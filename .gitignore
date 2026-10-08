@@ -1,0 +1,45 @@
+# Nothing game-derived may enter git history.
+#
+# The game's code and assets are copyrighted, and anything produced by feeding
+# them through the recompiler is a derivative of them. Only original work --
+# the launcher sources, the build files, this script -- belongs in here. A
+# game-derived file committed once has to be purged from history, not just the
+# working tree, so keep it out in the first place.
+
+# The user's own disc image and its extracted contents.
+game_files/
+
+# Lifted from the game by tools.recomp: derivative, and regenerable from the
+# user's own copy with ./regenerate.sh.
+src/recomp/gen/
+
+# Build output, including the compiled game code.
+build*/
+*.exe
+*.dll
+*.a
+*.o
+*.obj
+
+# Runtime artefacts from a debug run.
+*.log
+backtrace*.txt
+icall_targets.dump
+
+# CodeGraph's local index.
+.codegraph/
+
+# Temporary debugging instrumentation, kept out of history: some scripts
+# anchor on excerpts of the generated (game-derived) code.
+debug-instruments/
+
+# Frame dumps from XBOXRECOMP_FRAMEDUMP: game-derived rendered output.
+framedump_*.ppm
+
+# launcher build output
+launcher/bin/
+launcher/obj/
+
+# Windows launcher build output, and Python bytecode
+launcher-win/out/
+__pycache__/
