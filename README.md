@@ -2,7 +2,7 @@
 
 Fan / preservation project: a **static recompilation** of the original Xbox game **Breakdown** (Namco / Pandemic, 2004) to a native Windows build using [xboxrecomp](https://github.com/apexJCL/xboxrecomp) and [xboxrecomp-cli](https://github.com/apexJCL/xboxrecomp-cli).
 
-**This repository ships tooling and source only — never the game.** You must own a legitimate copy and supply your own dump.
+**This repository ships tooling and source only â€” never the game.** You must own a legitimate copy and supply your own dump.
 
 Share / clone: https://github.com/IQDropper/Breakdown-Recompilation
 
@@ -15,7 +15,7 @@ Share / clone: https://github.com/IQDropper/Breakdown-Recompilation
 - **No game files, ISOs, XBEs, ROMs, keys, cracks, or copyrighted assets are distributed** in this repository. Git is configured to ignore `game_files/`, generated recomp output, builds, and disc dumps. **Do not open PRs that add them.**
 - You must **own the game** (physical or digital through legitimate channels) and only use dumps you are authorized to make for personal use under the laws of your jurisdiction.
 - Reverse engineering / recompilation for interoperability or personal use may be restricted or allowed depending on where you live. **This README is not legal advice.** If you need legal advice, consult an attorney.
-- The maintainers provide this code **as-is, without warranty**. Use at your own risk. We are fans who want this game remembered and revisited — preferably with a proper official release someday.
+- The maintainers provide this code **as-is, without warranty**. Use at your own risk. We are fans who want this game remembered and revisited â€” preferably with a proper official release someday.
 
 If a rights holder wants changes or removal, open an issue or contact the repo owner; we will cooperate promptly.
 
@@ -23,7 +23,7 @@ If a rights holder wants changes or removal, open an issue or contact the repo o
 
 ## What "works" right now
 
-This fork tracks a **working native Windows build path** used for PC playtesting (including menus / save flow on mid-range GPUs such as a GTX 1660 Ti). Expect quirks (for example texture flicker in places). The first clean build on a new machine may crash until overrides / seeds match your dump — that is normal for this class of port.
+This fork tracks a **working native Windows build path** used for PC playtesting (including menus / save flow on mid-range GPUs such as a GTX 1660 Ti). Expect quirks (for example texture flicker in places). The first clean build on a new machine may crash until overrides / seeds match your dump â€” that is normal for this class of port.
 
 **Others can run it** after:
 
@@ -36,7 +36,7 @@ This fork tracks a **working native Windows build path** used for PC playtesting
 
 ## Quick start (Windows)
 
-### Option A — helper script (recommended)
+### Option A â€” helper script (recommended)
 
 From a Command Prompt or PowerShell:
 
@@ -50,11 +50,11 @@ SETUP.cmd
 
 - Enable `git config --global core.longpaths true` when possible
 - Remind you to use a short checkout path
-- Run `breakdown setup` (venv, llvm-mingw, toolkit — downloads are sha256-pinned)
+- Run `breakdown setup` (venv, llvm-mingw, toolkit â€” downloads are sha256-pinned)
 - Run `breakdown doctor` and report what is missing
 - Print where to put `game_files/` and how to build / run
 
-### Option B — manual
+### Option B â€” manual
 
 ```bat
 git config --global core.longpaths true
@@ -94,13 +94,18 @@ run_native.cmd
 
 ---
 
+
+## Controls (keyboard / mouse / pad)
+
+See [CONTROLS.txt](CONTROLS.txt). `SETUP.cmd` runs `APPLY_INPUT_PATCHES.cmd` after toolkit setup so mouse capture is wired. Modern default: mouse look, LMB/RMB punches (LT/RT). A controller still works.
+
 ## Common commands
 
 | Command | Purpose |
 |--------|---------|
 | `breakdown setup` | Once: `.venv`, llvm-mingw, toolkit (pinned hashes) |
 | `breakdown doctor` | What this machine has / what to do next |
-| `breakdown all` | Analyze → recomp → build |
+| `breakdown all` | Analyze â†’ recomp â†’ build |
 | `breakdown analyze` / `breakdown recomp` | Regenerate `src/recomp/gen/` (do **not** edit gen by hand) |
 | `run_native.cmd` | Launch helpers for the native exe |
 
@@ -114,9 +119,9 @@ Hand overrides live in `src/recomp_manual.c`. Missed function starts go in `conf
 
 See `.gitignore`. In particular:
 
-- `game_files/` — your disc dump
-- `src/recomp/gen/` — generated from your dump
-- `build-win/`, `.venv/`, `third_party/`, `external/` — local toolchain / build trees
+- `game_files/` â€” your disc dump
+- `src/recomp/gen/` â€” generated from your dump
+- `build-win/`, `.venv/`, `third_party/`, `external/` â€” local toolchain / build trees
 - Session logs / bench artefacts
 
 ---

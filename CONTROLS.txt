@@ -1,24 +1,39 @@
 BREAKDOWN (native) - KEYBOARD + MOUSE CONTROLS
 ================================================
-Start the game with run_native.cmd. A real controller still works too.
+Start with run_native.cmd. A real controller still works at the same time.
+After SETUP.cmd (or APPLY_INPUT_PATCHES.cmd), mouse capture is built into the toolkit.
 
-MOUSE
-  Click in the game window ... grab the mouse (this click is NOT sent to the game)
+Two mouse layouts
+-----------------
+MODERN (default in run_native.cmd) — FPS-style punches for Breakdown melee combos
+LEGACY — older face-button mouse map (set RECOMP_MOUSE_BUTTONS=X,B,Y,LT,RT)
+
+MOUSE (both layouts)
+  Click in the game window ... grab the mouse (that click is NOT sent to the game)
   Move mouse ................ look around (right stick)
+  Scroll wheel .............. D-pad up / down
+  F1 ........................ release mouse (Alt-Tab also releases)
+
+MOUSE BUTTONS — MODERN (default)
+  Left click ................ Left trigger   (left punch)
+  Right click ............... Right trigger  (right punch)
+  Middle click .............. Y
+  Side button (back) ........ White
+  Side button (forward) ..... Black
+
+MOUSE BUTTONS — LEGACY
   Left click ................ X
   Right click ............... B
   Middle click .............. Y
   Side button (back) ........ Left trigger
   Side button (forward) ..... Right trigger
-  Scroll wheel .............. D-pad up / down
-  F1 ........................ let go of the mouse (Alt-Tab also lets go)
 
-KEYBOARD
+KEYBOARD (same in both layouts)
   W A S D ................... move (left stick)
   I J K L ................... look (right stick), if you prefer keys
   Z / X / C / V ............. A / B / X / Y
   Q / E ..................... White / Black
-  1 / 3 ..................... Left trigger / Right trigger
+  1 / 3 ..................... Left trigger / Right trigger (punch keys)
   Enter ..................... START (pause)
   Backspace ................. BACK
   Arrow keys ................ D-pad (menus)
@@ -27,7 +42,10 @@ KEYBOARD
 CHANGE THE MOUSE (edit run_native.cmd, the "set RECOMP_MOUSE..." lines)
   RECOMP_MOUSE_SENS=1200 .... look speed (higher = faster)
   RECOMP_MOUSE_INVERT=1 ..... flip up/down look
-  RECOMP_MOUSE_BUTTONS=X,B,Y,LT,RT
+  RECOMP_MOUSE_BUTTONS=LT,RT,Y,WHITE,BLACK   ... Modern
+  RECOMP_MOUSE_BUTTONS=X,B,Y,LT,RT           ... Legacy
        order: left, right, middle, back side button, forward side button
        names: A B X Y WHITE BLACK LT RT START BACK LS RS UP DOWN LEFT RIGHT NONE
   RECOMP_MOUSE=0 ............ turn the mouse off
+
+If mouse does nothing after a toolkit reinstall, run APPLY_INPUT_PATCHES.cmd then rebuild.
