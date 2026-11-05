@@ -23,7 +23,7 @@ struct video_settings {
     unsigned window_scale; /* 1..6, RECOMP_WINDOW_SCALE */
     int aspect;            /* 0 4:3, 1 16:9, 2 16:10, 3 21:9 */
     int filter;            /* 0 nearest, 1 linear, 2 integer */
-    int borderless;        /* 0 windowed, 1 borderless (not exclusive) */
+    int borderless;        /* 0 windowed, 1 borderless, 2 exclusive */
 };
 
 enum {
@@ -68,6 +68,8 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
 int video_settings_aspect_index(const char *name);
 const char *video_settings_aspect_name(int index);
 const char *video_settings_filter_name(int index);
+/* "0", "1", or "exclusive". What breakdown_video.cfg stores. */
+const char *video_settings_fullscreen_token(int mode);
 
 const char *video_row_title(int row);
 /* dir is -1 or +1. Action rows do not change. Returns 1 if a value changed. */

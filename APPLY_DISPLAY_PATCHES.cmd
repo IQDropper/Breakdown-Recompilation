@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-echo Applying D3D11 window-size patch (idempotent)...
+echo Applying D3D11 window-size and exclusive-fullscreen patches (idempotent)...
 
 if not exist "external\xboxrecomp\src\d3d\nv2a_pb_d3d11.c" (
   echo [skip] Toolkit not present yet: external\xboxrecomp\src\d3d\nv2a_pb_d3d11.c
@@ -27,7 +27,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [ok] D3D11 window hook applied.
+echo --- patch_d3d11_exclusive.py ---
+%PY% patch_d3d11_exclusive.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_exclusive.py failed
+  exit /b 1
+)
+
+echo [ok] D3D11 window hook and exclusive fullscreen applied.
 echo      If this upgraded an older patch, rebuild the toolkit and the exe.
 echo      A build-win configured before display_host.c drops CMakeCache.txt
 echo      so the next breakdown build picks that file up. Then: breakdown all

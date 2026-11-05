@@ -101,7 +101,7 @@ See [CONTROLS.txt](CONTROLS.txt). `SETUP.cmd` runs `APPLY_INPUT_PATCHES.cmd` aft
 
 ## Display (aspect and resolution)
 
-See [docs/widescreen-hires.md](docs/widescreen-hires.md) and [docs/video-options.md](docs/video-options.md). The game frame stays 4:3. `run_native.cmd` asks for a 2x internal resolution and a 16:9 window that letterboxes that frame (HUD is not stretched, and the camera is not wider). `SETUP.cmd` runs `APPLY_DISPLAY_PATCHES.cmd` so the D3D11 window opens at that size. Rebuild after the patch. In-game, F10 opens Video (internal resolution, window size, letterbox aspect, present filter, windowed or borderless). Apply writes `breakdown_video.cfg` beside the exe. A set `RECOMP_*` variable still overrides that file, so `run_native.cmd` keeps its launch. A direct launch with no variables and no config file stays 640x480, scale 1.
+See [docs/widescreen-hires.md](docs/widescreen-hires.md) and [docs/video-options.md](docs/video-options.md). The game frame stays 4:3. `run_native.cmd` asks for a 2x internal resolution and a 16:9 window that letterboxes that frame (HUD is not stretched, and the camera is not wider). Hor+ is not in this toolkit pin. `SETUP.cmd` runs `APPLY_DISPLAY_PATCHES.cmd` so the D3D11 window opens at that size and exclusive fullscreen can switch the display mode. Rebuild after the patch. In-game, F10 opens Video (internal resolution, window size, letterbox aspect, present filter, windowed, borderless, or exclusive). Apply writes `breakdown_video.cfg` beside the exe. A set `RECOMP_*` variable still overrides that file, so `run_native.cmd` keeps its launch. A direct launch with no variables and no config file stays 640x480, scale 1.
 
 ## Common commands
 

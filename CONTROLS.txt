@@ -31,10 +31,10 @@ MOUSE BUTTONS — LEGACY
 VIDEO (host menu, not an Xbox screen)
   F10 ....................... Video options
        Internal resolution, window size, letterbox aspect (4:3, 16:9,
-       16:10, 21:9), present filter, windowed or borderless.
+       16:10, 21:9), present filter, windowed, borderless, or exclusive.
        Left / Right preview. Apply or OK saves breakdown_video.cfg
        beside the exe. Esc or F10 cancels the preview.
-       Hor+ and exclusive fullscreen are not in this menu.
+       Hor+ is not in this menu. Exclusive is a display mode, not a wider camera.
        Details: docs/video-options.md
 
 KEYBOARD (same in both layouts)

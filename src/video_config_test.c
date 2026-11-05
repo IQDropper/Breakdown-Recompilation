@@ -93,6 +93,16 @@ static void test_roundtrip(void)
     expect("roundtrip aspect", loaded.aspect == s.aspect && loaded.filter == 2);
     expect("roundtrip borderless", loaded.borderless == 1);
     expect("roundtrip size", c.window_w == 3360 && c.window_h == 1440);
+    s.borderless = DISPLAY_EXCLUSIVE;
+    expect("save exclusive", video_config_save(path, &s) == 0);
+    expect("load exclusive", video_config_load(path) == 1);
+    expect("stored exclusive word",
+           strcmp(video_config_getenv("RECOMP_PRESENT_FULLSCREEN"), "exclusive") == 0);
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &loaded);
+    expect("roundtrip exclusive",
+           loaded.borderless == DISPLAY_EXCLUSIVE && c.fullscreen == DISPLAY_EXCLUSIVE
+           && c.window_w == 3360 && c.window_h == 1440);
     snprintf(aspect, sizeof aspect, "%s", video_settings_aspect_name(loaded.aspect));
     expect("aspect name", strcmp(aspect, "21:9") == 0);
     remove(path);
@@ -234,10 +244,12 @@ static void test_menu_model(void)
     expect("window detail", strstr(video_row_detail(&s, VIDEO_ROW_WINDOW), "Resizes the window now") != NULL);
     expect("aspect detail",
            strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "Letterbox") != NULL
-           && strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "Hor+") != NULL);
+           && strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "Hor+") != NULL
+           && strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "not available") != NULL);
     expect("mode detail",
-           strstr(video_row_detail(&s, VIDEO_ROW_MODE), "Exclusive fullscreen") != NULL
-           && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "not available") != NULL);
+           strstr(video_row_detail(&s, VIDEO_ROW_MODE), "exclusive") != NULL
+           && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "letterboxed") != NULL
+           && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "Hor+") != NULL);
     expect("needs window",
            video_row_needs_window(VIDEO_ROW_SCALE) == 0
            && video_row_needs_window(VIDEO_ROW_FILTER) == 0
@@ -270,9 +282,16 @@ static void test_menu_model(void)
            && strcmp(video_settings_filter_name(s.filter), "nearest") == 0);
     expect("filter label",
            strcmp(video_settings_value(&s, VIDEO_ROW_FILTER, buf, sizeof buf), "Nearest") == 0);
-    expect("mode toggles",
+    expect("mode to borderless",
            video_settings_nudge(&s, VIDEO_ROW_MODE, 1) == 1 && s.borderless == 1
            && strcmp(video_settings_value(&s, VIDEO_ROW_MODE, buf, sizeof buf), "Borderless") == 0);
+    expect("mode to exclusive",
+           video_settings_nudge(&s, VIDEO_ROW_MODE, 1) == 1 && s.borderless == DISPLAY_EXCLUSIVE
+           && strcmp(video_settings_value(&s, VIDEO_ROW_MODE, buf, sizeof buf), "Exclusive") == 0);
+    expect("mode wraps to windowed",
+           video_settings_nudge(&s, VIDEO_ROW_MODE, 1) == 1 && s.borderless == 0
+           && strcmp(video_settings_value(&s, VIDEO_ROW_MODE, buf, sizeof buf), "Windowed") == 0);
+    s.borderless = 1;
     expect("action nudge ignored",
            video_settings_nudge(&s, VIDEO_ROW_OK, 1) == 0 && s.borderless == 1);
 
@@ -295,13 +314,16 @@ static void test_menu_model(void)
     c.window_w = 1536;
     c.window_h = 960;
     c.present_filter = 1;
-    c.fullscreen = 0;
+    c.fullscreen = DISPLAY_EXCLUSIVE;
     snprintf(c.aspect, sizeof c.aspect, "16:10");
     video_settings_from_choice(&c, &s);
     expect("from choice",
            s.render_scale == 3 && s.window_scale == 2
            && strcmp(video_settings_aspect_name(s.aspect), "16:10") == 0
-           && s.filter == 1 && s.borderless == 0);
+           && s.filter == 1 && s.borderless == DISPLAY_EXCLUSIVE);
+    c.fullscreen = 9;
+    video_settings_from_choice(&c, &s);
+    expect("mode clamps", s.borderless == DISPLAY_EXCLUSIVE);
 
     expect("bad aspect index", video_settings_aspect_index("hor+") < 0);
     expect("save null fails", video_config_save(NULL, &s) == -1);

@@ -24,13 +24,13 @@ The rows are:
 |---|---|---|
 | Internal resolution | `RECOMP_RENDER_SCALE` 1..4 | Next frame. Higher costs more. 1x is the Xbox internal size. |
 | Window size | `RECOMP_WINDOW_SCALE` 1..6 | Resizes the window now. Height is 480 times this. |
-| Aspect | `RECOMP_DISPLAY_ASPECT` `4:3`, `16:9`, `16:10`, `21:9` | Resizes now. Letterbox only. Hor+ is not available. |
+| Aspect | `RECOMP_DISPLAY_ASPECT` `4:3`, `16:9`, `16:10`, `21:9` | Resizes now. Letterbox only. Hor+ is not available on this toolkit pin. |
 | Present filter | `RECOMP_PRESENT_FILTER` `nearest`, `linear`, `integer` | Next frame. `integer` is the present path’s integer fit: the largest whole multiple of the frame that fits in the window, letterboxed. It does not stretch to fill. See [widescreen-hires.md](widescreen-hires.md). |
-| Window mode | `RECOMP_PRESENT_FULLSCREEN` `0` or `1` | Windowed, or borderless on the monitor. Exclusive fullscreen is not available. |
+| Window mode | `RECOMP_PRESENT_FULLSCREEN` `0`, `1`, or `exclusive` | Windowed, borderless on the monitor, or exclusive at this window size. The 4:3 frame stays letterboxed. Exclusive needs the D3D11 patch; without it the menu shows borderless and says so. |
 
 A wide aspect at internal 1x with nearest still pins the image to the top left. That is the present path, not a menu bug. The filter row says so. Linear or integer centres it. The same rule as a launch with those variables.
 
-VSync, a frame cap, stretch-to-fill, hor+, and the flicker switches (`RECOMP_D3D11_OCC`, `RECOMP_D3D11_NO_RTT`, mip, point) are not in this menu.
+VSync, a frame cap, stretch-to-fill, hor+, and the flicker switches (`RECOMP_D3D11_OCC`, `RECOMP_D3D11_NO_RTT`, mip, point) are not in this menu. Hor+ stays off because this toolkit pin cannot widen the camera. Exclusive fullscreen is the window-mode row, not a wider view.
 
 ## Config file
 
@@ -69,3 +69,4 @@ A bad `breakdown_video.cfg`, or a launch that keeps coming back at a size the ma
 3. OK. `build-win\breakdown_video.cfg` should appear. stderr: `[VIDEO] saved ...`.
 4. Quit and launch the exe again the same way (no variables). The log should say the config loaded and the sources are `file`. The window opens at the 16:9 size from the file (1707×960 at window scale 2).
 5. `run_native.cmd` still forces its own scale, window, aspect, and filter. Those sources log as `env`. The file does not change that launch. Comment out one `set` in the script if you want the file to win for that one variable.
+6. Window mode Exclusive writes `RECOMP_PRESENT_FULLSCREEN=exclusive`. The 4:3 frame stays letterboxed. stderr should include `[d3d11] exclusive fullscreen on` after the display patch is rebuilt in. Without that patch the row still says Exclusive, the window goes borderless, and the status line says the patch is required. Hor+ is not a row. Details: [widescreen-hires.md](widescreen-hires.md).

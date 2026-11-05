@@ -61,7 +61,9 @@ exe = "breakdown_recomp"
 # windows builds on every host (llvm-mingw). macos needs a main.c with the
 # POSIX host code: the CLI's docs/porting.md, "macOS as a target".
 targets = ["windows"]
-# No enhancements layer: the stock build is the plain one.
+# No enhancements layer: the stock build is the plain one. Linking it at
+# this pin does not implement Hor+ (enhance.c forces display.aspect to 4:3).
+# docs/widescreen-hires.md.
 stock_cmake = []
 
 [data]

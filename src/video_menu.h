@@ -12,8 +12,10 @@
 extern "C" {
 #endif
 
-/* After display_host_init has loaded the config and bound getenv. */
-void video_menu_start(void);
+/* After display_host_init has loaded the config and bound getenv.
+ * `applied_mode` is the fullscreen value handed to nv2a_host_opts
+ * (DISPLAY_WINDOWED, DISPLAY_BORDERLESS, or DISPLAY_EXCLUSIVE). */
+void video_menu_start(int applied_mode);
 
 #ifdef __cplusplus
 }
