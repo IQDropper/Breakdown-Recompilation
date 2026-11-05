@@ -26,7 +26,7 @@ static const struct aspect_ratio s_aspects[] = {
 
 static const char *s_filters[] = { "nearest", "linear", "integer" };
 
-static const char *env_get(const char *(*get)(const char *), const char *name)
+static const char *env_get(display_getenv_fn get, const char *name)
 {
     const char *v = get ? get(name) : NULL;
     return (v && *v) ? v : NULL;
@@ -72,7 +72,7 @@ static int truth(const char *s)
     return s && (strcmp(s, "1") == 0 || strcmp(s, "true") == 0 || strcmp(s, "yes") == 0);
 }
 
-void display_host_choose(const char *(*get)(const char *), struct display_choice *o)
+void display_host_choose(display_getenv_fn get, struct display_choice *o)
 {
     const char *s;
     unsigned num = 0, den = 0;
@@ -146,10 +146,35 @@ void display_host_choose(const char *(*get)(const char *), struct display_choice
 #if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
 #include "kernel/nv2a_backend_common.h"
 
+/* Defined by patch_d3d11_window.py inside nv2a_pb_d3d11.c. Weak so an
+ * unpatched toolkit still links; the pointer stays NULL and the window
+ * stays 640x480. Smoke tests never look at this declaration. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak))
+#endif
+extern void (*breakdown_display_window_size_hook)(unsigned int *w, unsigned int *h);
+
+static void display_apply_window(unsigned int *w, unsigned int *h)
+{
+    struct display_choice c;
+    display_host_choose(getenv, &c);
+    if (w)
+        *w = c.window_w;
+    if (h)
+        *h = c.window_h;
+}
+
 void display_host_init(void)
 {
     struct display_choice c;
     struct nv2a_host_opts opts;
+
+    /* Address is NULL when the patched backend is not in this link. */
+    if (&breakdown_display_window_size_hook)
+        breakdown_display_window_size_hook = display_apply_window;
+    else
+        fprintf(stderr, "[DISPLAY] window hook not linked; "
+                "run APPLY_DISPLAY_PATCHES.cmd and rebuild (window stays 640x480)\n");
 
     display_host_choose(getenv, &c);
     memset(&opts, 0, sizeof opts);
@@ -168,16 +193,6 @@ void display_host_init(void)
     if (c.window_clamped)
         fprintf(stderr, "[DISPLAY] RECOMP_WINDOW_SCALE clamped to 1..6\n");
 }
-
-void breakdown_display_window_size(unsigned int *w, unsigned int *h)
-{
-    struct display_choice c;
-    display_host_choose(getenv, &c);
-    if (w)
-        *w = c.window_w;
-    if (h)
-        *h = c.window_h;
-}
 #endif
 
 #ifdef DISPLAY_HOST_TEST
@@ -185,12 +200,13 @@ static const char *s_env[8];
 static const char *s_val[8];
 static int s_n;
 
-static const char *test_get(const char *name)
+/* getenv's return is char *, not const char *. */
+static char *test_get(const char *name)
 {
     int i;
     for (i = 0; i < s_n; i++)
         if (strcmp(s_env[i], name) == 0)
-            return s_val[i];
+            return (char *)s_val[i];
     return NULL;
 }
 

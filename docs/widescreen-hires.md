@@ -69,7 +69,11 @@ Examples at window scale 2: 4:3 is 1280×960, 16:9 is 1707×960, 16:10 is 1536×
 
 If the aspect is not 4:3, scale is 1, and the filter was left unset, the filter is promoted to `linear` so the present takes the centred blit instead of the top-left stock copy. An explicit `nearest` is left alone (top-left at scale 1). `run_native.cmd` uses scale 2, which already leaves the stock copy, so nearest stays sharp and the wide window still letterboxes.
 
-`patch_d3d11_window.py` (via `APPLY_DISPLAY_PATCHES.cmd` from `SETUP.cmd`) makes D3D11 window creation call `breakdown_display_window_size`. Until that patch is applied and the exe is rebuilt, the window still opens at 640×480. Scale, filter, and fullscreen still apply, and you can drag the window larger. Dragging is the same letterbox once the blit path is on.
+`patch_d3d11_window.py` (via `APPLY_DISPLAY_PATCHES.cmd` from `SETUP.cmd`) adds an optional hook in the D3D11 backend, `breakdown_display_window_size_hook`. `display_host_init` sets it before the guest starts. If the pointer is NULL the window stays 640×480. Toolkit smoke tests (`d3d11_backend_smoke` and the rest of `xbox_d3d8`) do not link the game, so they keep that default and still link. An earlier revision of the patch called a hard extern and those targets failed with `undefined symbol: breakdown_display_window_size`. Re-run `APPLY_DISPLAY_PATCHES.cmd` to upgrade that call.
+
+Until the patch is applied and both the toolkit and the exe are rebuilt, the window still opens at 640×480. Scale, filter, and fullscreen still apply, and you can drag the window larger. Dragging is the same letterbox once the blit path is on.
+
+`breakdown build` does not reconfigure when `build-win/CMakeCache.txt` already exists. A tree configured before `src/display_host.c` was on the exe will not compile that file, and the old hard extern then fails the link. The patch script deletes that cache when `build-win/build.ninja` does not mention `display_host.c`. The next build configures again. Object files are left in place. If cmake objects, delete `build-win` and configure from scratch. `CMakeLists.txt` also fails configure if the exe target loses `src/display_host.c`.
 
 stderr (also `run_stderr.txt`):
 
@@ -83,8 +87,8 @@ Direct `build-win\breakdown_recomp.exe` with a clean environment stays stock: sc
 
 ## Verify on Windows (your dump)
 
-1. `SETUP.cmd` (or `APPLY_DISPLAY_PATCHES.cmd` if `external\` is already there). The script prints `patched d3d11 window size` or `already patched`.
-2. `breakdown all` (a rebuild is required; the patch is C in the toolkit, and `display_host.c` is in the exe).
+1. `SETUP.cmd` (or `APPLY_DISPLAY_PATCHES.cmd` if `external\` is already there). The script prints `patched d3d11 window size`, `upgraded hard extern to optional hook`, or `already patched`. If it removed `build-win/CMakeCache.txt`, the next build reconfigures so `display_host.c` is on the exe.
+2. `breakdown all` (rebuild the toolkit and the exe after the patch).
 3. `run_native.cmd`.
 4. In `run_stderr.txt`:
    - `[DISPLAY] ... window=1707x960 aspect=16:9`
