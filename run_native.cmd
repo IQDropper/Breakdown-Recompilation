@@ -20,7 +20,8 @@ rem Modern (default): LMB/RMB = left/right punch (LT/RT). Legacy face-buttons: X
 set RECOMP_MOUSE_SENS=1200
 set RECOMP_MOUSE_INVERT=0
 set RECOMP_MOUSE_BUTTONS=LT,RT,Y,WHITE,BLACK
-rem Display (docs\widescreen-hires.md, docs\video-options.md). Frame stays 4:3. Hor+ is not in this toolkit pin.
+rem Display (docs\widescreen-hires.md, docs\video-options.md). Frame stays 4:3.
+rem Hor+ is not in this toolkit pin (0692070). Exclusive is a display mode, not a wider camera.
 rem Needs APPLY_DISPLAY_PATCHES.cmd and a rebuild or the window stays 640x480.
 rem These variables override breakdown_video.cfg beside the exe. In-game Video is F10.
 rem Unset a line here to use the saved value for that one setting.
@@ -31,5 +32,6 @@ rem 4:3 | 16:9 | 16:10 | 21:9. Wider values pillarbox. They do not widen the cam
 set RECOMP_DISPLAY_ASPECT=16:9
 rem nearest | linear | integer. Scale 2 already letterboxes a wide window.
 set RECOMP_PRESENT_FILTER=nearest
+rem Windowed if unset. 1 = borderless. exclusive (or 2) = mode switch at this window size.
 rem set RECOMP_PRESENT_FULLSCREEN=1
 build-win\breakdown_recomp.exe 1>run_stdout.txt 2>run_stderr.txt

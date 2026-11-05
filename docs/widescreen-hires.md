@@ -22,8 +22,8 @@ The HUD is drawn by the game into that same colour target. Nothing in this tree 
 |---|---|---|
 | `render.scale` | `RECOMP_RENDER_SCALE` | Integer internal scale **1..4**. Targets and the present texture are `guest × N`. Occlusion counts are divided by `N²`. |
 | `present.filter` | `RECOMP_PRESENT_FILTER` | `nearest` (stock), `linear`, or `integer`. Fit keeps the frame’s aspect, centred. `integer` is the largest whole multiple that fits. |
-| `present.fullscreen` | `RECOMP_PRESENT_FULLSCREEN` | Borderless desktop fullscreen. The frame is still letterboxed by the blit. |
-| `display.aspect` | `RECOMP_DISPLAY_ASPECT` | **Only `4:3` is implemented.** Any other value is logged and ignored: “hor+ is a later slice”. |
+| `present.fullscreen` | `RECOMP_PRESENT_FULLSCREEN` | In the enhance layer, a boolean: borderless desktop fullscreen. The frame is still letterboxed by the blit. This repo also accepts `exclusive` (see below). The layer does not. |
+| `display.aspect` | `RECOMP_DISPLAY_ASPECT` | **Only `4:3` is implemented.** Any other value is logged and ignored: “hor+ is a later slice”. The string is not stored on `nv2a_host_opts`. |
 | `present.pacing` | `RECOMP_PRESENT_PACING` | How lowered spin-waits sleep. Not a display mode. |
 
 This repo’s `game.toml` leaves `stock_cmake` empty, so the enhancements library is **not** linked and nothing calls `xbox_enhance_init`. Without another caller, those options stay zero: guest-size targets, nearest, windowed.
@@ -38,12 +38,24 @@ Present (`nv2a_present_rect`):
 
 Hor+ (render extra horizontal FOV, then pin the HUD) is the unimplemented slice named in `enhance.c`. It is not a window-size change.
 
+## Hor+ is blocked on this pin
+
+Checked against `src/enhance/enhance.c` and `struct nv2a_host_opts` at `0692070`:
+
+- `xbox_enhance_init` reads `display.aspect`. If it is not `4:3`, it logs `hor+ is a later slice` and forces `4:3`. Nothing copies the ratio into `nv2a_host_opts`.
+- That struct is `render_scale`, `present_filter`, `fullscreen`, and `pack_off`. There is no aspect, no horizontal pad, and no FOV scale.
+- Present (`nv2a_present_rect`) letterboxes the guest frame into the window. A wider window does not widen the guest target or the projection.
+- `game.toml` leaves `stock_cmake` empty, so `XBOXRECOMP_ENHANCE` stays off. Turning it on would still force 4:3. This repo does not link the layer for Hor+.
+- The guest projection is the title’s. There is no dump in git, and this repo does not patch it. A present-time stretch would be anamorphic, not extra horizontal FOV, and it would distort the HUD. It is not added.
+
+A later commit on `blinx2/portability`, `7a97fcd` (changelog for blinx2-v0.14.0), does implement Hor+: `display.aspect` pads 4:3 targets, 2D batches stay in the 4:3 columns, and the 3D view is wider. That commit is not this pin. The window, input, and flicker patches in this repo match `0692070`. Moving the pin is a toolkit upgrade, not a display-only change, so it is not done here. The Video menu does not offer Hor+.
+
 ## What Breakdown still needs
 
 - Read the real display mode from a dump (present extent in the flip log) and record it here if it is not 640×480.
-- Hor+: a wider view, with HUD anchored to the 4:3 safe area or to the new edges. The toolkit does not do this yet, and this repo does not patch the game’s projection.
+- Hor+: a wider view, with the HUD anchored to the 4:3 safe area. Blocked on this pin, as above. It needs the later toolkit’s Hor+ (or a pin move), not another window size.
 - A stretch-to-fill option. Not added. It would distort the HUD. Letterbox is the HUD-safe framing.
-- Exclusive fullscreen and arbitrary output modes beyond borderless + the window sizes below.
+- Output modes other than the window sizes below, borderless, and exclusive. VSync is still not a menu option (`RECOMP_PRESENT_VSYNC` exists on the backend; the menu does not expose it).
 - P2 art (original vs updated). Out of scope.
 
 ## What this change adds
@@ -56,9 +68,17 @@ Hor+ (render extra horizontal FOV, then pin the HUD) is the unimplemented slice 
 | `RECOMP_WINDOW_SCALE` | `1` (clamped to 1..6) | `2` |
 | `RECOMP_DISPLAY_ASPECT` | `4:3` | `16:9` |
 | `RECOMP_PRESENT_FILTER` | `nearest` | `nearest` |
-| `RECOMP_PRESENT_FULLSCREEN` | off | unset (windowed) |
+| `RECOMP_PRESENT_FULLSCREEN` | windowed | unset (windowed) |
 
-Window client, before fullscreen replaces it with the monitor:
+`RECOMP_PRESENT_FULLSCREEN` values:
+
+| Value | Mode |
+|---|---|
+| unset, `0`, `false`, `no`, `windowed`, anything else | Windowed at the client size below |
+| `1`, `true`, `yes`, `borderless` | Borderless popup over the monitor. The client size is not the swap chain. |
+| `exclusive`, `2` | Exclusive: `SetFullscreenState` at the client size below. Needs `patch_d3d11_exclusive.py`. |
+
+Window client, before borderless replaces it with the monitor. Exclusive uses this size as the display mode:
 
 - `4:3`: `640×scale` by `480×scale`
 - `16:9`, `16:10`, `21:9`: height `480×scale`, width that aspect, rounded to the nearest pixel
@@ -71,23 +91,25 @@ If the aspect is not 4:3, scale is 1, and the filter was left unset, the filter 
 
 `patch_d3d11_window.py` (via `APPLY_DISPLAY_PATCHES.cmd` from `SETUP.cmd`) adds an optional hook in the D3D11 backend, `breakdown_display_window_size_hook`. `display_host_init` sets it before the guest starts. If the pointer is NULL the window stays 640×480. Toolkit smoke tests (`d3d11_backend_smoke` and the rest of `xbox_d3d8`) do not link the game, so they keep that default and still link. An earlier revision of the patch called a hard extern and those targets failed with `undefined symbol: breakdown_display_window_size`. Re-run `APPLY_DISPLAY_PATCHES.cmd` to upgrade that call.
 
-Until the patch is applied and both the toolkit and the exe are rebuilt, the window still opens at 640×480. Scale, filter, and fullscreen still apply, and you can drag the window larger. Dragging is the same letterbox once the blit path is on.
+`patch_d3d11_exclusive.py` is the same script’s second step. It defines `breakdown_display_set_exclusive`. Fullscreen `2` keeps the hooked client size, creates the swap chain with `DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH`, and calls `SetFullscreenState`. Fullscreen `1` is still the borderless monitor popup. A resize leaves exclusive first (`ResizeBuffers` fails while it is held) and the next flip enters again when the option is still `2`. Alt+Enter is turned off so DXGI does not switch mode under the Video menu. If `SetFullscreenState` fails, stderr says so and the window stays at that client size. If the symbol is not linked, startup uses borderless instead of handing `2` to the unpatched backend (any non-zero value there is borderless).
+
+Until the window patch is applied and both the toolkit and the exe are rebuilt, the window still opens at 640×480. Scale, filter, and borderless still apply, and you can drag the window larger. Dragging is the same letterbox once the blit path is on. Exclusive without its patch is borderless.
 
 `breakdown build` does not reconfigure when `build-win/CMakeCache.txt` already exists. A tree configured before `src/display_host.c` was on the exe will not compile that file, and the old hard extern then fails the link. The patch script deletes that cache when `build-win/build.ninja` does not mention `display_host.c`. The next build configures again. Object files are left in place. If cmake objects, delete `build-win` and configure from scratch. `CMakeLists.txt` also fails configure if the exe target loses `src/display_host.c`.
 
 stderr (also `run_stderr.txt`):
 
 ```text
-[DISPLAY] render.scale=2 present.filter=nearest fullscreen=0 window=1707x960 aspect=16:9 (letterbox, 4:3 frame; hor+ is not in this pin)
+[DISPLAY] render.scale=2 present.filter=nearest fullscreen=0 (windowed) window=1707x960 aspect=16:9 (letterbox, 4:3 frame; hor+ is not in this pin)
 ```
 
-The window numbers are the windowed client. Fullscreen ignores them for the swap chain and letterboxes onto the monitor.
+The window numbers are the windowed client, and the exclusive mode size. Borderless ignores them for the swap chain and letterboxes onto the monitor. Exclusive asks the display to switch to that size; the 4:3 frame is still letterboxed inside it. `fullscreen=2 (exclusive)` is that mode. A following `[d3d11] exclusive fullscreen on` means `SetFullscreenState` succeeded. `exclusive fullscreen failed` means the driver refused and the window was left at the client size.
 
 Direct `build-win\breakdown_recomp.exe` with a clean environment and no `breakdown_video.cfg` beside the exe stays stock: scale 1, 640×480, nearest. If that file exists, its values fill any `RECOMP_*` variable that is unset. A variable that is set still wins, including the ones `run_native.cmd` sets. The in-game menu that writes the file is [video-options.md](video-options.md) (F10).
 
 ## Verify on Windows (your dump)
 
-1. `SETUP.cmd` (or `APPLY_DISPLAY_PATCHES.cmd` if `external\` is already there). The script prints `patched d3d11 window size`, `upgraded hard extern to optional hook`, or `already patched`. If it removed `build-win/CMakeCache.txt`, the next build reconfigures so `display_host.c` is on the exe.
+1. `SETUP.cmd` (or `APPLY_DISPLAY_PATCHES.cmd` if `external\` is already there). The window script prints `patched d3d11 window size`, `upgraded hard extern to optional hook`, or `already patched`. The exclusive script prints `patched d3d11 exclusive fullscreen` or `already patched`. If the window script removed `build-win/CMakeCache.txt`, the next build reconfigures so `display_host.c` is on the exe.
 2. `breakdown all` (rebuild the toolkit and the exe after the patch).
 3. `run_native.cmd`.
 4. In `run_stderr.txt`:
@@ -99,5 +121,6 @@ Direct `build-win\breakdown_recomp.exe` with a clean environment and no `breakdo
    - `RECOMP_DISPLAY_ASPECT=4:3` → `1280x960`, no side bars
    - `RECOMP_RENDER_SCALE=1` → softer, Xbox-sized targets
    - `RECOMP_PRESENT_FULLSCREEN=1` → borderless, 4:3 image centred on the monitor
+   - `RECOMP_PRESENT_FULLSCREEN=exclusive` → `[DISPLAY] ... fullscreen=2 (exclusive)` and `[d3d11] exclusive fullscreen on`. The desktop mode should become the window size (1707×960 at this scale and aspect). The picture stays a letterboxed 4:3 frame, not a wider camera. Alt+Tab should return; the next flip leaves exclusive if you set the variable back to `0`.
 7. Optional: `set RECOMP_FLIP_LOG=1` and confirm the present extent. If it is not 640×480, the “Xbox back buffer” note above needs an update. Hor+ is still not implemented either way.
 8. In-game Video (F10) and `breakdown_video.cfg` are [video-options.md](video-options.md). `run_native.cmd` still overrides that file for any variable it sets.

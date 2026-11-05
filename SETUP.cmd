@@ -78,7 +78,7 @@ echo   run_native.cmd
 echo.
 echo Controls: CONTROLS.txt  (Modern mouse punches = LT/RT by default)
 echo If you wipe external\, re-run APPLY_INPUT_PATCHES.cmd and APPLY_DISPLAY_PATCHES.cmd, then rebuild.
-echo Display: docs\widescreen-hires.md  (run_native.cmd = 2x, 16:9 letterbox)
+echo Display: docs\widescreen-hires.md  (run_native.cmd = 2x, 16:9 letterbox; Hor+ is not in this pin)
 echo.
 echo Read README.md and DISCLAIMER.md before sharing builds.
 echo.

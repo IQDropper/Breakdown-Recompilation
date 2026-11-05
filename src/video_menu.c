@@ -3,9 +3,11 @@
  *
  * Scale and the present filter are queued with nv2a_host_opts_request and
  * the D3D11 backend applies them on the next flip. Window size, letterbox
- * aspect, and borderless versus windowed are applied by resizing that
- * window (WM_SIZE updates the swap chain). Exclusive fullscreen and hor+
- * are not on this path. Nothing here is linked into toolkit smoke tests.
+ * aspect, and windowed versus borderless are applied by resizing that
+ * window (WM_SIZE updates the swap chain). Exclusive fullscreen calls
+ * breakdown_display_set_exclusive (patch_d3d11_exclusive.py) at the same
+ * window size. Hor+ is not on this path. Nothing here is linked into
+ * toolkit smoke tests.
  */
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -48,6 +50,7 @@ static int s_row;
 static int s_have_session;
 static int s_have_place;
 static int s_env_override;
+static int s_applied_mode; /* what the D3D11 window was last set to */
 static int s_client_w = MENU_W;
 static struct video_settings s_draft;
 static struct video_settings s_committed;
@@ -59,7 +62,7 @@ static char b_scale[8];
 static char b_window[8];
 static char b_aspect[8];
 static char b_filter[12];
-static char b_full[4];
+static char b_full[12];
 
 static int env_nonempty(const char *key)
 {
@@ -99,7 +102,32 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_window, sizeof b_window, "%u", c.window_scale);
     snprintf(b_aspect, sizeof b_aspect, "%s", video_settings_aspect_name(c.aspect));
     snprintf(b_filter, sizeof b_filter, "%s", video_settings_filter_name(c.filter));
-    snprintf(b_full, sizeof b_full, "%d", c.borderless ? 1 : 0);
+    snprintf(b_full, sizeof b_full, "%s",
+             video_settings_fullscreen_token(c.borderless));
+}
+
+/* What the window can show. Exclusive without the toolkit patch is borderless. */
+static int exclusive_linked(void)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return &breakdown_display_set_exclusive != 0;
+#else
+    return 1;
+#endif
+}
+
+static void set_exclusive(int on)
+{
+    void (*fn)(int) = breakdown_display_set_exclusive;
+    if (fn)
+        fn(on);
+}
+
+static int live_mode(int mode)
+{
+    if (mode == DISPLAY_EXCLUSIVE && !exclusive_linked())
+        return DISPLAY_BORDERLESS;
+    return mode;
 }
 
 static int style_is_borderless(HWND h)
@@ -165,42 +193,72 @@ static void windowed_origin(int was_borderless, int w, int h, int *x, int *y)
     }
 }
 
+static int client_matches(HWND h, unsigned w, unsigned h)
+{
+    RECT rc;
+    if (!GetClientRect(h, &rc))
+        return 0;
+    return (unsigned)(rc.right - rc.left) == w
+        && (unsigned)(rc.bottom - rc.top) == h;
+}
+
+static void monitor_rect(HWND h, RECT *out)
+{
+    MONITORINFO mi;
+    HMONITOR mon;
+
+    mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    mi.cbSize = sizeof mi;
+    if (!GetMonitorInfoA(mon, &mi)) {
+        out->left = 0;
+        out->top = 0;
+        out->right = GetSystemMetrics(SM_CXSCREEN);
+        out->bottom = GetSystemMetrics(SM_CYSCREEN);
+        return;
+    }
+    *out = mi.rcMonitor;
+}
+
 static void resize_game(const struct display_choice *c)
 {
     DWORD style;
-    RECT frame;
-    int was_borderless, x, y, w, h;
+    RECT frame, mon;
+    int was_borderless, mode, x, y, w, h;
 
     if (!s_game || !IsWindow(s_game) || !c)
         return;
+    mode = live_mode(c->fullscreen);
     was_borderless = style_is_borderless(s_game);
-    if (c->fullscreen) {
-        MONITORINFO mi;
-        HMONITOR mon;
-        if (!was_borderless) {
-            s_place.length = sizeof s_place;
-            if (GetWindowPlacement(s_game, &s_place))
-                s_have_place = 1;
+    /* Same mode and same client: do not leave exclusive and enter it again. */
+    if (mode == s_applied_mode) {
+        if (mode == DISPLAY_BORDERLESS
+            || (client_matches(s_game, c->window_w, c->window_h)
+                && (mode == DISPLAY_EXCLUSIVE) == was_borderless)) {
+            place_menu();
+            return;
         }
-        mon = MonitorFromWindow(s_game, MONITOR_DEFAULTTONEAREST);
-        mi.cbSize = sizeof mi;
-        if (!GetMonitorInfoA(mon, &mi)) {
-            mi.rcMonitor.left = 0;
-            mi.rcMonitor.top = 0;
-            mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
-            mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
-        }
+    }
+    if (s_applied_mode == DISPLAY_EXCLUSIVE)
+        set_exclusive(0);
+    if (!was_borderless) {
+        s_place.length = sizeof s_place;
+        if (GetWindowPlacement(s_game, &s_place))
+            s_have_place = 1;
+    }
+    if (mode == DISPLAY_BORDERLESS) {
+        monitor_rect(s_game, &mon);
         SetWindowLongPtrA(s_game, GWL_STYLE, (LONG_PTR)(WS_POPUP | WS_VISIBLE));
-        SetWindowPos(s_game, NULL,
-                     mi.rcMonitor.left, mi.rcMonitor.top,
-                     mi.rcMonitor.right - mi.rcMonitor.left,
-                     mi.rcMonitor.bottom - mi.rcMonitor.top,
+        SetWindowPos(s_game, NULL, mon.left, mon.top,
+                     mon.right - mon.left, mon.bottom - mon.top,
                      SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOZORDER);
+        s_applied_mode = mode;
         place_menu();
         return;
     }
 
-    style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+    style = mode == DISPLAY_EXCLUSIVE
+        ? (WS_POPUP | WS_VISIBLE)
+        : (WS_OVERLAPPEDWINDOW | WS_VISIBLE);
     frame.left = 0;
     frame.top = 0;
     frame.right = (LONG)c->window_w;
@@ -208,24 +266,34 @@ static void resize_game(const struct display_choice *c)
     AdjustWindowRect(&frame, style, FALSE);
     w = frame.right - frame.left;
     h = frame.bottom - frame.top;
-    windowed_origin(was_borderless, w, h, &x, &y);
+    if (mode == DISPLAY_EXCLUSIVE) {
+        monitor_rect(s_game, &mon);
+        x = mon.left + ((mon.right - mon.left) - w) / 2;
+        y = mon.top + ((mon.bottom - mon.top) - h) / 2;
+    } else {
+        windowed_origin(was_borderless, w, h, &x, &y);
+    }
     SetWindowLongPtrA(s_game, GWL_STYLE, (LONG_PTR)style);
     SetWindowPos(s_game, NULL, x, y, w, h,
                  SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOZORDER);
+    /* Entering exclusive waits until the flip has resized the swap chain.
+     * d3d11_on_flip calls breakdown_display_set_exclusive once fullscreen >= 2. */
+    s_applied_mode = mode;
     place_menu();
 }
 
 static void request_opts(const struct display_choice *c)
 {
     struct nv2a_host_opts o;
+    int mode = live_mode(c->fullscreen);
     memset(&o, 0, sizeof o);
     o.render_scale = c->render_scale;
     o.present_filter = c->present_filter;
-    o.fullscreen = c->fullscreen;
+    o.fullscreen = mode;
     nv2a_host_opts_request(&o, NV2A_OPT_SCALE | NV2A_OPT_FILTER | NV2A_OPT_FULLSCREEN);
     fprintf(stderr,
-            "[VIDEO] apply render.scale=%u filter=%s borderless=%d window=%ux%u aspect=%s\n",
-            c->render_scale, c->filter_name, c->fullscreen, c->window_w, c->window_h, c->aspect);
+            "[VIDEO] apply render.scale=%u filter=%s fullscreen=%d window=%ux%u aspect=%s\n",
+            c->render_scale, c->filter_name, mode, c->window_w, c->window_h, c->aspect);
 }
 
 /* restyle 0 leaves the HWND alone (scale and filter still queue). */
@@ -307,6 +375,13 @@ static void preview(int dir)
     if (!apply_live(&s_draft, video_row_needs_window(s_row)))
         snprintf(s_status, sizeof s_status,
                  "No D3D11 window. Scale and filter still queue; window size and borderless apply on the next launch.");
+    else if (s_row == VIDEO_ROW_MODE && s_draft.borderless == DISPLAY_EXCLUSIVE
+             && !exclusive_linked())
+        snprintf(s_status, sizeof s_status,
+                 "Exclusive needs APPLY_DISPLAY_PATCHES.cmd. Showing borderless until rebuild.");
+    else if (s_row == VIDEO_ROW_MODE && s_draft.borderless == DISPLAY_EXCLUSIVE)
+        snprintf(s_status, sizeof s_status,
+                 "Exclusive requested at this window size. Apply or OK writes the file.");
     else if (video_row_needs_window(s_row))
         snprintf(s_status, sizeof s_status, "Resized now. Apply or OK writes the file.");
     else
@@ -365,7 +440,7 @@ static void paint_menu(HDC hdc, const RECT *rc)
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     text.top = 62;
     text.bottom = 82;
-    DrawTextA(hdc, "Hor+ and exclusive fullscreen are not available.", -1, &text,
+    DrawTextA(hdc, "Hor+ is not available on this toolkit pin.", -1, &text,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     if (s_env_override) {
         text.top = 82;
@@ -672,12 +747,17 @@ static DWORD WINAPI wait_for_game(LPVOID unused)
     }
 }
 
-void video_menu_start(void)
+void video_menu_start(int applied_mode)
 {
     HANDLE thread;
     if (s_started)
         return;
     s_started = 1;
+    if (applied_mode < DISPLAY_WINDOWED)
+        applied_mode = DISPLAY_WINDOWED;
+    if (applied_mode > DISPLAY_EXCLUSIVE)
+        applied_mode = DISPLAY_EXCLUSIVE;
+    s_applied_mode = applied_mode;
     s_env_override = any_env_override();
     s_place.length = sizeof s_place;
     fprintf(stderr, "[VIDEO] F10 opens Video options when the D3D11 window (%s) exists\n",
