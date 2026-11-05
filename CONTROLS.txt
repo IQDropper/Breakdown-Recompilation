@@ -28,6 +28,15 @@ MOUSE BUTTONS — LEGACY
   Side button (back) ........ Left trigger
   Side button (forward) ..... Right trigger
 
+VIDEO (host menu, not an Xbox screen)
+  F10 ....................... Video options
+       Internal resolution, window size, letterbox aspect (4:3, 16:9,
+       16:10, 21:9), present filter, windowed or borderless.
+       Left / Right preview. Apply or OK saves breakdown_video.cfg
+       beside the exe. Esc or F10 cancels the preview.
+       Hor+ and exclusive fullscreen are not in this menu.
+       Details: docs/video-options.md
+
 KEYBOARD (same in both layouts)
   W A S D ................... move (left stick)
   I J K L ................... look (right stick), if you prefer keys

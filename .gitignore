@@ -70,6 +70,12 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 
+# Video menu save (beside the exe, or a test leftover). Not a dump.
+breakdown_video.cfg
+breakdown_video.cfg.tmp
+video_config_*.cfg
+video_config_*.cfg.tmp
+
 # Local session / bench / debug artefacts (not source)
 *_err.txt
 *_out.txt

@@ -20,8 +20,10 @@ rem Modern (default): LMB/RMB = left/right punch (LT/RT). Legacy face-buttons: X
 set RECOMP_MOUSE_SENS=1200
 set RECOMP_MOUSE_INVERT=0
 set RECOMP_MOUSE_BUTTONS=LT,RT,Y,WHITE,BLACK
-rem Display (docs\widescreen-hires.md). Frame stays 4:3. Hor+ is not in this toolkit pin.
+rem Display (docs\widescreen-hires.md, docs\video-options.md). Frame stays 4:3. Hor+ is not in this toolkit pin.
 rem Needs APPLY_DISPLAY_PATCHES.cmd and a rebuild or the window stays 640x480.
+rem These variables override breakdown_video.cfg beside the exe. In-game Video is F10.
+rem Unset a line here to use the saved value for that one setting.
 rem Internal resolution 1..4 (1 = Xbox pixels). Window height is 480*WINDOW_SCALE.
 set RECOMP_RENDER_SCALE=2
 set RECOMP_WINDOW_SCALE=2

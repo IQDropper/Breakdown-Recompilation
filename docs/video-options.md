@@ -1,0 +1,65 @@
+# Video options
+
+Date: 2026-11-05
+
+Players change performance from inside the running game. The knobs are the same `RECOMP_*` variables `run_native.cmd` already sets. This note is the menu and the file. Aspect and scale behaviour is [widescreen-hires.md](widescreen-hires.md).
+
+## Why a host window
+
+The Xbox Options screen is guest code. That code is generated from a disc dump, and the dump is not in this repo, so there is no stable place to add a row to that screen. The Video menu is a window the host opens on the D3D11 game window. It is the in-game control for this slice. F10 is the key.
+
+## Open it
+
+1. Launch the game (`run_native.cmd` or the exe).
+2. Click the game window if you want the picture to be the one you are tuning.
+3. Press **F10**.
+
+Left and Right change the selected row and preview it. Up and Down move. Enter on Apply saves and leaves the menu open. Enter on OK saves and closes. Esc, F10, or the title-bar close undoes the preview and closes. The file is only written by Apply or OK.
+
+The rows are:
+
+| Row | Saved as | Preview |
+|---|---|---|
+| Internal resolution | `RECOMP_RENDER_SCALE` 1..4 | Next frame. Higher costs more. 1x is the Xbox internal size. |
+| Window size | `RECOMP_WINDOW_SCALE` 1..6 | Resizes the window now. Height is 480 times this. |
+| Aspect | `RECOMP_DISPLAY_ASPECT` `4:3`, `16:9`, `16:10`, `21:9` | Resizes now. Letterbox only. Hor+ is not available. |
+| Present filter | `RECOMP_PRESENT_FILTER` `nearest`, `linear`, `integer` | Next frame. |
+| Window mode | `RECOMP_PRESENT_FULLSCREEN` `0` or `1` | Windowed, or borderless on the monitor. Exclusive fullscreen is not available. |
+
+A wide aspect at internal 1x with nearest still pins the image to the top left. That is the present path, not a menu bug. The filter row says so. Linear or integer centres it. The same rule as a launch with those variables.
+
+VSync, a frame cap, stretch-to-fill, hor+, and the flicker switches (`RECOMP_D3D11_OCC`, `RECOMP_D3D11_NO_RTT`, mip, point) are not in this menu.
+
+## Config file
+
+Apply and OK write **`breakdown_video.cfg` beside `breakdown_recomp.exe`**.
+
+A `run_native.cmd` launch runs `build-win\breakdown_recomp.exe`, so the file is `build-win\breakdown_video.cfg`, not the repo root. The startup log prints that full path. `sources` is `env` when that variable is set, `file` when only the config has it, and `default` when neither does. `run_native.cmd` before any save looks like:
+
+```text
+[VIDEO] config D:\...\build-win\breakdown_video.cfg (not created yet)
+[VIDEO] sources render=env window=env aspect=env filter=env fullscreen=default
+```
+
+A later launch of the exe with those variables unset looks like:
+
+```text
+[VIDEO] config D:\...\build-win\breakdown_video.cfg (loaded)
+[VIDEO] sources render=file window=file aspect=file filter=file fullscreen=file
+```
+
+On launch, for each variable:
+
+- Set and non-empty: the environment wins. `run_native.cmd` keeps working.
+- Unset or empty: the file is used.
+- Both missing: stock. Internal 1x, window 1x, 4:3, nearest, windowed (640×480).
+
+Deleting the file and clearing the variables is the stock launch. The menu does not write the file until Apply or OK.
+
+## What to click
+
+1. Start `build-win\breakdown_recomp.exe` with no `RECOMP_RENDER_SCALE`, `RECOMP_WINDOW_SCALE`, `RECOMP_DISPLAY_ASPECT`, `RECOMP_PRESENT_FILTER`, or `RECOMP_PRESENT_FULLSCREEN`, and with no cfg beside the exe. The log should say the config is not created yet, and every source is `default`. The window is 640×480.
+2. F10. Set internal resolution to 2x, window size to 2x, aspect to 16:9, filter to nearest, window mode to windowed. The window should grow as you change size and aspect. 2x and the filter show up on the next frame (stderr `[VIDEO] apply ...`).
+3. OK. `build-win\breakdown_video.cfg` should appear. stderr: `[VIDEO] saved ...`.
+4. Quit and launch the exe again the same way (no variables). The log should say the config loaded and the sources are `file`. The window opens at the 16:9 size from the file (1707×960 at window scale 2).
+5. `run_native.cmd` still forces its own scale, window, aspect, and filter. Those sources log as `env`. The file does not change that launch. Comment out one `set` in the script if you want the file to win for that one variable.
