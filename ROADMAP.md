@@ -6,6 +6,7 @@ Unofficial fan / preservation project. Own the game. No dumps in git.
 
 ### P0 — Stability
 1. **Fix flickering textures** (likely lighting + texture / occlusion interaction). Playable image first.
+   Notes: [docs/flicker-investigation.md](docs/flicker-investigation.md). The exe defaults occlusion queries to `sync` (lights and overlays). Mip and render-target defaults were left alone.
 
 ### P1 — Display
 2. **Modern aspect ratios** — 16:9, 16:10, ultrawide where feasible, with HUD-safe framing.

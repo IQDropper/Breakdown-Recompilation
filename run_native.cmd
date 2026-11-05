@@ -9,6 +9,8 @@ rem RECOMP_PB_BACKEND=d3d11: draw on the graphics card.
 rem   No RECOMP_FB_WINDOW with it: that window shows guest framebuffer memory, which D3D11 never writes (blank).
 set RECOMP_PB_BACKEND=d3d11
 rem Occlusion (visibility) tests answered the same frame: deferred answers made lights/overlays flicker.
+rem The exe defaults this too (src\env\recomp_env_game.h). A late query still falls back to visible after 250 ms:
+rem docs\flicker-investigation.md. A/B deferred: run_native_occdefer.cmd
 set RECOMP_D3D11_OCC=sync
 set RECOMP_VBLANK=1
 rem RECOMP_KEYBOARD=1: keyboard also drives controller 1. Controller: XAPI input bridge in src\recomp_manual.c

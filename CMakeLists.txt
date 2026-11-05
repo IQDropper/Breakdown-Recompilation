@@ -37,6 +37,12 @@ set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../xboxrecomp" CACHE PATH
 # and provides the 'xboxrecomp' umbrella target to link against.
 add_subdirectory(${XBOXRECOMP_DIR} ${CMAKE_BINARY_DIR}/xboxrecomp)
 
+# Game defaults for toolkit env keys (src/env/recomp_env_game.h).
+# D3D11_OCC=sync: deferred visibility tests flickered lights and overlays.
+# PUBLIC so every target that includes recomp_env.h sees the same table.
+target_compile_definitions(recomp_env PUBLIC RECOMP_ENV_HAVE_GAME_KEYS)
+target_include_directories(recomp_env PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/env)
+
 # ── Recompiled game executable ──────────────────────────────────
 
 # Collect generated recompiled code.

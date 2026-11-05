@@ -9,8 +9,11 @@ cd /d %~dp0
 rem RECOMP_PB_BACKEND=d3d11: draw on the graphics card (1.8x faster than the CPU rasteriser, 2026-11-03).
 rem   No RECOMP_FB_WINDOW with it: that window shows guest framebuffer memory, which D3D11 never writes (blank).
 set RECOMP_PB_BACKEND=d3d11
-rem TEST: render-to-texture fallback - the GPU reads render targets back from emulated memory
+rem TEST: render-to-texture off. The GPU then decodes render targets from guest memory, which this
+rem backend does not write. Keep occlusion on sync so this A/B does not also bring back the
+rem light/overlay flicker. Deferred occlusion is run_native_occdefer.cmd.
 set RECOMP_D3D11_NO_RTT=1
+set RECOMP_D3D11_OCC=sync
 set RECOMP_VBLANK=1
 rem RECOMP_KEYBOARD=1: keyboard also drives controller 1 (backup if the pad isn't seen). Controller: XAPI input bridge in src\recomp_manual.c
 set RECOMP_KEYBOARD=1
