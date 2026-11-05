@@ -10,7 +10,11 @@ Unofficial fan / preservation project. Own the game. No dumps in git.
 
 ### P1 — Display
 2. **Modern aspect ratios** — 16:9, 16:10, ultrawide where feasible, with HUD-safe framing.
+   - [x] Letterbox the 4:3 frame in a 16:9, 16:10, or 21:9 window (`RECOMP_DISPLAY_ASPECT`). HUD stays in the 4:3 image. [docs/widescreen-hires.md](docs/widescreen-hires.md).
+   - [ ] Hor+ (a wider camera). This toolkit pin logs any `display.aspect` other than 4:3 and keeps 4:3.
 3. **Higher internal / output resolutions** beyond the Xbox default.
+   - [x] `RECOMP_RENDER_SCALE` 1..4 and `RECOMP_WINDOW_SCALE` 1..6. `run_native.cmd` uses 2 and 16:9.
+   - [ ] Modes other than borderless fullscreen (`RECOMP_PRESENT_FULLSCREEN=1` is the borderless switch).
 
 ### P2 — Presentation
 4. **Anniversary-style graphics toggle** — switch between original look and touched-up assets (like Halo CE Anniversary original/remastered). Default: original. Updated pack optional / generated locally from your dump where possible.

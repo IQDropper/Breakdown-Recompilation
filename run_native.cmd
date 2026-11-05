@@ -20,4 +20,14 @@ rem Modern (default): LMB/RMB = left/right punch (LT/RT). Legacy face-buttons: X
 set RECOMP_MOUSE_SENS=1200
 set RECOMP_MOUSE_INVERT=0
 set RECOMP_MOUSE_BUTTONS=LT,RT,Y,WHITE,BLACK
+rem Display (docs\widescreen-hires.md). Frame stays 4:3. Hor+ is not in this toolkit pin.
+rem Needs APPLY_DISPLAY_PATCHES.cmd and a rebuild or the window stays 640x480.
+rem Internal resolution 1..4 (1 = Xbox pixels). Window height is 480*WINDOW_SCALE.
+set RECOMP_RENDER_SCALE=2
+set RECOMP_WINDOW_SCALE=2
+rem 4:3 | 16:9 | 16:10 | 21:9. Wider values pillarbox. They do not widen the camera.
+set RECOMP_DISPLAY_ASPECT=16:9
+rem nearest | linear | integer. Scale 2 already letterboxes a wide window.
+set RECOMP_PRESENT_FILTER=nearest
+rem set RECOMP_PRESENT_FULLSCREEN=1
 build-win\breakdown_recomp.exe 1>run_stdout.txt 2>run_stderr.txt

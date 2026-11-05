@@ -32,6 +32,7 @@
 
 #include <windows.h>
 #include "recomp_env.h"
+#include "display_host.h"
 #include <dbghelp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -304,6 +305,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     /* Read the environment once, before anything asks recomp_env(). */
     recomp_env_init();
+    /* Scale, letterbox window, present filter. Before any D3D window exists. */
+    display_host_init();
 
     /* Unbuffered output for immediate visibility during debugging */
     setvbuf(stdout, NULL, _IONBF, 0);
