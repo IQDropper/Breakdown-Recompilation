@@ -33,6 +33,12 @@ typedef char *(*display_getenv_fn)(const char *name);
 
 void display_host_choose(display_getenv_fn get, struct display_choice *out);
 
+/* Env wins. `file` is used only when `env` is missing or returns an empty
+ * string. Either pointer may be NULL. Not re-entrant: the two pointers are
+ * process-wide, and display_getenv_layered reads them. */
+void display_host_set_sources(display_getenv_fn env, display_getenv_fn file);
+char *display_getenv_layered(const char *name);
+
 /* After recomp_env_init, before the guest. Sets nv2a_host_opts, and the
  * optional D3D11 window hook when the toolkit patch defined it. */
 void display_host_init(void);

@@ -59,6 +59,8 @@ set(GAME_SOURCES
     src/main.c
     src/recomp_manual.c
     src/display_host.c
+    src/video_config.c
+    src/video_menu.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c
