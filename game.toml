@@ -1,0 +1,72 @@
+# game.toml: what xboxrecomp-cli needs to know about breakdown. The CLI reads
+# it on every command; every key and its default is in the CLI's
+# docs/manifest.md. Written by `xbr new`; the CLI never writes it again.
+schema = 1
+
+[game]
+name = "breakdown"
+slug = "breakdown"
+
+[xbe]
+path = "game_files/default.xbe"
+# The certificate's title ID: `package` refuses a dump with another one.
+title_id = 0x4E4D0009   # BREAKDOWN (Namco, NA) - from pipeline\out\02_xbe_info.md
+# Known dumps (sha256 of default.xbe); empty accepts any dump.
+sha256 = []
+
+[cli]
+# The xboxrecomp-cli ./breakdown runs: the bootstrap clones it at this release
+# tag (or commit) when it finds none; with both, the commit locks the tag.
+# `breakdown pins refresh` prints the newest release.
+commit = "2ad369903e10363a999d1d78f01a8150b236a856"
+url = "https://github.com/apexJCL/xboxrecomp-cli.git"
+
+[toolkit]
+# `breakdown setup` clones it into external/xboxrecomp at this commit. A
+# release tag pins it too: tag = "..." (branch is then optional).
+url = "https://github.com/apexJCL/xboxrecomp.git"
+branch = "blinx2/portability"
+commit = "0692070cb41d53d225711d8a8183efce0a388019"
+
+[toolchain]
+# The llvm-mingw release the windows target cross-compiles with, on every host.
+llvm_mingw = "20260922"
+
+[pipeline]
+# Stamped into every generated file: fixed for the life of the game.
+game_name = "breakdown"
+gen = "src/recomp/gen"
+out = "analysis"
+# Function starts the disassembler missed (ICALL failures at runtime).
+seeds = ["config/seed_functions.json"]
+# The toolkit's icall_feedback database belongs to another game: off.
+icall_seeds = false
+exclude_manual = "src/recomp_manual.c"
+
+[pipeline.disasm]
+# Only .text. A title with code in its XDK sections names them, for example
+# extra_sections = ["D3D", "DSOUND", "XPP"].
+text_only = true
+# Breakdown calls into XDK code it links statically (D3D, DSOUND, ...). Without these sections swept,
+# a function there ends at its FIRST ret and its out-of-line tail blocks become bare-ret stubs:
+# 179 of 342 unresolved stubs, lost esi/edi/ebp/ebx -> Game_Init crash. DOLBY is DSP code, not x86.
+extra_sections = ["D3D", "D3DX", "XGRPH", "DSOUND", "XMV", "XPP"]
+
+[build]
+# The CMake target and file name: build-win/breakdown_recomp.exe
+exe = "breakdown_recomp"
+# windows builds on every host (llvm-mingw). macos needs a main.c with the
+# POSIX host code: the CLI's docs/porting.md, "macOS as a target".
+targets = ["windows"]
+# No enhancements layer: the stock build is the plain one.
+stock_cmake = []
+
+[data]
+game_files = "game_files"
+
+# Packaging (a private bundle with your own dump inside) is opt-in:
+# [package]
+# app = "Breakdown"
+# targets = ["windows", "steamos"]
+# with packaging/launch.env.default.windows and packaging/windows/README.part.
+# See docs/manifest.md, [package].

@@ -1,0 +1,33 @@
+BREAKDOWN (native) - KEYBOARD + MOUSE CONTROLS
+================================================
+Start the game with run_native.cmd. A real controller still works too.
+
+MOUSE
+  Click in the game window ... grab the mouse (this click is NOT sent to the game)
+  Move mouse ................ look around (right stick)
+  Left click ................ X
+  Right click ............... B
+  Middle click .............. Y
+  Side button (back) ........ Left trigger
+  Side button (forward) ..... Right trigger
+  Scroll wheel .............. D-pad up / down
+  F1 ........................ let go of the mouse (Alt-Tab also lets go)
+
+KEYBOARD
+  W A S D ................... move (left stick)
+  I J K L ................... look (right stick), if you prefer keys
+  Z / X / C / V ............. A / B / X / Y
+  Q / E ..................... White / Black
+  1 / 3 ..................... Left trigger / Right trigger
+  Enter ..................... START (pause)
+  Backspace ................. BACK
+  Arrow keys ................ D-pad (menus)
+  Shift / Ctrl .............. left / right stick click
+
+CHANGE THE MOUSE (edit run_native.cmd, the "set RECOMP_MOUSE..." lines)
+  RECOMP_MOUSE_SENS=1200 .... look speed (higher = faster)
+  RECOMP_MOUSE_INVERT=1 ..... flip up/down look
+  RECOMP_MOUSE_BUTTONS=X,B,Y,LT,RT
+       order: left, right, middle, back side button, forward side button
+       names: A B X Y WHITE BLACK LT RT START BACK LS RS UP DOWN LEFT RIGHT NONE
+  RECOMP_MOUSE=0 ............ turn the mouse off

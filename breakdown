@@ -1,0 +1,3 @@
+#!/bin/sh
+# breakdown: the project CLI (breakdown.py). Python 3.9 or newer.
+exec python3 "$(dirname "$0")/breakdown.py" "$@"

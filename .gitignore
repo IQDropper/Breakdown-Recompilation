@@ -1,45 +1,100 @@
-# Nothing game-derived may enter git history.
-#
-# The game's code and assets are copyrighted, and anything produced by feeding
-# them through the recompiler is a derivative of them. Only original work --
-# the launcher sources, the build files, this script -- belongs in here. A
-# game-derived file committed once has to be purged from history, not just the
-# working tree, so keep it out in the first place.
+# Written by `xbr new`. Game data, generated code, the toolchain and the
+# bundles never enter git.
 
-# The user's own disc image and its extracted contents.
+# Your dump, and the analysis the pipeline writes beside it; `import`
+# builds the dump beside it first and keeps the old one there until the
+# new one is in place.
 game_files/
+game_files.partial/
+game_files.old/
 
-# Lifted from the game by tools.recomp: derivative, and regenerable from the
-# user's own copy with ./regenerate.sh.
+# Generated code and its key (`breakdown package` regenerates when it differs).
 src/recomp/gen/
+src/recomp/gen.key.json
+src/recomp/.gen-regenerating
 
-# Build output, including the compiled game code.
-build*/
+# The pipeline's intermediates.
+analysis/
+
+# Builds, and the packaging build trees.
+build-win/
+build/
+build-*/
+build-logs/
+
+# `breakdown setup`: the pinned venv, the toolchain, the toolkit and CLI clones.
+.venv/
+.venv-ghidra/
+third_party/
+external/
+.xbr-pin
+
+# `breakdown package`: private bundles holding the game. Never commit them.
+dist/
+*.dmg
 *.exe
-*.dll
-*.a
-*.o
-*.obj
+*.pdb
+*.nsi
+*.tar
 
-# Runtime artefacts from a debug run.
+# The bench host.
+bench-logs/
+scripts/bench.env
+
+# Game data, captures and game output, anywhere in the tree.
+*.xbe
+*.iso
+*.xiso
+*.xpr
+*.xwb
+*.adx
+*.sfd
+*.ipk
+*.wav
+*.bmp
+*.png
+# Screenshots of your own build for the README are the one exception.
+!docs/images/*.png
+*.ico
+*.icns
+*.ppm
+*.raw
+*.sav
+*.xsv
+UDATA/
+TDATA/
+saves/
+
 *.log
-backtrace*.txt
-icall_targets.dump
-
-# CodeGraph's local index.
-.codegraph/
-
-# Temporary debugging instrumentation, kept out of history: some scripts
-# anchor on excerpts of the generated (game-derived) code.
-debug-instruments/
-
-# Frame dumps from XBOXRECOMP_FRAMEDUMP: game-derived rendered output.
-framedump_*.ppm
-
-# launcher build output
-launcher/bin/
-launcher/obj/
-
-# Windows launcher build output, and Python bytecode
-launcher-win/out/
 __pycache__/
+.ruff_cache/
+.DS_Store
+
+# Local session / bench / debug artefacts (not source)
+*_err.txt
+*_out.txt
+*_mark.txt
+*_marks.txt
+log_*.txt
+bench_*.txt
+bench_*.out
+px_*.txt
+rb_*.txt
+run_*.txt
+iterate_*.txt
+migrate_log.txt
+out_stub_audit.txt
+bad_seeds.txt
+samples.txt
+build_done.txt
+diff_*.txt
+dbg_*.txt
+auto_wake_*.txt
+menu_probe_*.txt
+session_*.txt
+sample_*.txt
+title_d3d_*.txt
+*.out
+game.toml.bak*
+*.bak*
+*.bak_*

@@ -1,0 +1,26 @@
+# The Python environment for the toolkit's tools and the build. ./breakdown
+# (breakdown.py, standard library only) runs xboxrecomp-cli at the commit
+# game.toml pins; `breakdown setup` makes .venv/ from uv.lock (`uv sync
+# --locked`) for cmake, ninja, capstone and pefile, and with --dev the
+# tests and ruff. `breakdown pins refresh` rewrites the lock.
+
+[project]
+name = "breakdown"
+version = "0"
+description = "breakdown static recompilation: the tools environment (the CLI is xboxrecomp-cli)"
+requires-python = ">=3.9"
+dependencies = [
+  "cmake",
+  "ninja",
+  # The lifter decodes with capstone: a different version could change gen/.
+  "capstone==5.0.9",
+  "pefile==2024.8.26",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.uv]
+package = false   # a plain environment: nothing here is installed as a project
+# Wheels only: nothing builds from an sdist at install time.
+no-build = true

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # ============================================================================
-# YOUR_GAME_NAME - Static Recompilation
+# breakdown - Static Recompilation
 #
 # Copy this template to your game project root and customize:
 #   1. Change the project name below
@@ -19,13 +19,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_compile_definitions(
     WIN32_LEAN_AND_MEAN
     NOMINMAX
-    # Bring-up: record every indirect-branch target the title reaches (see
-    # docs/technical/indirect-calls.md and src/kernel/icall_feedback.c) so a
-    # gap like the device-table-never-written mystery can be chased with
-    # measurement instead of more manual disasm reading. Must be defined
-    # before add_subdirectory(xboxrecomp) below so xbox_kernel (which builds
-    # icall_feedback.c) sees it too, not just this executable's own sources.
-    RECOMP_ICALL_FEEDBACK
 )
 
 # ── xboxrecomp toolkit ──────────────────────────────────────────
@@ -37,9 +30,7 @@ add_compile_definitions(
 #   find_package(xboxrecomp REQUIRED)
 #
 # Adjust this path to point to your xboxrecomp clone:
-# Repo is named xboxrecomp-fork on this machine (RecompOne-fork naming
-# convention), not xboxrecomp -- override the template's default relative path.
-set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../xboxrecomp-fork" CACHE PATH
+set(XBOXRECOMP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../xboxrecomp" CACHE PATH
     "Path to the xboxrecomp toolkit root directory")
 
 # Add xboxrecomp as a subdirectory -- this builds all 6 runtime libraries
@@ -72,26 +63,10 @@ set(GAME_SOURCES
 #   src/recomp/recomp_dispatch.h     - binary search dispatch table
 #   src/recomp/recomp_types.h        - register model, ICALL macros, MEM helpers
 
-# BREAKDOWN_BUILD_DLL builds breakdown_game.dll instead of the exe: the same
-# code, started by the Windows launcher in its own window (see the exports at
-# the end of src/main.c). The target name stays the same either way so every
-# setting below applies to both.
-option(BREAKDOWN_BUILD_DLL "Build breakdown_game.dll for the Windows launcher" OFF)
-if(BREAKDOWN_BUILD_DLL)
-    add_library(${PROJECT_NAME} SHARED
-        ${GAME_SOURCES}
-        ${RECOMP_GEN_SOURCES}
-    )
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        OUTPUT_NAME breakdown_game
-        PREFIX "")
-    target_compile_definitions(${PROJECT_NAME} PRIVATE BREAKDOWN_DLL)
-else()
-    add_executable(${PROJECT_NAME} WIN32
-        ${GAME_SOURCES}
-        ${RECOMP_GEN_SOURCES}
-    )
-endif()
+add_executable(${PROJECT_NAME} WIN32
+    ${GAME_SOURCES}
+    ${RECOMP_GEN_SOURCES}
+)
 
 # Link against the xboxrecomp umbrella target (all 6 runtime libraries)
 target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp)
@@ -110,6 +85,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     dxguid
     xinput
     winmm
+    # Lets the fault handler resolve the host RIP back to the generated
+    # function's symbol, i.e. to the guest function that faulted.
+    dbghelp
 )
 
 # MSVC-specific: large address aware, increase section limit for big generated files
