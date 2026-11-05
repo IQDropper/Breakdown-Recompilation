@@ -1,0 +1,283 @@
+/*
+ * display_host.c - RECOMP_RENDER_SCALE, RECOMP_WINDOW_SCALE,
+ * RECOMP_DISPLAY_ASPECT, RECOMP_PRESENT_FILTER, RECOMP_PRESENT_FULLSCREEN.
+ *
+ * Read with getenv so they work without the enhancements layer. The layer's
+ * display.aspect other than 4:3 is still unimplemented there (hor+). Here
+ * aspect only sizes the output window; present letterboxes the 4:3 frame.
+ */
+#include "display_host.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct aspect_ratio {
+    const char *name;
+    unsigned num, den; /* width / height; 0 num means use 640x480 exactly */
+};
+
+static const struct aspect_ratio s_aspects[] = {
+    { "4:3",   0,  0 },
+    { "16:9",  16, 9 },
+    { "16:10", 16, 10 },
+    { "21:9",  21, 9 },
+};
+
+static const char *s_filters[] = { "nearest", "linear", "integer" };
+
+static const char *env_get(const char *(*get)(const char *), const char *name)
+{
+    const char *v = get ? get(name) : NULL;
+    return (v && *v) ? v : NULL;
+}
+
+static void choose_aspect(const char *s, struct display_choice *o,
+                          unsigned *num, unsigned *den)
+{
+    unsigned i;
+    if (!s)
+        s = "4:3";
+    for (i = 0; i < sizeof s_aspects / sizeof s_aspects[0]; i++) {
+        if (strcmp(s, s_aspects[i].name) == 0) {
+            snprintf(o->aspect, sizeof o->aspect, "%s", s_aspects[i].name);
+            *num = s_aspects[i].num;
+            *den = s_aspects[i].den;
+            return;
+        }
+    }
+    o->aspect_unknown = 1;
+    snprintf(o->aspect, sizeof o->aspect, "4:3");
+    *num = 0;
+    *den = 0;
+}
+
+/* 0..2, or -1 when s is missing or not a known word (caller treats as unset). */
+static int choose_filter(const char *s, struct display_choice *o)
+{
+    int i;
+    if (!s)
+        return -1;
+    for (i = 0; i < 3; i++) {
+        if (strcmp(s, s_filters[i]) == 0) {
+            snprintf(o->filter_name, sizeof o->filter_name, "%s", s_filters[i]);
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int truth(const char *s)
+{
+    return s && (strcmp(s, "1") == 0 || strcmp(s, "true") == 0 || strcmp(s, "yes") == 0);
+}
+
+void display_host_choose(const char *(*get)(const char *), struct display_choice *o)
+{
+    const char *s;
+    unsigned num = 0, den = 0;
+    long scale, wscale;
+    char *end;
+    int filter_set = 0;
+
+    memset(o, 0, sizeof *o);
+    o->render_scale = 1;
+
+    s = env_get(get, "RECOMP_RENDER_SCALE");
+    if (s) {
+        scale = strtol(s, &end, 10);
+        if (end == s || *end || scale < 1 || scale > 4) {
+            o->scale_clamped = 1;
+            if (scale < 1)
+                scale = 1;
+            if (scale > 4)
+                scale = 4;
+        }
+        o->render_scale = (unsigned)scale;
+    }
+
+    wscale = 1;
+    s = env_get(get, "RECOMP_WINDOW_SCALE");
+    if (s) {
+        wscale = strtol(s, &end, 10);
+        if (end == s || *end || wscale < 1 || wscale > 6) {
+            o->window_clamped = 1;
+            if (wscale < 1)
+                wscale = 1;
+            if (wscale > 6)
+                wscale = 6;
+        }
+    }
+
+    choose_aspect(env_get(get, "RECOMP_DISPLAY_ASPECT"), o, &num, &den);
+    o->window_h = (unsigned)(480 * wscale);
+    if (!num || !den)
+        o->window_w = (unsigned)(640 * wscale);
+    else
+        o->window_w = (unsigned)(((unsigned long)o->window_h * num + den / 2) / den);
+    if (!o->window_w)
+        o->window_w = 640;
+    if (!o->window_h)
+        o->window_h = 480;
+
+    s = env_get(get, "RECOMP_PRESENT_FILTER");
+    o->present_filter = choose_filter(s, o);
+    filter_set = o->present_filter >= 0;
+    if (!filter_set) {
+        o->present_filter = 0;
+        snprintf(o->filter_name, sizeof o->filter_name, "nearest");
+    }
+    /*
+     * Scale 1 + nearest + the window still at its created size takes the
+     * stock copy, which plants the frame at the top left of a wider window.
+     * Linear (or any non-nearest filter) takes the letterbox blit. A wider
+     * aspect with scale 1 therefore promotes an unset filter to linear.
+     * render.scale other than 1 already leaves that stock path.
+     */
+    if (strcmp(o->aspect, "4:3") != 0 && !filter_set && o->render_scale == 1) {
+        o->present_filter = 1;
+        snprintf(o->filter_name, sizeof o->filter_name, "linear");
+        o->filter_promoted = 1;
+    }
+
+    o->fullscreen = truth(env_get(get, "RECOMP_PRESENT_FULLSCREEN"));
+}
+
+#if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
+#include "kernel/nv2a_backend_common.h"
+
+void display_host_init(void)
+{
+    struct display_choice c;
+    struct nv2a_host_opts opts;
+
+    display_host_choose(getenv, &c);
+    memset(&opts, 0, sizeof opts);
+    opts.render_scale = c.render_scale;
+    opts.present_filter = c.present_filter;
+    opts.fullscreen = c.fullscreen;
+    nv2a_host_opts_set(&opts);
+    fprintf(stderr,
+            "[DISPLAY] render.scale=%u%s present.filter=%s%s fullscreen=%d"
+            " window=%ux%u aspect=%s%s (letterbox, 4:3 frame; hor+ is not in this pin)\n",
+            c.render_scale, c.scale_clamped ? " (clamped to 1..4)" : "",
+            c.filter_name,
+            c.filter_promoted ? " (promoted so a wide window letterboxes)" : "",
+            c.fullscreen, c.window_w, c.window_h, c.aspect,
+            c.aspect_unknown ? " (unknown aspect, using 4:3)" : "");
+    if (c.window_clamped)
+        fprintf(stderr, "[DISPLAY] RECOMP_WINDOW_SCALE clamped to 1..6\n");
+}
+
+void breakdown_display_window_size(unsigned int *w, unsigned int *h)
+{
+    struct display_choice c;
+    display_host_choose(getenv, &c);
+    if (w)
+        *w = c.window_w;
+    if (h)
+        *h = c.window_h;
+}
+#endif
+
+#ifdef DISPLAY_HOST_TEST
+static const char *s_env[8];
+static const char *s_val[8];
+static int s_n;
+
+static const char *test_get(const char *name)
+{
+    int i;
+    for (i = 0; i < s_n; i++)
+        if (strcmp(s_env[i], name) == 0)
+            return s_val[i];
+    return NULL;
+}
+
+static void setenv_test(const char *k, const char *v)
+{
+    s_env[s_n] = k;
+    s_val[s_n] = v;
+    s_n++;
+}
+
+static int g_fail;
+
+static void expect(const char *name, int cond)
+{
+    if (!cond) {
+        fprintf(stderr, "FAIL %s\n", name);
+        g_fail++;
+    } else {
+        printf("ok %s\n", name);
+    }
+}
+
+int main(void)
+{
+    struct display_choice c;
+
+    s_n = 0;
+    display_host_choose(test_get, &c);
+    expect("stock scale", c.render_scale == 1);
+    expect("stock filter", c.present_filter == 0);
+    expect("stock window", c.window_w == 640 && c.window_h == 480);
+    expect("stock aspect", strcmp(c.aspect, "4:3") == 0);
+    expect("stock fullscreen", c.fullscreen == 0);
+
+    s_n = 0;
+    setenv_test("RECOMP_RENDER_SCALE", "2");
+    setenv_test("RECOMP_WINDOW_SCALE", "2");
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:9");
+    display_host_choose(test_get, &c);
+    expect("16:9 scale", c.render_scale == 2);
+    expect("16:9 size", c.window_w == 1707 && c.window_h == 960);
+    expect("16:9 not promoted", c.filter_promoted == 0 && c.present_filter == 0);
+
+    s_n = 0;
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:9");
+    display_host_choose(test_get, &c);
+    expect("promote linear", c.filter_promoted == 1 && c.present_filter == 1);
+    expect("16:9 height 480", c.window_w == 853 && c.window_h == 480);
+
+    s_n = 0;
+    setenv_test("RECOMP_RENDER_SCALE", "9");
+    setenv_test("RECOMP_WINDOW_SCALE", "0");
+    setenv_test("RECOMP_DISPLAY_ASPECT", "nope");
+    display_host_choose(test_get, &c);
+    expect("scale clamp", c.render_scale == 4 && c.scale_clamped);
+    expect("window clamp", c.window_w == 640 && c.window_h == 480 && c.window_clamped);
+    expect("unknown aspect", c.aspect_unknown && strcmp(c.aspect, "4:3") == 0);
+
+    s_n = 0;
+    setenv_test("RECOMP_WINDOW_SCALE", "2");
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:10");
+    display_host_choose(test_get, &c);
+    expect("16:10", c.window_w == 1536 && c.window_h == 960);
+
+    s_n = 0;
+    setenv_test("RECOMP_DISPLAY_ASPECT", "21:9");
+    display_host_choose(test_get, &c);
+    expect("21:9", c.window_w == 1120 && c.window_h == 480);
+
+    s_n = 0;
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:9");
+    setenv_test("RECOMP_PRESENT_FILTER", "nearest");
+    display_host_choose(test_get, &c);
+    expect("explicit nearest kept", c.present_filter == 0 && c.filter_promoted == 0);
+
+    s_n = 0;
+    setenv_test("RECOMP_PRESENT_FILTER", "integer");
+    setenv_test("RECOMP_PRESENT_FULLSCREEN", "1");
+    display_host_choose(test_get, &c);
+    expect("integer", c.present_filter == 2);
+    expect("fullscreen", c.fullscreen == 1);
+
+    if (g_fail) {
+        fprintf(stderr, "%d failed\n", g_fail);
+        return 1;
+    }
+    puts("all passed");
+    return 0;
+}
+#endif

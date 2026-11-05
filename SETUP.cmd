@@ -52,6 +52,11 @@ call APPLY_INPUT_PATCHES.cmd
 set PATCH_ERR=%ERRORLEVEL%
 
 echo.
+echo --- Display patch (D3D11 window size for aspect / scale) ---
+call APPLY_DISPLAY_PATCHES.cmd
+set DISP_ERR=%ERRORLEVEL%
+
+echo.
 echo --- Running: breakdown doctor ---
 call breakdown.cmd doctor
 echo.
@@ -72,7 +77,8 @@ echo   build-win\breakdown_recomp.exe
 echo   run_native.cmd
 echo.
 echo Controls: CONTROLS.txt  (Modern mouse punches = LT/RT by default)
-echo If you wipe external\, re-run APPLY_INPUT_PATCHES.cmd then rebuild.
+echo If you wipe external\, re-run APPLY_INPUT_PATCHES.cmd and APPLY_DISPLAY_PATCHES.cmd, then rebuild.
+echo Display: docs\widescreen-hires.md  (run_native.cmd = 2x, 16:9 letterbox)
 echo.
 echo Read README.md and DISCLAIMER.md before sharing builds.
 echo.
