@@ -26,9 +26,12 @@ struct display_choice {
     char     filter_name[12];
 };
 
-/* `get` is getenv, or a test double. Never returns a zero window. */
-void display_host_choose(const char *(*get)(const char *name),
-                         struct display_choice *out);
+/* Same type as getenv (char *getenv(const char *)). A const-returning
+ * getter does not match, and mingw-clang rejects that pointer conversion.
+ * `get` is getenv, or a test double. Never returns a zero window. */
+typedef char *(*display_getenv_fn)(const char *name);
+
+void display_host_choose(display_getenv_fn get, struct display_choice *out);
 
 /* After recomp_env_init, before the guest. Sets nv2a_host_opts, and the
  * optional D3D11 window hook when the toolkit patch defined it. */

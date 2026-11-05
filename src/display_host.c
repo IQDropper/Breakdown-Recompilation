@@ -26,7 +26,7 @@ static const struct aspect_ratio s_aspects[] = {
 
 static const char *s_filters[] = { "nearest", "linear", "integer" };
 
-static const char *env_get(const char *(*get)(const char *), const char *name)
+static const char *env_get(display_getenv_fn get, const char *name)
 {
     const char *v = get ? get(name) : NULL;
     return (v && *v) ? v : NULL;
@@ -72,7 +72,7 @@ static int truth(const char *s)
     return s && (strcmp(s, "1") == 0 || strcmp(s, "true") == 0 || strcmp(s, "yes") == 0);
 }
 
-void display_host_choose(const char *(*get)(const char *), struct display_choice *o)
+void display_host_choose(display_getenv_fn get, struct display_choice *o)
 {
     const char *s;
     unsigned num = 0, den = 0;
@@ -200,12 +200,13 @@ static const char *s_env[8];
 static const char *s_val[8];
 static int s_n;
 
-static const char *test_get(const char *name)
+/* getenv's return is char *, not const char *. */
+static char *test_get(const char *name)
 {
     int i;
     for (i = 0; i < s_n; i++)
         if (strcmp(s_env[i], name) == 0)
-            return s_val[i];
+            return (char *)s_val[i];
     return NULL;
 }
 
