@@ -30,11 +30,9 @@ struct display_choice {
 void display_host_choose(const char *(*get)(const char *name),
                          struct display_choice *out);
 
-/* After recomp_env_init, before the guest. Sets nv2a_host_opts and logs. */
+/* After recomp_env_init, before the guest. Sets nv2a_host_opts, and the
+ * optional D3D11 window hook when the toolkit patch defined it. */
 void display_host_init(void);
-
-/* D3D11 window creation (patch_d3d11_window.py). Windowed client size. */
-void breakdown_display_window_size(unsigned int *w, unsigned int *h);
 
 #ifdef __cplusplus
 }

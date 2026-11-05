@@ -27,7 +27,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [ok] D3D11 window patch applied.
-echo      Rebuild after this if the exe was already built: breakdown all
+echo [ok] D3D11 window hook applied.
+echo      If this upgraded an older patch, rebuild the toolkit and the exe.
+echo      A build-win configured before display_host.c drops CMakeCache.txt
+echo      so the next breakdown build picks that file up. Then: breakdown all
 echo      Play with run_native.cmd  (see docs\widescreen-hires.md)
 exit /b 0

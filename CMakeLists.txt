@@ -75,6 +75,21 @@ add_executable(${PROJECT_NAME} WIN32
     ${RECOMP_GEN_SOURCES}
 )
 
+# src/display_host.c sets the optional D3D11 window hook and the RECOMP_*
+# display knobs. GAME_SOURCES lists it; fail configure if that list loses it.
+# A build tree configured before the file existed does not see this until
+# cmake runs again (APPLY_DISPLAY_PATCHES.cmd drops that CMakeCache.txt).
+get_target_property(_breakdown_sources ${PROJECT_NAME} SOURCES)
+set(_has_display_host FALSE)
+foreach(_src IN LISTS _breakdown_sources)
+    if(_src MATCHES "display_host\\.c$")
+        set(_has_display_host TRUE)
+    endif()
+endforeach()
+if(NOT _has_display_host)
+    message(FATAL_ERROR "breakdown_recomp is missing src/display_host.c")
+endif()
+
 # Link against the xboxrecomp umbrella target (all 6 runtime libraries)
 target_link_libraries(${PROJECT_NAME} PRIVATE xboxrecomp)
 
