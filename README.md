@@ -1,27 +1,135 @@
-# breakdown static recompilation
+# Breakdown Recompilation (native PC)
 
-A port of the original Xbox game *breakdown* to native code with the
-[xboxrecomp](https://github.com/apexJCL/xboxrecomp) toolkit, driven by
-[xboxrecomp-cli](https://github.com/apexJCL/xboxrecomp-cli). Started with
-`xbr new`.
+Fan / preservation project: a **static recompilation** of the original Xbox game **Breakdown** (Namco / Pandemic, 2004) to a native Windows build using [xboxrecomp](https://github.com/apexJCL/xboxrecomp) and [xboxrecomp-cli](https://github.com/apexJCL/xboxrecomp-cli).
 
-**No game data here, and none ever will be.** Put your own dump of the disc
-(`default.xbe` and the game's files) in `game_files/`; git ignores it.
+**This repository ships tooling and source only — never the game.** You must own a legitimate copy and supply your own dump.
 
-```sh
-./breakdown setup      # once: .venv, llvm-mingw, the toolkit (each download sha256-pinned)
-./breakdown all        # analyze (parse, disasm, funcid, abi), recomp, build
-./breakdown doctor     # what this machine has, and what is next
+Share / clone: https://github.com/IQDropper/Breakdown-Recompilation
+
+---
+
+## Legal / ownership disclaimers (please read)
+
+- **Breakdown**, its name, characters, artwork, audio, and all related trademarks and copyrights are the property of their respective rights holders (historically associated with Pandemic Studios, Namco, Microsoft, and successors). This project is **not affiliated with, endorsed by, sponsored by, or partnered with** any of them.
+- This is an **unofficial fan / technical / preservation** effort. It is **not** an official remaster, remake, re-release, or licensed port.
+- **No game files, ISOs, XBEs, ROMs, keys, cracks, or copyrighted assets are distributed** in this repository. Git is configured to ignore `game_files/`, generated recomp output, builds, and disc dumps. **Do not open PRs that add them.**
+- You must **own the game** (physical or digital through legitimate channels) and only use dumps you are authorized to make for personal use under the laws of your jurisdiction.
+- Reverse engineering / recompilation for interoperability or personal use may be restricted or allowed depending on where you live. **This README is not legal advice.** If you need legal advice, consult an attorney.
+- The maintainers provide this code **as-is, without warranty**. Use at your own risk. We are fans who want this game remembered and revisited — preferably with a proper official release someday.
+
+If a rights holder wants changes or removal, open an issue or contact the repo owner; we will cooperate promptly.
+
+---
+
+## What "works" right now
+
+This fork tracks a **working native Windows build path** used for PC playtesting (including menus / save flow on mid-range GPUs such as a GTX 1660 Ti). Expect quirks (for example texture flicker in places). The first clean build on a new machine may crash until overrides / seeds match your dump — that is normal for this class of port.
+
+**Others can run it** after:
+
+1. Cloning this repo
+2. Running setup once (script below)
+3. Placing **their own** `game_files/` dump
+4. Building / launching
+
+---
+
+## Quick start (Windows)
+
+### Option A — helper script (recommended)
+
+From a Command Prompt or PowerShell:
+
+```bat
+git clone https://github.com/IQDropper/Breakdown-Recompilation.git
+cd Breakdown-Recompilation
+SETUP.cmd
 ```
 
-Windows: `breakdown` (the `breakdown.cmd` wrapper) or `py -3 breakdown.py`, from a
-short checkout path such as `C:\g\breakdown`, with
-`git config --global core.longpaths true`.
+`SETUP.cmd` will:
 
-The first build is `build-win/breakdown_recomp.exe`, cross-compiled with llvm-mingw on
-every host. It will crash the first time: that is where the port starts.
-`src/recomp_manual.c` takes hand-written overrides, `config/seed_functions.json`
-the function starts the disassembler missed, and `./breakdown analyze` then
-`./breakdown recomp` regenerate `src/recomp/gen/` (never edit it by hand).
-The CLI's `docs/porting.md` has the loop; `game.toml` has every setting,
-documented in the CLI's `docs/manifest.md`.
+- Enable `git config --global core.longpaths true` when possible
+- Remind you to use a short checkout path
+- Run `breakdown setup` (venv, llvm-mingw, toolkit — downloads are sha256-pinned)
+- Run `breakdown doctor` and report what is missing
+- Print where to put `game_files/` and how to build / run
+
+### Option B — manual
+
+```bat
+git config --global core.longpaths true
+git clone https://github.com/IQDropper/Breakdown-Recompilation.git
+cd Breakdown-Recompilation
+
+REM Prefer: breakdown.cmd   or:   py -3 breakdown.py
+breakdown setup
+breakdown doctor
+```
+
+Put your dump here (gitignored):
+
+```text
+game_files/
+  default.xbe
+  ... remaining disc files (romdata/, stream/, etc.)
+```
+
+Then:
+
+```bat
+breakdown all
+```
+
+First successful Windows binary:
+
+```text
+build-win\breakdown_recomp.exe
+```
+
+Or, if you already have a built `build-win\` and your dump is present:
+
+```bat
+run_native.cmd
+```
+
+---
+
+## Common commands
+
+| Command | Purpose |
+|--------|---------|
+| `breakdown setup` | Once: `.venv`, llvm-mingw, toolkit (pinned hashes) |
+| `breakdown doctor` | What this machine has / what to do next |
+| `breakdown all` | Analyze → recomp → build |
+| `breakdown analyze` / `breakdown recomp` | Regenerate `src/recomp/gen/` (do **not** edit gen by hand) |
+| `run_native.cmd` | Launch helpers for the native exe |
+
+Hand overrides live in `src/recomp_manual.c`. Missed function starts go in `config/seed_functions.json`. Settings are in `game.toml`. Upstream CLI docs: `docs/porting.md` / `docs/manifest.md` inside the toolkit after setup.
+
+**Tip:** Keep the checkout on a short path (for example `D:\Emulation\Breakdown_Recomp` or `C:\g\breakdown`). Long OneDrive paths + Windows MAX_PATH still hurt toolchains even with longpaths enabled.
+
+---
+
+## What is intentionally not in git
+
+See `.gitignore`. In particular:
+
+- `game_files/` — your disc dump
+- `src/recomp/gen/` — generated from your dump
+- `build-win/`, `.venv/`, `third_party/`, `external/` — local toolchain / build trees
+- Session logs / bench artefacts
+
+---
+
+## Credits
+
+- Original game: Pandemic Studios / Namco (2004, Xbox)
+- Recomp stack: [xboxrecomp](https://github.com/apexJCL/xboxrecomp), [xboxrecomp-cli](https://github.com/apexJCL/xboxrecomp-cli)
+- Upstream project template: [Heromachine/Breakdown-Recompilation](https://github.com/Heromachine/Breakdown-Recompilation)
+- This fork: working-tree sync and PC playtest notes for sharing with other fans who **own the game**
+
+---
+
+## License / contribution note
+
+Tooling and original code in this repo are provided for educational and preservation discussion among legitimate owners. Do not submit copyrighted game assets. By contributing, you confirm your patches do not include dumps, ISOs, or generated game-derived blobs that belong in `game_files/` or `src/recomp/gen/`.
