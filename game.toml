@@ -6,6 +6,9 @@ schema = 1
 [game]
 name = "breakdown"
 slug = "breakdown"
+# Doctor names these. The header is compiled into the toolkit env table.
+env_header = "src/env/recomp_env_game.h"
+env_doc = "docs/flicker-investigation.md"
 
 [xbe]
 path = "game_files/default.xbe"

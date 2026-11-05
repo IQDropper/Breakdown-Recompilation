@@ -47,6 +47,11 @@ if not "%SETUP_ERR%"=="0" (
 )
 
 echo.
+echo --- Input patches (mouse + keyboard host bridge) ---
+call APPLY_INPUT_PATCHES.cmd
+set PATCH_ERR=%ERRORLEVEL%
+
+echo.
 echo --- Running: breakdown doctor ---
 call breakdown.cmd doctor
 echo.
@@ -65,6 +70,9 @@ echo --- Next commands ---
 echo   breakdown all
 echo   build-win\breakdown_recomp.exe
 echo   run_native.cmd
+echo.
+echo Controls: CONTROLS.txt  (Modern mouse punches = LT/RT by default)
+echo If you wipe external\, re-run APPLY_INPUT_PATCHES.cmd then rebuild.
 echo.
 echo Read README.md and DISCLAIMER.md before sharing builds.
 echo.

@@ -9,6 +9,9 @@ cd /d %~dp0
 rem RECOMP_PB_BACKEND=d3d11: draw on the graphics card (1.8x faster than the CPU rasteriser, 2026-11-03).
 rem   No RECOMP_FB_WINDOW with it: that window shows guest framebuffer memory, which D3D11 never writes (blank).
 set RECOMP_PB_BACKEND=d3d11
+rem A/B: deferred occlusion. The exe and run_native.cmd default to sync, which stops lights/overlays
+rem flickering. Any value other than sync or fixed is deferred (see docs\flicker-investigation.md).
+set RECOMP_D3D11_OCC=defer
 set RECOMP_VBLANK=1
 rem RECOMP_KEYBOARD=1: keyboard also drives controller 1 (backup if the pad isn't seen). Controller: XAPI input bridge in src\recomp_manual.c
 set RECOMP_KEYBOARD=1

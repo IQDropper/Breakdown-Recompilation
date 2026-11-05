@@ -23,7 +23,7 @@ If a rights holder wants changes or removal, open an issue or contact the repo o
 
 ## What "works" right now
 
-This fork tracks a **working native Windows build path** used for PC playtesting (including menus / save flow on mid-range GPUs such as a GTX 1660 Ti). Expect quirks (for example texture flicker in places). The first clean build on a new machine may crash until overrides / seeds match your dump — that is normal for this class of port.
+This fork tracks a **working native Windows build path** used for PC playtesting (including menus / save flow on mid-range GPUs such as a GTX 1660 Ti). Texture flicker is the open image bug; see docs/flicker-investigation.md. The executable defaults RECOMP_D3D11_OCC=sync (same as run_native.cmd) so a direct launch does not leave lights and overlays on deferred visibility tests. Rebuild to pick that up. The first clean build on a new machine may crash until overrides / seeds match your dump — that is normal for this class of port.
 
 **Others can run it** after:
 
@@ -93,6 +93,11 @@ run_native.cmd
 ```
 
 ---
+
+
+## Controls (keyboard / mouse / pad)
+
+See [CONTROLS.txt](CONTROLS.txt). `SETUP.cmd` runs `APPLY_INPUT_PATCHES.cmd` after toolkit setup so mouse capture is wired. Modern default: mouse look, LMB/RMB punches (LT/RT). A controller still works.
 
 ## Common commands
 
