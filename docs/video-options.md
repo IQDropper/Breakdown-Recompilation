@@ -14,7 +14,9 @@ The Xbox Options screen is guest code. That code is generated from a disc dump, 
 2. Click the game window if you want the picture to be the one you are tuning.
 3. Press **F10**.
 
-Left and Right change the selected row and preview it. Up and Down move. Enter on Apply saves and leaves the menu open. Enter on OK saves and closes. Esc, F10, or the title-bar close undoes the preview and closes. The file is only written by Apply or OK.
+F10 is the only hotkey in this slice. Some accessibility tools also bind F10, and this build does not offer a second key. Esc closes the menu the same way F10 does (it undoes an unsaved preview). The title-bar close does that too.
+
+Left and Right change the selected row and preview it. Up and Down move. Enter on Apply saves and leaves the menu open. Enter on OK saves and closes. The file is only written by Apply or OK.
 
 The rows are:
 
@@ -23,7 +25,7 @@ The rows are:
 | Internal resolution | `RECOMP_RENDER_SCALE` 1..4 | Next frame. Higher costs more. 1x is the Xbox internal size. |
 | Window size | `RECOMP_WINDOW_SCALE` 1..6 | Resizes the window now. Height is 480 times this. |
 | Aspect | `RECOMP_DISPLAY_ASPECT` `4:3`, `16:9`, `16:10`, `21:9` | Resizes now. Letterbox only. Hor+ is not available. |
-| Present filter | `RECOMP_PRESENT_FILTER` `nearest`, `linear`, `integer` | Next frame. |
+| Present filter | `RECOMP_PRESENT_FILTER` `nearest`, `linear`, `integer` | Next frame. `integer` is the present path’s integer fit: the largest whole multiple of the frame that fits in the window, letterboxed. It does not stretch to fill. See [widescreen-hires.md](widescreen-hires.md). |
 | Window mode | `RECOMP_PRESENT_FULLSCREEN` `0` or `1` | Windowed, or borderless on the monitor. Exclusive fullscreen is not available. |
 
 A wide aspect at internal 1x with nearest still pins the image to the top left. That is the present path, not a menu bug. The filter row says so. Linear or integer centres it. The same rule as a launch with those variables.
@@ -54,7 +56,11 @@ On launch, for each variable:
 - Unset or empty: the file is used.
 - Both missing: stock. Internal 1x, window 1x, 4:3, nearest, windowed (640×480).
 
-Deleting the file and clearing the variables is the stock launch. The menu does not write the file until Apply or OK.
+The menu does not write the file until Apply or OK.
+
+## Recovery
+
+A bad `breakdown_video.cfg`, or a launch that keeps coming back at a size the machine cannot show, is cleared by deleting that file beside the exe. If any of `RECOMP_RENDER_SCALE`, `RECOMP_WINDOW_SCALE`, `RECOMP_DISPLAY_ASPECT`, `RECOMP_PRESENT_FILTER`, or `RECOMP_PRESENT_FULLSCREEN` is set, clear those too: a set variable overrides the file, including after the file is gone. With the file gone and those variables unset, the next launch is stock: internal 1x, window 1x, 4:3, nearest, windowed (640×480).
 
 ## What to click
 
