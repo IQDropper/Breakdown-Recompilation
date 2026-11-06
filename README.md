@@ -128,6 +128,8 @@ See `.gitignore`. In particular:
 - `build-win/`, `.venv/`, `third_party/`, `external/` — local toolchain / build trees
 - Session logs / bench artefacts
 
+Dump missing at launch: [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Pins: [TOOLCHAIN.md](TOOLCHAIN.md). PR changelog: [docs/CHANGELOG_TEMPLATE.md](docs/CHANGELOG_TEMPLATE.md).
+
 ---
 
 ## Credits
