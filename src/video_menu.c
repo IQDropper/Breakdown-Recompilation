@@ -8,6 +8,10 @@
  * breakdown_display_set_exclusive (patch_d3d11_exclusive.py) at the same
  * window size. Hor+ is not on this path. Nothing here is linked into
  * toolkit smoke tests.
+ *
+ * F10 toggles this window. A rising Start from the input bridge
+ * (keyboard Enter or the controller Start button, which is also pause)
+ * opens the same window. docs/video-options.md.
  */
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -46,6 +50,8 @@ static HFONT s_font;
 static HFONT s_title_font;
 static int s_started;
 static int s_open;
+static volatile LONG s_open_pub;
+static volatile LONG s_pause_pending;
 static int s_row;
 static int s_have_session;
 static int s_have_place;
@@ -193,13 +199,15 @@ static void windowed_origin(int was_borderless, int w, int h, int *x, int *y)
     }
 }
 
-static int client_matches(HWND h, unsigned w, unsigned h)
+/* `hwnd` is the window. `height` must not reuse that name: MSVC and mingw
+ * reject two parameters named h (HWND h, unsigned h). */
+static int client_matches(HWND hwnd, unsigned width, unsigned height)
 {
     RECT rc;
-    if (!GetClientRect(h, &rc))
+    if (!GetClientRect(hwnd, &rc))
         return 0;
-    return (unsigned)(rc.right - rc.left) == w
-        && (unsigned)(rc.bottom - rc.top) == h;
+    return (unsigned)(rc.right - rc.left) == width
+        && (unsigned)(rc.bottom - rc.top) == height;
 }
 
 static void monitor_rect(HWND h, RECT *out)
@@ -330,6 +338,14 @@ static int save_draft(void)
     return 1;
 }
 
+#define VIDEO_PAUSE_MSG (WM_APP + 0x56)
+
+static void set_open(int open)
+{
+    s_open = open ? 1 : 0;
+    InterlockedExchange(&s_open_pub, (LONG)s_open);
+}
+
 static void hide_menu(int revert)
 {
     if (revert) {
@@ -340,7 +356,7 @@ static void hide_menu(int revert)
             snprintf(s_status, sizeof s_status,
                      "Reverted. Window size and borderless apply on the next launch.");
     }
-    s_open = 0;
+    set_open(0);
     if (s_menu)
         ShowWindow(s_menu, SW_HIDE);
     if (s_game && IsWindow(s_game))
@@ -436,7 +452,7 @@ static void paint_menu(HDC hdc, const RECT *rc)
     SetTextColor(hdc, COL_DIM);
     text.top = 42;
     text.bottom = 62;
-    DrawTextA(hdc, "Host options. The game frame stays 4:3.", -1, &text,
+    DrawTextA(hdc, "Pause (Start) or F10. The game frame stays 4:3.", -1, &text,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     text.top = 62;
     text.bottom = 82;
@@ -655,7 +671,7 @@ static void ensure_menu(void)
         fprintf(stderr, "[VIDEO] could not open the Video window (%lu)\n", GetLastError());
 }
 
-static void show_menu(void)
+static void show_menu(int from_pause)
 {
     ensure_menu();
     if (!s_menu)
@@ -664,8 +680,14 @@ static void show_menu(void)
     s_committed = s_session;
     s_draft = s_session;
     s_row = 0;
-    s_open = 1;
-    snprintf(s_status, sizeof s_status, "Preview with Left and Right. Nothing is saved yet.");
+    set_open(1);
+    if (from_pause) {
+        snprintf(s_status, sizeof s_status,
+                 "Opened from pause. Esc or F10 cancels a preview. F10 still toggles.");
+        fprintf(stderr, "[VIDEO] pause opened Video options (F10 still toggles)\n");
+    } else {
+        snprintf(s_status, sizeof s_status, "Preview with Left and Right. Nothing is saved yet.");
+    }
     place_menu();
     ShowWindow(s_menu, SW_SHOW);
     SetFocus(s_menu);
@@ -677,7 +699,16 @@ static void toggle_menu(void)
     if (s_open)
         hide_menu(1);
     else
-        show_menu();
+        show_menu(0);
+}
+
+static void drain_pause_request(void)
+{
+    if (!InterlockedExchange(&s_pause_pending, 0))
+        return;
+    if (s_open)
+        return;
+    show_menu(1);
 }
 
 static int menu_wants_message(UINT m)
@@ -691,6 +722,11 @@ static int menu_wants_message(UINT m)
 
 static LRESULT CALLBACK game_proc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
+    if (m == VIDEO_PAUSE_MSG) {
+        drain_pause_request();
+        return 0;
+    }
+    /* F10 stays the backup hotkey. It does not press Start for the game. */
     if ((m == WM_KEYDOWN || m == WM_SYSKEYDOWN) && w == VK_F10 && (l & (1L << 30)) == 0) {
         toggle_menu();
         return 0;
@@ -731,7 +767,9 @@ static void attach_game(HWND h)
     s_game = h;
     prev = SetWindowLongPtrA(h, GWLP_WNDPROC, proc_to_long(game_proc));
     s_old = proc_from_long(prev);
-    fprintf(stderr, "[VIDEO] F10 opens Video options\n");
+    fprintf(stderr, "[VIDEO] F10 or Start/pause opens Video options\n");
+    if (InterlockedCompareExchange(&s_pause_pending, 0, 0))
+        PostMessageA(h, VIDEO_PAUSE_MSG, 0, 0);
 }
 
 static DWORD WINAPI wait_for_game(LPVOID unused)
@@ -760,11 +798,25 @@ void video_menu_start(int applied_mode)
     s_applied_mode = applied_mode;
     s_env_override = any_env_override();
     s_place.length = sizeof s_place;
-    fprintf(stderr, "[VIDEO] F10 opens Video options when the D3D11 window (%s) exists\n",
+    fprintf(stderr, "[VIDEO] F10 or Start/pause opens Video options when the D3D11 window (%s) exists\n",
             GAME_CLASS);
     thread = CreateThread(NULL, 0, wait_for_game, NULL, 0, NULL);
     if (thread)
         CloseHandle(thread);
     else
         fprintf(stderr, "[VIDEO] could not watch for the D3D11 window; F10 will not open Video\n");
+}
+
+int video_menu_is_open(void)
+{
+    return InterlockedCompareExchange(&s_open_pub, 0, 0) != 0;
+}
+
+void video_menu_on_pause_action(int action)
+{
+    if (action != VIDEO_PAUSE_OPEN)
+        return;
+    InterlockedExchange(&s_pause_pending, 1);
+    if (s_game && IsWindow(s_game))
+        PostMessageA(s_game, VIDEO_PAUSE_MSG, 0, 0);
 }

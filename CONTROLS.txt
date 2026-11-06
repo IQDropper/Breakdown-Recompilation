@@ -29,11 +29,13 @@ MOUSE BUTTONS — LEGACY
   Side button (forward) ..... Right trigger
 
 VIDEO (host menu, not an Xbox screen)
-  F10 ....................... Video options
+  Enter / Start ............. opens Video when you pause (the game still pauses)
+  F10 ....................... Video options (backup hotkey, toggles)
        Internal resolution, window size, letterbox aspect (4:3, 16:9,
        16:10, 21:9), present filter, windowed, borderless, or exclusive.
        Left / Right preview. Apply or OK saves breakdown_video.cfg
        beside the exe. Esc or F10 cancels the preview.
+       While Video is open, Start and the d-pad stay in that window.
        Hor+ is not in this menu. Exclusive is a display mode, not a wider camera.
        Details: docs/video-options.md
 

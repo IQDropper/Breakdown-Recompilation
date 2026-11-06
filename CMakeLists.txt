@@ -61,6 +61,7 @@ set(GAME_SOURCES
     src/display_host.c
     src/video_config.c
     src/video_menu.c
+    src/video_menu_policy.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c

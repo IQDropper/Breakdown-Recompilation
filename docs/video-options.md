@@ -6,15 +6,18 @@ Players change performance from inside the running game. The knobs are the same 
 
 ## Why a host window
 
-The Xbox Options screen is guest code. That code is generated from a disc dump, and the dump is not in this repo, so there is no stable place to add a row to that screen. The Video menu is a window the host opens on the D3D11 game window. It is the in-game control for this slice. F10 is the key.
+The Xbox Options screen is guest code. That code is generated from a disc dump, and the dump is not in this repo, so there is no stable place to add a row to that screen. The Video menu is a window the host opens on the D3D11 game window. It is the in-game control for this slice.
+
+F10 toggles that window. Pause opens it too: the input bridge sees a rising Start (keyboard Enter, or the controller Start button) and posts the same window onto the game. The game still receives that press, so the pause screen opens underneath. This does not patch the guest Options screen.
 
 ## Open it
 
 1. Launch the game (`run_native.cmd` or the exe).
 2. Click the game window if you want the picture to be the one you are tuning.
-3. Press **F10**.
+3. Press **Start** (keyboard **Enter**, or the controller Start button). That is pause. The host Video window opens on top. The same Start press on a menu, including the title's Press Start, opens Video too.
+4. Or press **F10**. F10 toggles the window and does not send Start to the game. It stays the backup hotkey. Some accessibility tools also bind F10.
 
-F10 is the only hotkey in this slice. Some accessibility tools also bind F10, and this build does not offer a second key. Esc closes the menu the same way F10 does (it undoes an unsaved preview). The title-bar close does that too.
+While Video is open, Start and the d-pad stay in that window. The pause screen does not move or close, and Enter confirms the highlighted row. Esc, F10, or Cancel closes Video and undoes an unsaved preview. The title-bar close does that too. After Video is closed, Start leaves the game's pause screen. stderr when pause opens it: `[VIDEO] pause opened Video options (F10 still toggles)`. Startup says `[VIDEO] F10 or Start/pause opens Video options`.
 
 Left and Right change the selected row and preview it. Up and Down move. Enter on Apply saves and leaves the menu open. Enter on OK saves and closes. The file is only written by Apply or OK.
 
@@ -65,7 +68,7 @@ A bad `breakdown_video.cfg`, or a launch that keeps coming back at a size the ma
 ## What to click
 
 1. Start `build-win\breakdown_recomp.exe` with no `RECOMP_RENDER_SCALE`, `RECOMP_WINDOW_SCALE`, `RECOMP_DISPLAY_ASPECT`, `RECOMP_PRESENT_FILTER`, or `RECOMP_PRESENT_FULLSCREEN`, and with no cfg beside the exe. The log should say the config is not created yet, and every source is `default`. The window is 640×480.
-2. F10. Set internal resolution to 2x, window size to 2x, aspect to 16:9, filter to nearest, window mode to windowed. The window should grow as you change size and aspect. 2x and the filter show up on the next frame (stderr `[VIDEO] apply ...`).
+2. Press Enter (Start / pause) or F10. The Video window opens. stderr for Enter: `[VIDEO] pause opened Video options (F10 still toggles)`. Set internal resolution to 2x, window size to 2x, aspect to 16:9, filter to nearest, window mode to windowed. The window should grow as you change size and aspect. 2x and the filter show up on the next frame (stderr `[VIDEO] apply ...`). Esc closes it. Press F10 again and confirm the same window still toggles.
 3. OK. `build-win\breakdown_video.cfg` should appear. stderr: `[VIDEO] saved ...`.
 4. Quit and launch the exe again the same way (no variables). The log should say the config loaded and the sources are `file`. The window opens at the 16:9 size from the file (1707×960 at window scale 2).
 5. `run_native.cmd` still forces its own scale, window, aspect, and filter. Those sources log as `env`. The file does not change that launch. Comment out one `set` in the script if you want the file to win for that one variable.

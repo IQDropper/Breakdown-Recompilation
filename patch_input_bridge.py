@@ -16,7 +16,7 @@ if MARK in s:
 inc_old = '#include <stddef.h>   /* ptrdiff_t */\n'
 eax_old = 'extern uint32_t g_eax;\n'
 assert s.count(inc_old) == 1 and s.count(eax_old) == 1, 'recomp_manual.c changed - patch by hand'
-s = s.replace(inc_old, inc_old + '#include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */\n')
+s = s.replace(inc_old, inc_old + '#include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */\n#include "video_menu.h"\n')
 s = s.replace(eax_old, '/* g_eax: declared thread-local by recomp_types.h (a plain extern here would name the wrong copy) */\n')
 s += '\n' + MARK + r'''
 /* Breakdown's XAPI gamepad calls -> the toolkit's host input (xbox_Input*). All are __stdcall: on entry
@@ -28,6 +28,7 @@ uint32_t xbox_InputSetState(uint32_t port, const HostVibration *v);
 int      xbox_InputIsConnected(uint32_t port);
 #define PAD_HANDLE(port) (0xFEED0000u | (port))
 static uint32_t s_pads_known;
+static uint16_t s_btn_prev[4];
 
 /* BOOL XGetDeviceChanges(PXPP_DEVICE_TYPE type, PDWORD inserted, PDWORD removed). Only answer the gamepad poll
  * (called from Input_PollGamepads 0x18c5a0..0x18c830); anything else (memory units) sees no changes. */
@@ -58,9 +59,22 @@ void sub_00205261(void)
 void sub_00205439(void)
 {
     uint32_t h = MEM32(g_esp + 4), dst = MEM32(g_esp + 8), i;
+    uint32_t port = h & 3u;
     HostPadState st;
-    const uint8_t *b = (const uint8_t *)&st;
-    if (xbox_InputGetState(h & 3u, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    const uint8_t *b;
+    unsigned prev, now;
+    int open, action;
+    if (xbox_InputGetState(port, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    /* Rising Start opens the host Video window and still pauses the game.
+     * Once that window is up, Start and the d-pad stay there. */
+    prev = s_btn_prev[port];
+    now = st.wButtons;
+    open = video_menu_is_open();
+    action = video_menu_pause_action(now, prev, open);
+    s_btn_prev[port] = (uint16_t)now;
+    st.wButtons = (uint16_t)video_menu_filter_buttons(now, open);
+    video_menu_on_pause_action(action);
+    b = (const uint8_t *)&st;
     for (i = 0; i < 22; i++) MEM8(dst + i) = b[i];
     g_eax = 0; g_esp += 12;
 }
