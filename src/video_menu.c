@@ -4,8 +4,10 @@
  * Scale and the present filter are queued with nv2a_host_opts_request and
  * the D3D11 backend applies them on the next flip. Window size, letterbox
  * aspect, and borderless versus windowed are applied by resizing that
- * window (WM_SIZE updates the swap chain). Exclusive fullscreen and hor+
- * are not on this path. Nothing here is linked into toolkit smoke tests.
+ * window (WM_SIZE updates the swap chain). Quality and HUD readability
+ * write those same fields. Exclusive fullscreen, hor+, contrast, subtitles,
+ * and flicker switches are not on this path. Nothing here is linked into
+ * toolkit smoke tests.
  */
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -28,8 +30,18 @@ enum {
     MENU_W = 640,
     MENU_TOP = 112,
     MENU_ROW = 34,
-    MENU_BOTTOM = 124
+    MENU_SECTION = 28,
+    MENU_BOTTOM = 200
 };
+
+/* HUD readability sits under an Accessibility label, not in the value list. */
+static int row_top(int row)
+{
+    int y = MENU_TOP + row * MENU_ROW;
+    if (row >= VIDEO_ROW_HUD)
+        y += MENU_SECTION;
+    return y;
+}
 
 static const COLORREF COL_BG = RGB(22, 24, 28);
 static const COLORREF COL_ROW = RGB(36, 52, 74);
@@ -307,6 +319,12 @@ static void preview(int dir)
     if (!apply_live(&s_draft, video_row_needs_window(s_row)))
         snprintf(s_status, sizeof s_status,
                  "No D3D11 window. Scale and filter still queue; window size and borderless apply on the next launch.");
+    else if (s_row == VIDEO_ROW_PRESET)
+        snprintf(s_status, sizeof s_status,
+                 "Window resized now. Internal resolution and filter apply on the next frame.");
+    else if (s_row == VIDEO_ROW_HUD)
+        snprintf(s_status, sizeof s_status,
+                 "Window resized now. Internal resolution applies on the next frame. HUD stays in the 4:3 frame.");
     else if (video_row_needs_window(s_row))
         snprintf(s_status, sizeof s_status, "Resized now. Apply or OK writes the file.");
     else
@@ -376,7 +394,7 @@ static void paint_menu(HDC hdc, const RECT *rc)
 
     hi = CreateSolidBrush(COL_ROW);
     for (i = 0; i < VIDEO_ROW_COUNT; i++) {
-        y = MENU_TOP + i * MENU_ROW;
+        y = row_top(i);
         row.left = 10;
         row.top = y;
         row.right = rc->right - 10;
@@ -400,23 +418,34 @@ static void paint_menu(HDC hdc, const RECT *rc)
     }
     DeleteObject(hi);
 
+    SetTextColor(hdc, COL_TEXT);
+    text.left = 18;
+    text.right = rc->right - 18;
+    text.top = row_top(VIDEO_ROW_MODE) + MENU_ROW;
+    text.bottom = text.top + MENU_SECTION;
+    DrawTextA(hdc, "Accessibility", -1, &text, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
     bottom = rc->bottom;
     SetTextColor(hdc, COL_DIM);
     block.left = 18;
     block.right = rc->right - 18;
-    block.top = MENU_TOP + VIDEO_ROW_COUNT * MENU_ROW + 6;
-    block.bottom = bottom - 56;
+    block.top = row_top(VIDEO_ROW_COUNT - 1) + MENU_ROW + 8;
+    block.bottom = bottom - 120;
     DrawTextA(hdc, video_row_detail(&s_draft, s_row), -1, &block,
               DT_LEFT | DT_WORDBREAK | DT_TOP);
     text.left = 18;
     text.right = rc->right - 18;
-    text.top = bottom - 54;
-    text.bottom = bottom - 36;
+    text.top = bottom - 116;
+    text.bottom = bottom - 96;
     DrawTextA(hdc, "Left/Right preview. Apply or OK saves. F10 or Esc cancels.",
               -1, &text, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    text.top = bottom - 94;
+    text.bottom = bottom - 54;
+    DrawTextA(hdc, "No contrast, subtitle, or flicker control in this build. Keys stay in CONTROLS.txt.",
+              -1, &text, DT_LEFT | DT_WORDBREAK | DT_TOP);
     SetTextColor(hdc, COL_TEXT);
-    text.top = bottom - 34;
-    text.bottom = bottom - 10;
+    text.top = bottom - 52;
+    text.bottom = bottom - 12;
     DrawTextA(hdc, s_status, -1, &text, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 }
 
@@ -452,14 +481,26 @@ static void on_paint(HWND h)
     EndPaint(h, &ps);
 }
 
+static int row_at(int y)
+{
+    int i;
+
+    if (y < MENU_TOP)
+        return -1;
+    for (i = 0; i < VIDEO_ROW_COUNT; i++) {
+        int top = row_top(i);
+        if (y >= top && y < top + MENU_ROW - 2)
+            return i;
+    }
+    return -1;
+}
+
 static void on_click(int x, int y)
 {
     int row, rel, box;
 
-    if (y < MENU_TOP)
-        return;
-    row = (y - MENU_TOP) / MENU_ROW;
-    if (row < 0 || row >= VIDEO_ROW_COUNT)
+    row = row_at(y);
+    if (row < 0)
         return;
     s_row = row;
     if (row >= VIDEO_ROW_APPLY) {
@@ -570,7 +611,7 @@ static void ensure_menu(void)
     frame.left = 0;
     frame.top = 0;
     frame.right = MENU_W;
-    frame.bottom = MENU_TOP + VIDEO_ROW_COUNT * MENU_ROW + MENU_BOTTOM;
+    frame.bottom = row_top(VIDEO_ROW_COUNT - 1) + MENU_ROW + MENU_BOTTOM;
     AdjustWindowRectEx(&frame, style, FALSE, ex);
     w = frame.right - frame.left;
     h = frame.bottom - frame.top;

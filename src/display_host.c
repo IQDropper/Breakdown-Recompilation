@@ -419,6 +419,28 @@ int main(void)
            c.present_filter == 0 && c.filter_promoted == 0 && c.render_scale == 1
            && c.window_w == 2560 && c.window_h == 1440);
 
+    /* Quality preset tuples. Filter is explicit, so a wide Low does not
+     * promote, and High's integer filter is kept. */
+    s_n = 0;
+    setenv_test("RECOMP_RENDER_SCALE", "1");
+    setenv_test("RECOMP_WINDOW_SCALE", "1");
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:9");
+    setenv_test("RECOMP_PRESENT_FILTER", "linear");
+    display_host_choose(test_get, &c);
+    expect("low preset 16:9",
+           c.render_scale == 1 && c.present_filter == 1 && c.filter_promoted == 0
+           && c.window_w == 853 && c.window_h == 480 && strcmp(c.aspect, "16:9") == 0);
+
+    s_n = 0;
+    setenv_test("RECOMP_RENDER_SCALE", "4");
+    setenv_test("RECOMP_WINDOW_SCALE", "2");
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:9");
+    setenv_test("RECOMP_PRESENT_FILTER", "integer");
+    display_host_choose(test_get, &c);
+    expect("high preset 16:9",
+           c.render_scale == 4 && c.present_filter == 2 && c.filter_promoted == 0
+           && c.window_w == 1707 && c.window_h == 960 && c.fullscreen == 0);
+
     if (g_fail) {
         fprintf(stderr, "%d failed\n", g_fail);
         return 1;

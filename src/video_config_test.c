@@ -217,11 +217,13 @@ static void test_menu_model(void)
            s.render_scale == 1 && s.window_scale == 1 && s.aspect == 0
            && s.filter == 0 && s.borderless == 0);
     expect("titles",
-           strcmp(video_row_title(VIDEO_ROW_SCALE), "Internal resolution") == 0
+           strcmp(video_row_title(VIDEO_ROW_PRESET), "Quality") == 0
+           && strcmp(video_row_title(VIDEO_ROW_SCALE), "Internal resolution") == 0
            && strcmp(video_row_title(VIDEO_ROW_WINDOW), "Window size") == 0
            && strcmp(video_row_title(VIDEO_ROW_ASPECT), "Aspect") == 0
            && strcmp(video_row_title(VIDEO_ROW_FILTER), "Present filter") == 0
            && strcmp(video_row_title(VIDEO_ROW_MODE), "Window mode") == 0
+           && strcmp(video_row_title(VIDEO_ROW_HUD), "HUD readability") == 0
            && strcmp(video_row_title(VIDEO_ROW_APPLY), "Apply") == 0
            && strcmp(video_row_title(VIDEO_ROW_OK), "OK") == 0
            && strcmp(video_row_title(VIDEO_ROW_CANCEL), "Cancel") == 0);
@@ -239,11 +241,13 @@ static void test_menu_model(void)
            strstr(video_row_detail(&s, VIDEO_ROW_MODE), "Exclusive fullscreen") != NULL
            && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "not available") != NULL);
     expect("needs window",
-           video_row_needs_window(VIDEO_ROW_SCALE) == 0
+           video_row_needs_window(VIDEO_ROW_PRESET) == 1
+           && video_row_needs_window(VIDEO_ROW_SCALE) == 0
            && video_row_needs_window(VIDEO_ROW_FILTER) == 0
            && video_row_needs_window(VIDEO_ROW_WINDOW) == 1
            && video_row_needs_window(VIDEO_ROW_ASPECT) == 1
            && video_row_needs_window(VIDEO_ROW_MODE) == 1
+           && video_row_needs_window(VIDEO_ROW_HUD) == 1
            && video_row_needs_window(VIDEO_ROW_APPLY) == 0);
 
     expect("nudge scale stops",
@@ -307,6 +311,196 @@ static void test_menu_model(void)
     expect("save null fails", video_config_save(NULL, &s) == -1);
 }
 
+/* Low and High are bundles of the three quality fields. They are not keys. */
+static void test_presets(void)
+{
+    struct video_settings s, loaded;
+    struct display_choice c;
+    const char *path = "video_config_preset.cfg";
+    char buf[32];
+    FILE *f;
+    char file[1024];
+    size_t nread;
+
+    video_settings_stock(&s);
+    s.aspect = video_settings_aspect_index("21:9");
+    s.borderless = 1;
+    expect("stock is custom", video_settings_preset(&s) == VIDEO_PRESET_CUSTOM);
+    expect("preset names",
+           strcmp(video_settings_preset_name(VIDEO_PRESET_LOW), "Low") == 0
+           && strcmp(video_settings_preset_name(VIDEO_PRESET_HIGH), "High") == 0
+           && strcmp(video_settings_preset_name(VIDEO_PRESET_CUSTOM), "Custom") == 0);
+    expect("apply low", video_settings_apply_preset(&s, VIDEO_PRESET_LOW) == 1);
+    expect("low fields",
+           s.render_scale == 1 && s.window_scale == 1 && s.filter == 1
+           && s.aspect == video_settings_aspect_index("21:9") && s.borderless == 1);
+    expect("low matches", video_settings_preset(&s) == VIDEO_PRESET_LOW);
+    expect("low value",
+           strcmp(video_settings_value(&s, VIDEO_ROW_PRESET, buf, sizeof buf), "Low") == 0);
+    expect("apply low again", video_settings_apply_preset(&s, VIDEO_PRESET_LOW) == 0);
+    expect("null preset",
+           video_settings_apply_preset(NULL, VIDEO_PRESET_LOW) == 0
+           && video_settings_preset(NULL) == VIDEO_PRESET_CUSTOM);
+    expect("unknown preset", video_settings_apply_preset(&s, 99) == 0 && s.filter == 1);
+
+    expect("apply high", video_settings_apply_preset(&s, VIDEO_PRESET_HIGH) == 1);
+    expect("high fields",
+           s.render_scale == 4 && s.window_scale == 2 && s.filter == 2
+           && s.aspect == video_settings_aspect_index("21:9") && s.borderless == 1);
+    expect("high matches", video_settings_preset(&s) == VIDEO_PRESET_HIGH);
+    expect("high leaves aspect",
+           strcmp(video_settings_aspect_name(s.aspect), "21:9") == 0);
+
+    expect("save high", video_config_save(path, &s) == 0);
+    video_config_reset();
+    expect("no preset key", video_config_getenv("RECOMP_VIDEO_PRESET") == NULL);
+    expect("load high", video_config_load(path) == 1);
+    expect("high file scale",
+           strcmp(video_config_getenv("RECOMP_RENDER_SCALE"), "4") == 0
+           && strcmp(video_config_getenv("RECOMP_WINDOW_SCALE"), "2") == 0
+           && strcmp(video_config_getenv("RECOMP_PRESENT_FILTER"), "integer") == 0
+           && strcmp(video_config_getenv("RECOMP_DISPLAY_ASPECT"), "21:9") == 0
+           && strcmp(video_config_getenv("RECOMP_PRESENT_FULLSCREEN"), "1") == 0);
+    display_host_set_sources(env_empty, video_config_getenv);
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &loaded);
+    expect("high roundtrip",
+           video_settings_preset(&loaded) == VIDEO_PRESET_HIGH
+           && loaded.borderless == 1
+           && strcmp(video_settings_aspect_name(loaded.aspect), "21:9") == 0);
+    expect("high present",
+           c.render_scale == 4 && c.present_filter == 2 && c.filter_promoted == 0
+           && c.window_w == 2240 && c.window_h == 960);
+
+    expect("save low",
+           video_settings_apply_preset(&loaded, VIDEO_PRESET_LOW) == 1
+           && video_config_save(path, &loaded) == 0);
+    expect("load low", video_config_load(path) == 1);
+    expect("low file",
+           strcmp(video_config_getenv("RECOMP_RENDER_SCALE"), "1") == 0
+           && strcmp(video_config_getenv("RECOMP_WINDOW_SCALE"), "1") == 0
+           && strcmp(video_config_getenv("RECOMP_PRESENT_FILTER"), "linear") == 0
+           && strcmp(video_config_getenv("RECOMP_DISPLAY_ASPECT"), "21:9") == 0);
+    display_host_choose(display_getenv_layered, &c);
+    expect("low present is linear not promoted",
+           c.render_scale == 1 && c.present_filter == 1 && c.filter_promoted == 0
+           && c.window_w == 1120 && c.window_h == 480);
+    video_settings_from_choice(&c, &loaded);
+    expect("low roundtrip", video_settings_preset(&loaded) == VIDEO_PRESET_LOW);
+
+    f = fopen(path, "rb");
+    expect("reread preset file", f != NULL);
+    nread = f ? fread(file, 1, sizeof file - 1, f) : 0;
+    if (f)
+        fclose(f);
+    file[nread] = 0;
+    expect("file has no preset assignment", strstr(file, "PRESET=") == NULL);
+    remove(path);
+
+    video_settings_apply_preset(&s, VIDEO_PRESET_LOW);
+    expect("nudge scale leaves low",
+           video_settings_nudge(&s, VIDEO_ROW_SCALE, 1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_CUSTOM);
+    expect("preset row from custom goes high",
+           video_settings_nudge(&s, VIDEO_ROW_PRESET, 1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_HIGH);
+    expect("preset row from custom goes low",
+           video_settings_nudge(&s, VIDEO_ROW_FILTER, 1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_CUSTOM
+           && video_settings_nudge(&s, VIDEO_ROW_PRESET, -1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_LOW);
+    expect("preset wraps to high",
+           video_settings_nudge(&s, VIDEO_ROW_PRESET, -1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_HIGH);
+    expect("preset wraps to low",
+           video_settings_nudge(&s, VIDEO_ROW_PRESET, 1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_LOW);
+    s.aspect = video_settings_aspect_index("16:9");
+    expect("aspect nudge keeps low",
+           video_settings_nudge(&s, VIDEO_ROW_ASPECT, 1) == 1
+           && video_settings_preset(&s) == VIDEO_PRESET_LOW
+           && s.render_scale == 1 && s.filter == 1);
+    expect("low detail names the filter",
+           strstr(video_row_detail(&s, VIDEO_ROW_PRESET), "linear") != NULL);
+    video_settings_apply_preset(&s, VIDEO_PRESET_HIGH);
+    expect("high detail names integer",
+           strstr(video_row_detail(&s, VIDEO_ROW_PRESET), "integer") != NULL);
+    s.filter = 0;
+    expect("custom detail",
+           video_settings_preset(&s) == VIDEO_PRESET_CUSTOM
+           && strstr(video_row_detail(&s, VIDEO_ROW_PRESET), "Custom") != NULL);
+    expect("preset resizes", video_row_needs_window(VIDEO_ROW_PRESET) == 1);
+}
+
+static void test_readability(void)
+{
+    struct video_settings s;
+    char buf[32];
+
+    video_settings_stock(&s);
+    expect("stock readability 1x",
+           video_settings_readability(&s) == 1
+           && strcmp(video_settings_value(&s, VIDEO_ROW_HUD, buf, sizeof buf), "1x") == 0);
+    s.render_scale = 2;
+    s.window_scale = 2;
+    expect("paired 2x", video_settings_readability(&s) == 2);
+    s.window_scale = 5;
+    expect("mismatched is custom",
+           video_settings_readability(&s) == 0
+           && strcmp(video_settings_value(&s, VIDEO_ROW_HUD, buf, sizeof buf), "Custom") == 0);
+    s.render_scale = 4;
+    s.window_scale = 4;
+    s.filter = 2;
+    s.aspect = video_settings_aspect_index("16:10");
+    s.borderless = 1;
+    expect("readability stops at 4",
+           video_settings_nudge(&s, VIDEO_ROW_HUD, 1) == 0
+           && s.render_scale == 4 && s.window_scale == 4 && s.filter == 2);
+    expect("readability down",
+           video_settings_nudge(&s, VIDEO_ROW_HUD, -1) == 1
+           && s.render_scale == 3 && s.window_scale == 3
+           && s.filter == 2 && s.borderless == 1
+           && strcmp(video_settings_aspect_name(s.aspect), "16:10") == 0);
+    expect("readability value",
+           strcmp(video_settings_value(&s, VIDEO_ROW_HUD, buf, sizeof buf), "3x") == 0);
+    s.render_scale = 1;
+    s.window_scale = 1;
+    expect("readability stops at 1",
+           video_settings_nudge(&s, VIDEO_ROW_HUD, -1) == 0
+           && s.render_scale == 1 && s.window_scale == 1);
+    s.render_scale = 3;
+    s.window_scale = 6;
+    expect("custom readability right snaps high",
+           video_settings_nudge(&s, VIDEO_ROW_HUD, 1) == 1
+           && s.render_scale == 4 && s.window_scale == 4);
+    s.render_scale = 2;
+    s.window_scale = 5;
+    expect("custom readability left snaps low",
+           video_settings_nudge(&s, VIDEO_ROW_HUD, -1) == 1
+           && s.render_scale == 2 && s.window_scale == 2);
+    s.render_scale = 4;
+    s.window_scale = 6;
+    expect("custom above 4 snaps to 4",
+           video_settings_nudge(&s, VIDEO_ROW_HUD, -1) == 1
+           && s.render_scale == 4 && s.window_scale == 4);
+    expect("apply readability",
+           video_settings_apply_readability(&s, 2) == 1
+           && s.render_scale == 2 && s.window_scale == 2
+           && video_settings_apply_readability(&s, 2) == 0
+           && video_settings_apply_readability(&s, 0) == 0
+           && video_settings_apply_readability(&s, 5) == 0
+           && video_settings_apply_readability(NULL, 2) == 0
+           && video_settings_readability(NULL) == 0);
+    expect("hud detail stays in frame",
+           strstr(video_row_detail(&s, VIDEO_ROW_HUD), "4:3") != NULL
+           && strstr(video_row_detail(&s, VIDEO_ROW_HUD), "letterbox") != NULL);
+    expect("hud resizes", video_row_needs_window(VIDEO_ROW_HUD) == 1);
+    expect("titles include preset and hud",
+           strcmp(video_row_title(VIDEO_ROW_PRESET), "Quality") == 0
+           && strcmp(video_row_title(VIDEO_ROW_HUD), "HUD readability") == 0
+           && strcmp(video_row_title(VIDEO_ROW_SCALE), "Internal resolution") == 0);
+}
+
 int main(void)
 {
     test_join();
@@ -315,6 +509,8 @@ int main(void)
     test_precedence();
     test_promote_from_partial_file();
     test_menu_model();
+    test_presets();
+    test_readability();
     if (g_fail) {
         fprintf(stderr, "%d failed\n", g_fail);
         return 1;
