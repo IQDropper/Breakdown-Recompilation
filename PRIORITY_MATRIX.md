@@ -1,0 +1,18 @@
+# Priority matrix
+
+Rank a play issue with one line per tier.
+
+- **Crash** = critical — process dies / hard hang
+- **Unplayable** = high — cannot progress or control the game
+- **Poor performance** = high — unusable framerate/stutter for play
+- **Medium** — Functionality isn't working properly but the game is still playable.
+- **Low** — Overall bugs or things that are purely cosmetic and don't impact play.
+
+## Known issues
+
+| Issue | Severity |
+| --- | --- |
+| Exclusive fullscreen acts as borderless (SetFullscreenState fails) | Medium. Borderless is still playable. |
+| Shadow flicker on turn (no perf hit) | Medium |
+| Mouse/keyboard gated on controller presence | Unplayable (high) for M&K-only (no pad) |
+| F10-to-menu / pause opens Video (PR #8 in progress) | Medium. Discoverability; F10 still works. Feature work, not a crash. |
