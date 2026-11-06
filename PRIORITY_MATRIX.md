@@ -12,6 +12,7 @@ Rank a play issue with one line per tier.
 
 | Issue | Severity |
 | --- | --- |
-| Exclusive FS acts like borderless (SetFullscreenState fails) | Medium. Display mode is wrong; borderless is still playable. |
-| Shadow flicker/vanish on character turn (no perf hit) | Medium |
-| Mouse/keyboard gated on controller presence | High / Unplayable for M&K-only users (no pad) |
+| Exclusive fullscreen acts as borderless (SetFullscreenState fails) | Medium. Borderless is still playable. |
+| Shadow flicker on turn (no perf hit) | Medium |
+| Mouse/keyboard gated on controller presence | Unplayable (high) for M&K-only (no pad) |
+| F10-to-menu / pause opens Video (PR #8 in progress) | Medium. Discoverability; F10 still works. Feature work, not a crash. |
