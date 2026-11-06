@@ -28,33 +28,41 @@ This fork tracks a **working native Windows build path** used for PC playtesting
 **Others can run it** after:
 
 1. Cloning this repo
-2. Running setup once (script below)
-3. Placing **their own** `game_files/` dump
-4. Building / launching
+2. Putting **their own** ISO/XISO next to `breakdown_recomp.exe` (`build-win\`) or one folder up, next to `FIRST_RUN.cmd`, and running `FIRST_RUN.cmd`
+3. Building / launching (`breakdown all`, then `run_native.cmd`)
 
 ---
 
 ## Quick start (Windows)
 
-### Option A — helper script (recommended)
+### Option A — first run (recommended)
 
-From a Command Prompt or PowerShell:
+Copy the ISO or XISO you own into `build-win\` (same folder as `breakdown_recomp.exe`) or one folder up, next to `FIRST_RUN.cmd`. The wizard looks only in those two folders, for `Breakdown*.iso` such as `Breakdown (USA).iso`, then `*.xiso`, then `*.xiso.iso`. The exe folder wins when both have the same kind of name.
 
 ```bat
 git clone https://github.com/IQDropper/Breakdown-Recompilation.git
 cd Breakdown-Recompilation
+FIRST_RUN.cmd
+```
+
+`FIRST_RUN.cmd` will:
+
+- Suggest the disc image it found and wait for Enter. If the two folders are empty, copy the file in and press Enter again. Pasting a path is the fallback.
+- Run `SETUP.cmd`: long paths, `breakdown setup` (venv, llvm-mingw, toolkit — downloads are sha256-pinned), input and display patches, and `breakdown doctor`
+- `breakdown import` into `game_files\` (`default.xbe`, `romdata\`, `stream\`, and the rest), then doctor and a dump check
+- If `build-win\breakdown_recomp.exe` is already built, launch it for a few seconds and print pass or fail
+
+Full steps, pass/fail lines, and what stays manual: [docs/first-run.md](docs/first-run.md).
+
+### Option B — toolchain only
+
+```bat
 SETUP.cmd
 ```
 
-`SETUP.cmd` will:
+`SETUP.cmd` does the toolchain and patches. It leaves disc import to `FIRST_RUN.cmd`.
 
-- Enable `git config --global core.longpaths true` when possible
-- Remind you to use a short checkout path
-- Run `breakdown setup` (venv, llvm-mingw, toolkit — downloads are sha256-pinned)
-- Run `breakdown doctor` and report what is missing
-- Print where to put `game_files/` and how to build / run
-
-### Option B — manual
+### Option C — manual
 
 ```bat
 git config --global core.longpaths true
@@ -66,7 +74,11 @@ breakdown setup
 breakdown doctor
 ```
 
-Put your dump here (gitignored):
+Put your dump here (gitignored), or let `breakdown import` do it from an image in this folder:
+
+```bat
+breakdown import "Breakdown (USA).iso"
+```
 
 ```text
 game_files/
@@ -107,11 +119,14 @@ See [docs/widescreen-hires.md](docs/widescreen-hires.md) and [docs/video-options
 
 | Command | Purpose |
 |--------|---------|
+| `FIRST_RUN.cmd` | Disc image in this folder or `build-win\`, then setup, import, doctor, optional smoke |
 | `breakdown setup` | Once: `.venv`, llvm-mingw, toolkit (pinned hashes) |
+| `breakdown import PATH` | Extract your ISO/XISO or dump folder into `game_files\` after a title check |
 | `breakdown doctor` | What this machine has / what to do next |
 | `breakdown all` | Analyze → recomp → build |
 | `breakdown analyze` / `breakdown recomp` | Regenerate `src/recomp/gen/` (do **not** edit gen by hand) |
-| `run_native.cmd` | Launch helpers for the native exe |
+| `run_native.cmd` | Launch the native exe |
+| `run_smoke.cmd` | A few seconds of that exe, pass/fail, when it is already built |
 
 Hand overrides live in `src/recomp_manual.c`. Missed function starts go in `config/seed_functions.json`. Settings are in `game.toml`. Upstream CLI docs: `docs/porting.md` / `docs/manifest.md` inside the toolkit after setup.
 

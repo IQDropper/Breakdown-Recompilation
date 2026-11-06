@@ -6,7 +6,8 @@ echo.
 echo === Breakdown Recompilation - Windows setup helper ===
 echo Repo: https://github.com/IQDropper/Breakdown-Recompilation
 echo This script never downloads the game. Bring your own disc dump.
-echo See DISCLAIMER.md and README.md.
+echo To extract an ISO/XISO from this folder, run FIRST_RUN.cmd.
+echo See DISCLAIMER.md, README.md, and docs\first-run.md.
 echo.
 
 git config --global core.longpaths true >nul 2>&1
@@ -62,10 +63,9 @@ call breakdown.cmd doctor
 echo.
 
 if not exist "game_files\default.xbe" (
-  echo [next] Create game_files\ and copy YOUR dump here:
-  echo          game_files\default.xbe
-  echo          game_files\romdata\  and other disc files
-  echo        Git ignores this folder. Do not commit it.
+  echo [next] Put your ISO or XISO in build-win\ or in this folder and run FIRST_RUN.cmd
+  echo        It extracts into game_files\default.xbe plus romdata\ and stream\.
+  echo        Git ignores that folder. Do not commit it.
 ) else (
   echo [ok] Found game_files\default.xbe
 )
@@ -82,5 +82,10 @@ echo Display: docs\widescreen-hires.md  (run_native.cmd = 2x, 16:9 letterbox)
 echo.
 echo Read README.md and DISCLAIMER.md before sharing builds.
 echo.
+if /I "%~1"=="nopause" (
+  echo SETUP.cmd finished without waiting. FIRST_RUN.cmd continues with the disc.
+  endlocal
+  exit /b 0
+)
 pause
 endlocal
