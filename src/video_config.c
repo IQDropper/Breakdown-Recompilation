@@ -190,6 +190,9 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# run_native.cmd sets some of these, so it ignores this file\n"
                 "# until those variables are unset.\n"
                 "# Hor+ and exclusive fullscreen are not settings.\n"
+                "# Quality Low writes scale 1, window 1, filter linear.\n"
+                "# Quality High writes scale 4, window 2, filter integer.\n"
+                "# Those are not extra keys. Aspect and fullscreen stay as set.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
@@ -302,6 +305,74 @@ const char *video_settings_filter_name(int index)
     return s_filters[index];
 }
 
+int video_settings_preset(const struct video_settings *s)
+{
+    if (!s)
+        return VIDEO_PRESET_CUSTOM;
+    /* Linear, not nearest: scale 1 + nearest in a wide window pins the
+     * image to the top left. Low always letterboxes. */
+    if (s->render_scale == 1 && s->window_scale == 1 && s->filter == 1)
+        return VIDEO_PRESET_LOW;
+    if (s->render_scale == 4 && s->window_scale == 2 && s->filter == 2)
+        return VIDEO_PRESET_HIGH;
+    return VIDEO_PRESET_CUSTOM;
+}
+
+int video_settings_apply_preset(struct video_settings *s, int preset)
+{
+    unsigned rs, ws;
+    int filter;
+
+    if (!s)
+        return 0;
+    if (preset == VIDEO_PRESET_LOW) {
+        rs = 1;
+        ws = 1;
+        filter = 1;
+    } else if (preset == VIDEO_PRESET_HIGH) {
+        rs = 4;
+        ws = 2;
+        filter = 2;
+    } else {
+        return 0;
+    }
+    if (s->render_scale == rs && s->window_scale == ws && s->filter == filter)
+        return 0;
+    s->render_scale = rs;
+    s->window_scale = ws;
+    s->filter = filter;
+    return 1;
+}
+
+const char *video_settings_preset_name(int preset)
+{
+    if (preset == VIDEO_PRESET_LOW)
+        return "Low";
+    if (preset == VIDEO_PRESET_HIGH)
+        return "High";
+    return "Custom";
+}
+
+int video_settings_readability(const struct video_settings *s)
+{
+    if (!s)
+        return 0;
+    if (s->render_scale == s->window_scale && s->render_scale >= 1 && s->render_scale <= 4)
+        return (int)s->render_scale;
+    return 0;
+}
+
+int video_settings_apply_readability(struct video_settings *s, int step)
+{
+    if (!s || step < 1 || step > 4)
+        return 0;
+    if (s->render_scale == (unsigned)step && s->window_scale == (unsigned)step)
+        return 0;
+    s->render_scale = (unsigned)step;
+    s->window_scale = (unsigned)step;
+    return 1;
+}
+
 void video_settings_from_choice(const struct display_choice *c, struct video_settings *s)
 {
     unsigned ws;
@@ -324,11 +395,13 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
 const char *video_row_title(int row)
 {
     static const char *const titles[VIDEO_ROW_COUNT] = {
+        "Quality",
         "Internal resolution",
         "Window size",
         "Aspect",
         "Present filter",
         "Window mode",
+        "HUD readability",
         "Apply",
         "OK",
         "Cancel",
@@ -385,6 +458,36 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->borderless ? 1 : 0;
         s->borderless = before ? 0 : 1;
         return 1;
+    case VIDEO_ROW_PRESET:
+        before = video_settings_preset(s);
+        if (before == VIDEO_PRESET_CUSTOM)
+            before = dir > 0 ? VIDEO_PRESET_HIGH : VIDEO_PRESET_LOW;
+        else if (dir > 0)
+            before = before == VIDEO_PRESET_LOW ? VIDEO_PRESET_HIGH : VIDEO_PRESET_LOW;
+        else
+            before = before == VIDEO_PRESET_HIGH ? VIDEO_PRESET_LOW : VIDEO_PRESET_HIGH;
+        return video_settings_apply_preset(s, before);
+    case VIDEO_ROW_HUD: {
+        int step = video_settings_readability(s);
+        int next;
+
+        if (step >= 1) {
+            next = step + (dir > 0 ? 1 : -1);
+            if (next < 1 || next > 4)
+                return 0;
+        } else {
+            unsigned hi = s->render_scale > s->window_scale ? s->render_scale : s->window_scale;
+            unsigned lo = s->render_scale < s->window_scale ? s->render_scale : s->window_scale;
+            if (hi > 4)
+                hi = 4;
+            if (lo < 1)
+                lo = 1;
+            if (lo > 4)
+                lo = 4;
+            next = dir > 0 ? (int)hi : (int)lo;
+        }
+        return video_settings_apply_readability(s, next);
+    }
     default:
         return 0;
     }
@@ -414,6 +517,17 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_MODE:
         snprintf(buf, n, "%s", s->borderless ? "Borderless" : "Windowed");
         break;
+    case VIDEO_ROW_PRESET:
+        snprintf(buf, n, "%s", video_settings_preset_name(video_settings_preset(s)));
+        break;
+    case VIDEO_ROW_HUD: {
+        int step = video_settings_readability(s);
+        if (step >= 1)
+            snprintf(buf, n, "%dx", step);
+        else
+            snprintf(buf, n, "Custom");
+        break;
+    }
     default:
         break;
     }
@@ -423,6 +537,14 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
 const char *video_row_detail(const struct video_settings *s, int row)
 {
     switch (row) {
+    case VIDEO_ROW_PRESET:
+        if (!s || video_settings_preset(s) == VIDEO_PRESET_CUSTOM)
+            return "Custom. Left applies Low, Right applies High. Aspect and window mode stay as they are.";
+        if (video_settings_preset(s) == VIDEO_PRESET_LOW)
+            return "Low: internal 1x, window 1x, linear. Linear letterboxes a wide window. "
+                   "Nearest at internal 1x would pin that image to the top left.";
+        return "High: internal 4x, window 2x, integer. Integer is the sharp present. "
+               "At 16:9 that window is 1707x960.";
     case VIDEO_ROW_SCALE:
         return "1x is the Xbox internal size. Higher costs more. Changes on the next frame.";
     case VIDEO_ROW_WINDOW:
@@ -436,6 +558,10 @@ const char *video_row_detail(const struct video_settings *s, int row)
         return "Nearest, linear, or integer. Changes on the next frame.";
     case VIDEO_ROW_MODE:
         return "Windowed, or borderless on the monitor. Exclusive fullscreen is not available.";
+    case VIDEO_ROW_HUD:
+        return "Sets internal resolution and window size to the same step, 1x to 4x. "
+               "The HUD is drawn in the 4:3 frame, so this enlarges that frame. "
+               "It does not move the HUD into the letterbox bars.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:
@@ -449,5 +575,6 @@ const char *video_row_detail(const struct video_settings *s, int row)
 
 int video_row_needs_window(int row)
 {
-    return row == VIDEO_ROW_WINDOW || row == VIDEO_ROW_ASPECT || row == VIDEO_ROW_MODE;
+    return row == VIDEO_ROW_PRESET || row == VIDEO_ROW_WINDOW || row == VIDEO_ROW_ASPECT
+        || row == VIDEO_ROW_MODE || row == VIDEO_ROW_HUD;
 }

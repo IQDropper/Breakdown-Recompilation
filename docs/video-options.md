@@ -22,11 +22,41 @@ The rows are:
 
 | Row | Saved as | Preview |
 |---|---|---|
+| Quality | not its own key. Low or High writes the three fields below. Custom is anything else. | Resizes the window now. Scale and filter on the next frame. |
 | Internal resolution | `RECOMP_RENDER_SCALE` 1..4 | Next frame. Higher costs more. 1x is the Xbox internal size. |
 | Window size | `RECOMP_WINDOW_SCALE` 1..6 | Resizes the window now. Height is 480 times this. |
 | Aspect | `RECOMP_DISPLAY_ASPECT` `4:3`, `16:9`, `16:10`, `21:9` | Resizes now. Letterbox only. Hor+ is not available. |
 | Present filter | `RECOMP_PRESENT_FILTER` `nearest`, `linear`, `integer` | Next frame. `integer` is the present path’s integer fit: the largest whole multiple of the frame that fits in the window, letterboxed. It does not stretch to fill. See [widescreen-hires.md](widescreen-hires.md). |
 | Window mode | `RECOMP_PRESENT_FULLSCREEN` `0` or `1` | Windowed, or borderless on the monitor. Exclusive fullscreen is not available. |
+| HUD readability | not its own key. A step sets `RECOMP_RENDER_SCALE` and `RECOMP_WINDOW_SCALE` to the same value, 1..4. | Resizes the window now. Internal resolution on the next frame. |
+
+Quality writes internal resolution, window size, and the present filter. HUD readability writes internal resolution and window size. Changing an individual row leaves Quality on Custom when those three fields no longer match Low or High. Aspect and window mode are not part of either preset.
+
+## Quality presets
+
+Low and High are bundles. Apply and OK still write the five `RECOMP_*` lines. There is no preset line in the file. A set environment variable still wins over the file on the next launch, including a preset you just saved.
+
+| Preset | `RECOMP_RENDER_SCALE` | `RECOMP_WINDOW_SCALE` | `RECOMP_PRESENT_FILTER` | Aspect and fullscreen |
+|---|---|---|---|---|
+| Low | `1` | `1` | `linear` | unchanged |
+| High | `4` | `2` | `integer` | unchanged |
+
+Low is the small internal image and the small window. The filter is linear, not nearest. At internal 1x, nearest in a wide window still pins the picture to the top left. Linear letterboxes it. High is the top of the internal-resolution clamp (4) and the sharp present (`integer`). Window 2x is the size `run_native.cmd` already uses: 1707×960 at 16:9, which fits a 1080p desktop. It is not window scale 6. `run_native.cmd` is not changed by a preset; that launch still sets its own variables.
+
+Left on Custom applies Low. Right on Custom applies High. On Low or High, Left or Right swaps to the other one. Custom is not a third bundle.
+
+## Accessibility
+
+The Accessibility label sits above HUD readability. That row is the readability control this host can actually apply.
+
+The HUD is drawn into the same colour target as the scene. Render scale makes that target sharper. Window scale makes the 4:3 frame larger on the monitor. HUD readability sets both to the same step, 1x through 4x, so the frame gets bigger and the HUD stays inside it. It does not slide the HUD into the letterbox, and it is not hor+. If the two scales already differ (High is internal 4x and window 2x, or a window size of 5x or 6x), the row reads Custom. Left snaps both to the lower scale, capped at 4. Right snaps both to the higher scale, capped at 4.
+
+These are not rows, because this build cannot do them honestly:
+
+- **Contrast and colorblind cues.** The present path only chooses nearest, linear, or integer. Nothing in this tree recolors the frame or overlays a cue on a HUD element. A flat tint would not be a colorblind cue. No checkbox until a real present-time transform or overlay exists. Replacement art stays P2.
+- **Subtitles.** Spoken lines are not available as text here. The disc dump and the generated recomp are not in git, and `src/` has no dialogue script. This build does not invent a subtitle track.
+- **Flicker and comfort.** No motion-blur, camera-shake, or flicker switch exists on the host. P0 flicker is still open. The investigation switches stay off this menu.
+- **Remapping.** Not this menu. Shipped mouse and keyboard defaults stay in [CONTROLS.txt](../CONTROLS.txt). Full remapping is the parallel controls track.
 
 A wide aspect at internal 1x with nearest still pins the image to the top left. That is the present path, not a menu bug. The filter row says so. Linear or integer centres it. The same rule as a launch with those variables.
 
@@ -69,3 +99,5 @@ A bad `breakdown_video.cfg`, or a launch that keeps coming back at a size the ma
 3. OK. `build-win\breakdown_video.cfg` should appear. stderr: `[VIDEO] saved ...`.
 4. Quit and launch the exe again the same way (no variables). The log should say the config loaded and the sources are `file`. The window opens at the 16:9 size from the file (1707×960 at window scale 2).
 5. `run_native.cmd` still forces its own scale, window, aspect, and filter. Those sources log as `env`. The file does not change that launch. Comment out one `set` in the script if you want the file to win for that one variable.
+6. F10 again. The menu opens on Quality. It should read Custom if step 2 did not land on Low or High (2x / 2x / nearest does not). Left applies Low: internal 1x, window 1x, linear. The window shrinks now. Right applies High: internal 4x, window 2x, integer. Aspect and window mode stay on whatever they already were. OK, then relaunch the exe with the variables unset. The log sources are `file`, and the values match that preset.
+7. F10, move to HUD readability. If Quality is High, this row reads Custom (4x internal, 2x window). Right sets both scales to 4x and Quality becomes Custom, because the filter is still integer and High wants window 2x. The picture stays inside the 4:3 frame. There is no contrast, subtitle, or flicker row.

@@ -30,11 +30,17 @@ MOUSE BUTTONS — LEGACY
 
 VIDEO (host menu, not an Xbox screen)
   F10 ....................... Video options
+       Quality: Low (internal 1x, window 1x, linear) or High (internal 4x,
+       window 2x, integer). Anything else reads Custom. Left / Right applies
+       the other preset. Aspect and window mode are not part of the preset.
        Internal resolution, window size, letterbox aspect (4:3, 16:9,
        16:10, 21:9), present filter, windowed or borderless.
+       Accessibility: HUD readability sets internal resolution and window
+       size to the same step (1x-4x) inside the 4:3 frame.
        Left / Right preview. Apply or OK saves breakdown_video.cfg
        beside the exe. Esc or F10 cancels the preview.
-       Hor+ and exclusive fullscreen are not in this menu.
+       Hor+, exclusive fullscreen, contrast, subtitles, flicker toggles,
+       and key remapping are not in this menu. Key defaults are this file.
        Details: docs/video-options.md
 
 KEYBOARD (same in both layouts)

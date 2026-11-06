@@ -27,16 +27,39 @@ struct video_settings {
 };
 
 enum {
-    VIDEO_ROW_SCALE = 0,
+    VIDEO_ROW_PRESET = 0,
+    VIDEO_ROW_SCALE,
     VIDEO_ROW_WINDOW,
     VIDEO_ROW_ASPECT,
     VIDEO_ROW_FILTER,
     VIDEO_ROW_MODE,
+    VIDEO_ROW_HUD,
     VIDEO_ROW_APPLY,
     VIDEO_ROW_OK,
     VIDEO_ROW_CANCEL,
     VIDEO_ROW_COUNT
 };
+
+/* Derived from render scale, window scale, and the present filter.
+ * Not a config key. Aspect and window mode are not part of a preset. */
+enum {
+    VIDEO_PRESET_CUSTOM = 0,
+    VIDEO_PRESET_LOW = 1,
+    VIDEO_PRESET_HIGH = 2
+};
+
+/* Low:  render 1, window 1, linear.
+ * High: render 4, window 2, integer.
+ * Any other id, or a NULL settings pointer, changes nothing and returns 0.
+ * Returns 1 when a quality field changed. */
+int video_settings_preset(const struct video_settings *s);
+int video_settings_apply_preset(struct video_settings *s, int preset);
+const char *video_settings_preset_name(int preset);
+
+/* 1..4 when both scales are that same step, otherwise 0 (custom).
+ * Applying a step writes both scales and leaves filter, aspect, and mode. */
+int video_settings_readability(const struct video_settings *s);
+int video_settings_apply_readability(struct video_settings *s, int step);
 
 /* dir + filename. 0 on success, -1 if it does not fit. A Windows dir
  * (backslash, no slash) keeps backslashes. */
@@ -74,8 +97,9 @@ const char *video_row_title(int row);
 int video_settings_nudge(struct video_settings *s, int row, int dir);
 char *video_settings_value(const struct video_settings *s, int row, char *buf, size_t n);
 const char *video_row_detail(const struct video_settings *s, int row);
-/* Window size, aspect, and window mode resize the D3D11 window. Scale and
- * the present filter go through nv2a_host_opts and do not need the HWND. */
+/* Window size, aspect, window mode, Quality, and HUD readability resize
+ * the D3D11 window. Internal resolution and the present filter go through
+ * nv2a_host_opts and do not need the HWND. */
 int video_row_needs_window(int row);
 
 #ifdef __cplusplus
