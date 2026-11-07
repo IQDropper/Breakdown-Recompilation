@@ -67,8 +67,10 @@ A bad `breakdown_video.cfg`, or a launch that keeps coming back at a size the ma
 
 ## What to click
 
+Full `breakdown_recomp.exe` link and this click-through were not run for the merge `2b8408a`. A stub link of the host objects is not that validation. The overlay is not drawn into the frame.
+
 1. Start `build-win\breakdown_recomp.exe` with no `RECOMP_RENDER_SCALE`, `RECOMP_WINDOW_SCALE`, `RECOMP_DISPLAY_ASPECT`, `RECOMP_PRESENT_FILTER`, or `RECOMP_PRESENT_FULLSCREEN`, and with no cfg beside the exe. The log should say the config is not created yet, and every source is `default`. The window is 640×480.
 2. Hold Back and press Start, or press F10. The overlay opens over the 4:3 picture and stays above the game window while the game presents. stderr: `[PC] Back+Start opens the host overlay over the 4:3 picture`. Set internal resolution to 2x, window size to 2x, aspect to 16:9, filter to nearest, window mode to windowed. The window should grow as you change size and aspect. stderr: `[PC] apply ...`. Esc reverts that preview. Press Start alone on the title screen and confirm the page stays closed. Press F10 and confirm the same page toggles.
-3. OK. `build-win\breakdown_video.cfg` should appear. stderr: `[VIDEO] saved ...`.
+3. Apply. `build-win\breakdown_video.cfg` should appear. stderr: `[PC] saved ...`. Esc or Revert after an unsaved size change restores the previous window. A failed save leaves the previous file in place.
 4. Quit and launch the exe again the same way (no variables). The log should say the config loaded and the sources are `file`. The window opens at the 16:9 size from the file (1707×960 at window scale 2).
 5. `run_native.cmd` still forces its own scale, window, aspect, and filter. Those sources log as `env`. The file does not change that launch. Comment out one `set` in the script if you want the file to win for that one variable.
