@@ -15,4 +15,4 @@ Rank a play issue with one line per tier.
 | Exclusive fullscreen acts as borderless (SetFullscreenState fails) | Medium. Borderless is still playable. |
 | Shadow flicker on turn (no perf hit) | Medium |
 | Mouse/keyboard gated on controller presence | Unplayable (high) for M&K-only (no pad) |
-| F10-to-menu / pause opens Video (PR #8 in progress) | Medium. Discoverability; F10 still works. Feature work, not a crash. |
+| PC options is a host page inside the 4:3 picture, not the Xbox Options screen | Medium until a play-test confirms Back+Start, F10, and cfg reload. |

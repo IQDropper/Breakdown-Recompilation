@@ -83,7 +83,7 @@ stderr (also `run_stderr.txt`):
 
 The window numbers are the windowed client. Fullscreen ignores them for the swap chain and letterboxes onto the monitor.
 
-Direct `build-win\breakdown_recomp.exe` with a clean environment and no `breakdown_video.cfg` beside the exe stays stock: scale 1, 640×480, nearest. If that file exists, its values fill any `RECOMP_*` variable that is unset. A variable that is set still wins, including the ones `run_native.cmd` sets. The in-game menu that writes the file is [video-options.md](video-options.md) (F10).
+Direct `build-win\breakdown_recomp.exe` with a clean environment and no `breakdown_video.cfg` beside the exe stays stock: scale 1, 640×480, nearest. If that file exists, its values fill any `RECOMP_*` variable that is unset. A variable that is set still wins, including the ones `run_native.cmd` sets. The in-game page that writes the file is [video-options.md](video-options.md) (Back+Start or F10).
 
 ## Verify on Windows (your dump)
 
@@ -100,4 +100,4 @@ Direct `build-win\breakdown_recomp.exe` with a clean environment and no `breakdo
    - `RECOMP_RENDER_SCALE=1` → softer, Xbox-sized targets
    - `RECOMP_PRESENT_FULLSCREEN=1` → borderless, 4:3 image centred on the monitor
 7. Optional: `set RECOMP_FLIP_LOG=1` and confirm the present extent. If it is not 640×480, the “Xbox back buffer” note above needs an update. Hor+ is still not implemented either way.
-8. In-game Video (F10) and `breakdown_video.cfg` are [video-options.md](video-options.md). `run_native.cmd` still overrides that file for any variable it sets.
+8. In-game PC options (Back+Start or F10) and `breakdown_video.cfg` are [video-options.md](video-options.md). `run_native.cmd` still overrides that file for any variable it sets.

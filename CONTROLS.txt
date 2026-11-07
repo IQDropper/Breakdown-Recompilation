@@ -28,13 +28,16 @@ MOUSE BUTTONS — LEGACY
   Side button (back) ........ Left trigger
   Side button (forward) ..... Right trigger
 
-VIDEO (host menu, not an Xbox screen)
-  F10 ....................... Video options
+PC OPTIONS (host page inside the 4:3 picture, not an Xbox screen)
+  Back + Start .............. opens PC options (Backspace + Enter)
+  F10 ....................... same page, backup toggle
+       Start alone still pauses and still advances the title.
        Internal resolution, window size, letterbox aspect (4:3, 16:9,
        16:10, 21:9), present filter, windowed or borderless.
-       Left / Right preview. Apply or OK saves breakdown_video.cfg
-       beside the exe. Esc or F10 cancels the preview.
-       Hor+ and exclusive fullscreen are not in this menu.
+       Apply writes breakdown_video.cfg. Reset previews stock.
+       Esc, B, or Revert puts the picture back.
+       A row marked "launch script" follows that RECOMP_* variable.
+       Hor+ and exclusive fullscreen are not on this page.
        Details: docs/video-options.md
 
 KEYBOARD (same in both layouts)

@@ -1,9 +1,8 @@
 /*
- * video_menu.h - host Video menu. F10 on the D3D11 window.
+ * video_menu.h - starts the in-frame PC options page.
  *
- * The Xbox Options screen is guest code generated from a dump, and that
- * dump is not in this repo, so the menu is a host window instead of a
- * patched guest screen. docs/video-options.md.
+ * The Xbox Options screen is guest code. This entry opens a host page
+ * inside the 4:3 picture instead. docs/video-options.md.
  */
 #ifndef VIDEO_MENU_H
 #define VIDEO_MENU_H

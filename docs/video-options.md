@@ -6,17 +6,20 @@ Players change performance from inside the running game. The knobs are the same 
 
 ## Why a host window
 
-The Xbox Options screen is guest code. That code is generated from a disc dump, and the dump is not in this repo, so there is no stable place to add a row to that screen. The Video menu is a window the host opens on the D3D11 game window. It is the in-game control for this slice. F10 is the key.
+The Xbox Options screen is guest code. That code is generated from a disc dump, and the dump is not in this repo, so there is no stable place to add a row to that screen. PC options is a host page drawn inside the 4:3 picture. It is not that Xbox screen.
+
+The toolkit present path is not in this repo. Present covers a child window, so the page is an owned borderless window parked on the 4:3 picture (no caption, no taskbar button). The letterbox bars stay empty. Colors are procedural (navy panel, steel highlight, amber values). They are not sampled from the game. A local pause screenshot is still the review for visual polish.
 
 ## Open it
 
 1. Launch the game (`run_native.cmd` or the exe).
 2. Click the game window if you want the picture to be the one you are tuning.
-3. Press **F10**.
+3. Hold **Back** and press **Start** (Backspace and Enter, or the controller buttons). Start alone still pauses and still advances the title. The opening press is not forwarded.
+4. Or press **F10**. F10 toggles the page and does not send Start.
 
-F10 is the only hotkey in this slice. Some accessibility tools also bind F10, and this build does not offer a second key. Esc closes the menu the same way F10 does (it undoes an unsaved preview). The title-bar close does that too.
+While the page is open, Start, Back, the d-pad, A, and B stay on the page. Sticks and triggers are cleared for those polls. Up and Down move. Left and Right preview. A or Enter on Apply writes the file and leaves the page open. Reset previews stock (1x, 1x, 4:3, nearest, windowed) except a row a launch script owns. Esc, B, or Revert puts the picture back and closes. A held direction repeats. A row marked `launch script` cannot be changed; that variable still wins over the file.
 
-Left and Right change the selected row and preview it. Up and Down move. Enter on Apply saves and leaves the menu open. Enter on OK saves and closes. The file is only written by Apply or OK.
+stderr: `[PC] in-frame PC options (host page, not the Xbox Options screen)`.
 
 The rows are:
 
@@ -65,7 +68,7 @@ A bad `breakdown_video.cfg`, or a launch that keeps coming back at a size the ma
 ## What to click
 
 1. Start `build-win\breakdown_recomp.exe` with no `RECOMP_RENDER_SCALE`, `RECOMP_WINDOW_SCALE`, `RECOMP_DISPLAY_ASPECT`, `RECOMP_PRESENT_FILTER`, or `RECOMP_PRESENT_FULLSCREEN`, and with no cfg beside the exe. The log should say the config is not created yet, and every source is `default`. The window is 640×480.
-2. F10. Set internal resolution to 2x, window size to 2x, aspect to 16:9, filter to nearest, window mode to windowed. The window should grow as you change size and aspect. 2x and the filter show up on the next frame (stderr `[VIDEO] apply ...`).
+2. Hold Back and press Start, or press F10. The page opens inside the 4:3 picture. stderr: `[PC] Back+Start opens PC options inside the 4:3 picture`. Set internal resolution to 2x, window size to 2x, aspect to 16:9, filter to nearest, window mode to windowed. The window should grow as you change size and aspect. stderr: `[PC] apply ...`. Esc reverts that preview. Press Start alone on the title screen and confirm the page stays closed. Press F10 and confirm the same page toggles.
 3. OK. `build-win\breakdown_video.cfg` should appear. stderr: `[VIDEO] saved ...`.
 4. Quit and launch the exe again the same way (no variables). The log should say the config loaded and the sources are `file`. The window opens at the 16:9 size from the file (1707×960 at window scale 2).
 5. `run_native.cmd` still forces its own scale, window, aspect, and filter. Those sources log as `env`. The file does not change that launch. Comment out one `set` in the script if you want the file to win for that one variable.
