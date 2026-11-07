@@ -5,7 +5,7 @@ Status: approved to implement (owner: keep working). Slice only.
 
 ## What this is
 
-A host page titled **PC options**. It is drawn in the game window, inside the 4:3 picture, not in the letterbox bars and not as a captioned desktop popup. It is not the Xbox Options screen. That screen is guest code from the disc dump, and the dump is not in this repo.
+A host page titled **PC options**. It is an owned borderless overlay whose rectangle matches the 4:3 picture, so the letterbox bars stay outside it. It is not drawn into the frame, it is not a captioned desktop dialog, and it is not the Xbox Options screen. That screen is guest code from the disc dump, and the dump is not in this repo.
 
 The present path that could draw a sprite into the swap chain lives in the toolkit (`external/xboxrecomp`, not in git). This slice does not patch that toolkit. Present also covers a child HWND, so the page is an owned borderless window (no caption, no taskbar button) parked on the 4:3 picture. Colors are original and procedural. A local pause screenshot is still required before anyone calls the palette final.
 

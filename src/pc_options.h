@@ -75,6 +75,9 @@ struct pc_pad_result pc_options_on_port(int port, unsigned buttons);
 /* Keyboard mirror of one XINPUT bit. down=0 releases it. */
 struct pc_pad_result pc_options_set_ui_bit(unsigned bit, int down);
 
+/* Drop every keyboard-held bit. A missed key-up must not leave Start stuck. */
+void pc_options_release_ui(void);
+
 /* F10 toggles. Esc reverts when open. */
 struct pc_pad_result pc_options_on_f10(void);
 struct pc_pad_result pc_options_on_esc(void);

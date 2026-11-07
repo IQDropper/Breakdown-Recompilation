@@ -247,7 +247,11 @@ void sub_00205439(void)
     HostPadState st;
     const uint8_t *b;
     struct pc_pad_result pr;
-    if (xbox_InputGetState(port, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    if (xbox_InputGetState(port, &st) != 0) {
+        /* A disconnected pad must not leave Start or the d-pad held. */
+        pc_options_host_on_port((int)port, 0);
+        g_eax = 1167; g_esp += 12; return;   /* ERROR_DEVICE_NOT_CONNECTED */
+    }
     /* PC options is a host page. Start alone still reaches the guest. */
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;

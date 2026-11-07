@@ -231,6 +231,56 @@ static void test_layout(void)
            panel.x > 0 && panel.y > 0 && panel.x + panel.w < 640 && panel.y + panel.h < 480);
 }
 
+static void test_port_zero_drops_stuck_start(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_on_port(1, PC_PAD_START);
+    r = pc_options_on_port(0, PC_PAD_BACK);
+    expect("stuck start on another port still forms the chord", r.action == PC_ACT_OPENED);
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_on_port(1, PC_PAD_START);
+    pc_options_on_port(1, 0);
+    r = pc_options_on_port(0, PC_PAD_BACK);
+    expect("a port that reports 0 no longer supplies start",
+           r.action == PC_ACT_NONE && pc_options_is_open() == 0);
+    expect("back still reaches the guest", (r.guest_buttons & PC_PAD_BACK) != 0);
+}
+
+static void test_release_ui_drops_stuck_start(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_ui_bit(PC_PAD_START, 1);
+    pc_options_release_ui();
+    r = pc_options_set_ui_bit(PC_PAD_BACK, 1);
+    expect("released start does not complete a later chord",
+           r.action == PC_ACT_NONE && pc_options_is_open() == 0);
+}
+
+static void test_keyboard_only_moves_the_page(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_ui_bit(PC_PAD_BACK, 1);
+    r = pc_options_set_ui_bit(PC_PAD_START, 1);
+    expect("keyboard chord opens with no pad port", r.action == PC_ACT_OPENED);
+    pc_options_set_ui_bit(PC_PAD_START, 0);
+    pc_options_set_ui_bit(PC_PAD_BACK, 0);
+    r = pc_options_set_ui_bit(PC_PAD_DPAD_DOWN, 1);
+    expect("keyboard down moves a row", pc_options_row() == 1);
+    pc_options_release_ui();
+    r = pc_options_on_port(0, PC_PAD_DPAD_DOWN);
+    expect("after release the same down is a new edge", pc_options_row() == 2);
+}
+
 static void test_rows_are_real(void)
 {
     int i;
@@ -256,6 +306,9 @@ int main(void)
     test_back_while_start_held_stays();
     test_second_port_does_not_drop_chord();
     test_layout();
+    test_port_zero_drops_stuck_start();
+    test_release_ui_drops_stuck_start();
+    test_keyboard_only_moves_the_page();
     test_rows_are_real();
     if (g_fail) {
         fprintf(stderr, "%d failed\n", g_fail);
