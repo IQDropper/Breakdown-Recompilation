@@ -1,5 +1,5 @@
 /*
- * pc_options_host.c - child window inside the D3D11 client.
+ * pc_options_host.c - owned borderless overlay on the 4:3 picture.
  *
  * A swap-chain sprite would have to be drawn by the toolkit present path
  * (external/xboxrecomp, not in this repo). Present also covers a child HWND.
@@ -108,11 +108,15 @@ static void refresh_baseline(void)
     pc_options_set_locks(env_locks());
 }
 
-static void enqueue(int action, int restyle, const struct video_settings *s)
+static int s_save_inline;
+static struct video_settings s_save_inline_settings;
+
+/* 1 when the game window will run the action. 0 when there is no window yet. */
+static int enqueue(int action, int restyle, const struct video_settings *s)
 {
     struct pc_apply item;
     if (!s_game || !IsWindow(s_game))
-        return;
+        return 0;
     item.action = action;
     item.restyle = restyle;
     item.settings = *s;
@@ -124,6 +128,7 @@ static void enqueue(int action, int restyle, const struct video_settings *s)
     s_qw = (s_qw + 1) % 16;
     s_q_count++;
     PostMessageA(s_game, PC_MSG, 0, 0);
+    return 1;
 }
 
 static int dequeue(struct pc_apply *out)
@@ -229,6 +234,8 @@ static void resize_game(const struct display_choice *c)
     frame.top = 0;
     frame.right = (LONG)c->window_w;
     frame.bottom = (LONG)c->window_h;
+    /* Same DPI space as the rest of this process. Do not turn on
+     * per-monitor awareness here; that would resize the whole game. */
     AdjustWindowRect(&frame, style, FALSE);
     w = frame.right - frame.left;
     h = frame.bottom - frame.top;
@@ -266,11 +273,15 @@ static int apply_live(const struct video_settings *s, int restyle)
     return have;
 }
 
+static int s_placing;
+
 static void place_page(void)
 {
     RECT client;
     struct pc_rect panel;
     POINT origin;
+    if (s_placing)
+        return;
     if (!s_page || !s_game || !IsWindow(s_page) || !IsWindow(s_game))
         return;
     if (!GetClientRect(s_game, &client))
@@ -284,8 +295,15 @@ static void place_page(void)
     origin.y = panel.y;
     if (!ClientToScreen(s_game, &origin))
         return;
-    SetWindowPos(s_page, HWND_TOP, origin.x, origin.y, panel.w, panel.h,
-                 SWP_NOACTIVATE | (IsWindowVisible(s_page) ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+    /* Owned popups already stay above their owner. HWND_TOP would raise
+     * that whole group above every other application on each move.
+     * Client and screen points stay in this process's DPI space. The exe
+     * does not call SetProcessDpiAwareness, so these match the game window. */
+    s_placing = 1;
+    SetWindowPos(s_page, NULL, origin.x, origin.y, panel.w, panel.h,
+                 SWP_NOZORDER | SWP_NOACTIVATE |
+                 (IsWindowVisible(s_page) ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+    s_placing = 0;
 }
 
 static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
@@ -318,7 +336,7 @@ static void ensure_class_and_page(void)
     s_page = CreateWindowExA(WS_EX_TOOLWINDOW, PAGE_CLASS, "PC options", WS_POPUP,
                              0, 0, 10, 10, s_game, NULL, wc.hInstance, NULL);
     if (!s_page)
-        fprintf(stderr, "[PC] could not create the in-frame page (%lu)\n", GetLastError());
+        fprintf(stderr, "[PC] could not create the host overlay (%lu)\n", GetLastError());
 }
 
 static void show_page(void)
@@ -401,7 +419,28 @@ static void note_result(const struct pc_pad_result *r, int restyle)
         return;
     }
     src = (r->action == PC_ACT_REVERT) ? pc_options_committed() : pc_options_draft();
-    enqueue(r->action, restyle, src);
+    if (enqueue(r->action, restyle, src))
+        return;
+    /* Apply still has to hit the file when the D3D window is not up yet. */
+    if (r->action == PC_ACT_SAVE) {
+        s_save_inline = 1;
+        s_save_inline_settings = *src;
+    }
+}
+
+static void flush_inline_save(void)
+{
+    struct video_settings s;
+    int do_it = 0;
+    lock();
+    if (s_save_inline) {
+        s = s_save_inline_settings;
+        s_save_inline = 0;
+        do_it = 1;
+    }
+    unlock();
+    if (do_it)
+        save_snapshot(&s);
 }
 
 static void on_key(WPARAM vk, int down)
@@ -417,6 +456,7 @@ static void on_key(WPARAM vk, int down)
         restyle = (r.action == PC_ACT_REVERT);
         note_result(&r, restyle);
         unlock();
+        flush_inline_save();
         return;
     }
     if (vk == VK_ESCAPE && down) {
@@ -424,6 +464,7 @@ static void on_key(WPARAM vk, int down)
         r = pc_options_on_esc();
         note_result(&r, r.action == PC_ACT_REVERT);
         unlock();
+        flush_inline_save();
         return;
     }
     if (!down && vk == VK_RETURN) {
@@ -432,6 +473,7 @@ static void on_key(WPARAM vk, int down)
         r = pc_options_set_ui_bit(PC_PAD_START, 0);
         note_result(&r, 0);
         unlock();
+        flush_inline_save();
         return;
     }
     lock();
@@ -450,6 +492,7 @@ static void on_key(WPARAM vk, int down)
         restyle = 1;
     note_result(&r, restyle);
     unlock();
+    flush_inline_save();
 }
 
 static void paint_page(HDC hdc, const RECT *rc)
@@ -497,7 +540,7 @@ static void paint_page(HDC hdc, const RECT *rc)
     SetTextColor(hdc, COL_DIM);
     line.top = 36;
     line.bottom = 56;
-    DrawTextA(hdc, "Host page inside the 4:3 picture. Not the Xbox Options screen.",
+    DrawTextA(hdc, "Host overlay on the 4:3 picture. Not drawn into the frame.",
               -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     hi = CreateSolidBrush(COL_ROW);
     for (i = 0; i < PC_ROW_COUNT; i++) {
@@ -558,6 +601,14 @@ static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
         on_key(wparam, 0);
         return 0;
     }
+    if (msg == WM_KILLFOCUS) {
+        HWND next = (HWND)wparam;
+        if (next != s_game && next != s_page) {
+            lock();
+            pc_options_release_ui();
+            unlock();
+        }
+    }
     if (msg == WM_SETCURSOR && LOWORD(lparam) == HTCLIENT) {
         SetCursor(LoadCursor(NULL, IDC_ARROW));
         return TRUE;
@@ -585,6 +636,21 @@ static LRESULT CALLBACK game_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
             perform(&item);
         }
         return 0;
+    }
+    if (msg == WM_DESTROY) {
+        s_page = NULL;
+        s_game = NULL;
+        if (s_old)
+            return CallWindowProcA(s_old, hwnd, msg, wparam, lparam);
+        return DefWindowProcA(hwnd, msg, wparam, lparam);
+    }
+    if (msg == WM_KILLFOCUS) {
+        HWND next = (HWND)wparam;
+        if (next != s_game && next != s_page) {
+            lock();
+            pc_options_release_ui();
+            unlock();
+        }
     }
     if (msg == WM_SIZE || msg == WM_MOVE || msg == WM_WINDOWPOSCHANGED)
         place_page();
@@ -631,7 +697,7 @@ static void attach_game(HWND hwnd)
     s_game = hwnd;
     prev = SetWindowLongPtrA(hwnd, GWLP_WNDPROC, proc_to_long(game_proc));
     s_old = proc_from_long(prev);
-    fprintf(stderr, "[PC] Back+Start opens PC options inside the 4:3 picture. F10 toggles it.\n");
+    fprintf(stderr, "[PC] Back+Start opens the host overlay over the 4:3 picture. F10 toggles it.\n");
 }
 
 static DWORD WINAPI wait_for_game(LPVOID unused)
@@ -639,12 +705,11 @@ static DWORD WINAPI wait_for_game(LPVOID unused)
     (void)unused;
     for (;;) {
         HWND hwnd = FindWindowA(GAME_CLASS, NULL);
-        if (hwnd) {
+        if (hwnd && hwnd != s_game && IsWindow(hwnd))
             attach_game(hwnd);
-            return 0;
-        }
         Sleep(200);
     }
+    return 0;
 }
 
 void pc_options_host_start(void)
@@ -656,7 +721,8 @@ void pc_options_host_start(void)
     ensure_lock();
     s_place.length = sizeof s_place;
     fprintf(stderr,
-            "[PC] in-frame PC options (host page, not the Xbox Options screen) "
+            "[PC] owned borderless host overlay over the 4:3 picture "
+            "(not drawn into the frame, not the Xbox Options screen) "
             "when the D3D11 window (%s) exists. Back+Start opens it. F10 toggles it.\n",
             GAME_CLASS);
     thread = CreateThread(NULL, 0, wait_for_game, NULL, 0, NULL);
@@ -681,5 +747,6 @@ struct pc_pad_result pc_options_host_on_port(int port, unsigned buttons)
         restyle = 1;
     note_result(&r, restyle);
     unlock();
+    flush_inline_save();
     return r;
 }

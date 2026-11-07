@@ -279,6 +279,12 @@ struct pc_pad_result pc_options_set_ui_bit(unsigned bit, int down)
     return evaluate(0, 0, repeat ? 1 : 0);
 }
 
+void pc_options_release_ui(void)
+{
+    s_ui = 0;
+    evaluate(0, 0, 0);
+}
+
 struct pc_pad_result pc_options_on_f10(void)
 {
     struct pc_pad_result r;

@@ -28,7 +28,7 @@ MOUSE BUTTONS — LEGACY
   Side button (back) ........ Left trigger
   Side button (forward) ..... Right trigger
 
-PC OPTIONS (host page inside the 4:3 picture, not an Xbox screen)
+PC OPTIONS (owned borderless host overlay over the 4:3 picture, not drawn into the frame, not an Xbox screen)
   Back + Start .............. opens PC options (Backspace + Enter)
   F10 ....................... same page, backup toggle
        Start alone still pauses and still advances the title.

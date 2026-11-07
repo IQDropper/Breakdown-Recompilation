@@ -1,9 +1,9 @@
 /*
- * pc_options_host.h - child window for the PC options page.
+ * pc_options_host.h - owned borderless overlay for PC options.
  *
- * The page is a borderless child of the D3D11 window, placed inside the
- * 4:3 picture. It is not drawn by the swap chain, and it is not the Xbox
- * Options screen. docs/superpowers/specs/2026-11-06-pc-options-design.md
+ * The page is positioned over the 4:3 picture. It is not drawn into the
+ * swap chain, and it is not the Xbox Options screen.
+ * docs/superpowers/specs/2026-11-06-pc-options-design.md
  */
 #ifndef PC_OPTIONS_HOST_H
 #define PC_OPTIONS_HOST_H
