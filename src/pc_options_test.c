@@ -229,6 +229,28 @@ static void test_layout(void)
     expect("4:3 frame fills the client", frame.x == 0 && frame.y == 0 && frame.w == 640 && frame.h == 480);
     expect("4:3 panel is inset",
            panel.x > 0 && panel.y > 0 && panel.x + panel.w < 640 && panel.y + panel.h < 480);
+
+    /* Borderless client is the monitor. 1920x1080 is wider than 4:3. */
+    pc_options_frame_rect(1920, 1080, &frame);
+    pc_options_panel_rect(1920, 1080, &panel);
+    expect("borderless frame is 4:3", frame.w == 1440 && frame.h == 1080 && frame.y == 0);
+    expect("borderless frame is centered", frame.x == (1920 - 1440) / 2);
+    expect("borderless panel stays inside the frame",
+           panel.x >= frame.x && panel.y >= frame.y
+           && panel.x + panel.w <= frame.x + frame.w
+           && panel.y + panel.h <= frame.y + frame.h);
+    expect("borderless panel misses the side bars",
+           panel.x > frame.x && panel.x + panel.w < frame.x + frame.w);
+
+    /* A taller client letterboxes above and below the 4:3 picture. */
+    pc_options_frame_rect(800, 900, &frame);
+    pc_options_panel_rect(800, 900, &panel);
+    expect("tall frame is 4:3 wide", frame.w == 800 && frame.h == 600 && frame.x == 0);
+    expect("tall frame is centered", frame.y == (900 - 600) / 2);
+    expect("tall panel stays inside the frame",
+           panel.x >= frame.x && panel.y >= frame.y
+           && panel.x + panel.w <= frame.x + frame.w
+           && panel.y + panel.h <= frame.y + frame.h);
 }
 
 static void test_port_zero_drops_stuck_start(void)
