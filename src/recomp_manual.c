@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include "recomp_env.h"
+#include "pc_options_host.h"
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
@@ -242,9 +243,19 @@ void sub_00205261(void)
 void sub_00205439(void)
 {
     uint32_t h = MEM32(g_esp + 4), dst = MEM32(g_esp + 8), i;
+    uint32_t port = h & 3u;
     HostPadState st;
-    const uint8_t *b = (const uint8_t *)&st;
-    if (xbox_InputGetState(h & 3u, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    const uint8_t *b;
+    struct pc_pad_result pr;
+    if (xbox_InputGetState(port, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    /* PC options is a host page. Start alone still reaches the guest. */
+    pr = pc_options_host_on_port((int)port, st.wButtons);
+    st.wButtons = (uint16_t)pr.guest_buttons;
+    if (pr.suppress_motion) {
+        memset(st.bAnalog, 0, sizeof st.bAnalog);
+        memset(st.thumb, 0, sizeof st.thumb);
+    }
+    b = (const uint8_t *)&st;
     for (i = 0; i < 22; i++) MEM8(dst + i) = b[i];
     g_eax = 0; g_esp += 12;
 }

@@ -25,9 +25,9 @@ Player-facing **Options → Video** (and an accessibility section in that same p
    - [ ] Modes other than borderless fullscreen (`RECOMP_PRESENT_FULLSCREEN=1` is the borderless switch). Exclusive fullscreen is not on this present path yet.
      Severity: Medium — exclusive fullscreen acts as borderless (`SetFullscreenState` fails). Borderless is still playable.
 4. **In-game Video / Graphics menu** — full in-game control, not env-only. Required so weaker PCs can choose performance against clarity. The menu persists choices and applies them through the existing `RECOMP_*` host knobs (launch scripts keep working; a normal launch reads the saved config when those vars are unset). Items below are the parity goals. They are not all implemented. This slice ships the Video rows and the config file ([docs/video-options.md](docs/video-options.md)). Accessibility, presets, VSync, exclusive fullscreen, and hor+ are still open.
-   Severity: Medium — F10-to-menu / pause opens Video is in progress (PR #8). Discoverability; F10 still works. Feature work, not a crash.
+   Severity: Medium — the page is a host child window inside the 4:3 picture. It is not the Xbox Options screen. Play-test is still open.
    - **Display**
-     - [x] Resolution and window mode: windowed and borderless, from the Video menu (F10) and from `breakdown_video.cfg` beside the exe. Sizes are `RECOMP_WINDOW_SCALE` 1..6 × `RECOMP_DISPLAY_ASPECT`. The menu calls the second mode borderless. Exclusive fullscreen is still item 3 and is not offered.
+     - [x] Resolution and window mode: windowed and borderless, from PC options (Back+Start, F10 backup) and from `breakdown_video.cfg` beside the exe. Sizes are `RECOMP_WINDOW_SCALE` 1..6 × `RECOMP_DISPLAY_ASPECT`. The page calls the second mode borderless. Exclusive fullscreen is still item 3 and is not offered.
      - [x] Aspect: letterbox `4:3`, `16:9`, `16:10`, or `21:9`. Hor+ is not offered (item 2).
      - [ ] VSync and a frame cap, once the present path can support them. `RECOMP_PRESENT_PACING` only changes how lowered spin-waits sleep. It is not this option.
        Severity: Low — no frame cap yet. Play stays at a usable framerate.

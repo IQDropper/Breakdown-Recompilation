@@ -1,0 +1,685 @@
+/*
+ * pc_options_host.c - child window inside the D3D11 client.
+ *
+ * A swap-chain sprite would have to be drawn by the toolkit present path
+ * (external/xboxrecomp, not in this repo). Present also covers a child HWND.
+ * The page is an owned borderless window parked on the 4:3 picture instead.
+ * Colors are procedural, not sampled from the game.
+ */
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+#include "pc_options_host.h"
+#include "video_config.h"
+#include "display_host.h"
+#include "kernel/nv2a_backend_common.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#define GAME_CLASS "RecompNv2aD3D11"
+#define PAGE_CLASS "BreakdownPcOptions"
+#define PC_MSG (WM_APP + 0x57)
+
+static const COLORREF COL_BG = RGB(10, 16, 28);
+static const COLORREF COL_ROW = RGB(36, 64, 96);
+static const COLORREF COL_TEXT = RGB(236, 240, 244);
+static const COLORREF COL_DIM = RGB(168, 178, 190);
+static const COLORREF COL_VALUE = RGB(232, 196, 120);
+
+static HWND s_game;
+static HWND s_page;
+static WNDPROC s_old;
+static HFONT s_font;
+static HFONT s_title_font;
+static CRITICAL_SECTION s_lock;
+static volatile LONG s_lock_state;
+static int s_started;
+static int s_have_place;
+static WINDOWPLACEMENT s_place;
+static char b_scale[8];
+static char b_window[8];
+static char b_aspect[8];
+static char b_filter[12];
+static char b_full[4];
+
+struct pc_apply {
+    int action;
+    int restyle;
+    struct video_settings settings;
+};
+
+static struct pc_apply s_q[16];
+static int s_qr;
+static int s_qw;
+static int s_q_count;
+
+static void ensure_lock(void)
+{
+    LONG state = InterlockedCompareExchange(&s_lock_state, 1, 0);
+    if (state == 0) {
+        InitializeCriticalSection(&s_lock);
+        InterlockedExchange(&s_lock_state, 2);
+        return;
+    }
+    while (InterlockedCompareExchange(&s_lock_state, 2, 2) != 2)
+        Sleep(0);
+}
+
+static void lock(void)
+{
+    ensure_lock();
+    EnterCriticalSection(&s_lock);
+}
+
+static void unlock(void)
+{
+    LeaveCriticalSection(&s_lock);
+}
+
+static unsigned env_locks(void)
+{
+    unsigned mask = 0;
+    const char *v;
+    v = getenv("RECOMP_RENDER_SCALE");
+    if (v && v[0]) mask |= PC_LOCK_SCALE;
+    v = getenv("RECOMP_WINDOW_SCALE");
+    if (v && v[0]) mask |= PC_LOCK_WINDOW;
+    v = getenv("RECOMP_DISPLAY_ASPECT");
+    if (v && v[0]) mask |= PC_LOCK_ASPECT;
+    v = getenv("RECOMP_PRESENT_FILTER");
+    if (v && v[0]) mask |= PC_LOCK_FILTER;
+    v = getenv("RECOMP_PRESENT_FULLSCREEN");
+    if (v && v[0]) mask |= PC_LOCK_MODE;
+    return mask;
+}
+
+static void refresh_baseline(void)
+{
+    struct display_choice c;
+    struct video_settings s;
+    if (pc_options_is_open())
+        return;
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &s);
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(env_locks());
+}
+
+static void enqueue(int action, int restyle, const struct video_settings *s)
+{
+    struct pc_apply item;
+    if (!s_game || !IsWindow(s_game))
+        return;
+    item.action = action;
+    item.restyle = restyle;
+    item.settings = *s;
+    if (s_q_count == 16) {
+        s_qr = (s_qr + 1) % 16;
+        s_q_count--;
+    }
+    s_q[s_qw] = item;
+    s_qw = (s_qw + 1) % 16;
+    s_q_count++;
+    PostMessageA(s_game, PC_MSG, 0, 0);
+}
+
+static int dequeue(struct pc_apply *out)
+{
+    if (s_q_count == 0)
+        return 0;
+    *out = s_q[s_qr];
+    s_qr = (s_qr + 1) % 16;
+    s_q_count--;
+    return 1;
+}
+
+static char *bound_get(const char *name)
+{
+    if (strcmp(name, "RECOMP_RENDER_SCALE") == 0) return b_scale;
+    if (strcmp(name, "RECOMP_WINDOW_SCALE") == 0) return b_window;
+    if (strcmp(name, "RECOMP_DISPLAY_ASPECT") == 0) return b_aspect;
+    if (strcmp(name, "RECOMP_PRESENT_FILTER") == 0) return b_filter;
+    if (strcmp(name, "RECOMP_PRESENT_FULLSCREEN") == 0) return b_full;
+    return NULL;
+}
+
+static void bind_settings(const struct video_settings *s)
+{
+    struct video_settings c = *s;
+    video_settings_clamp(&c);
+    snprintf(b_scale, sizeof b_scale, "%u", c.render_scale);
+    snprintf(b_window, sizeof b_window, "%u", c.window_scale);
+    snprintf(b_aspect, sizeof b_aspect, "%s", video_settings_aspect_name(c.aspect));
+    snprintf(b_filter, sizeof b_filter, "%s", video_settings_filter_name(c.filter));
+    snprintf(b_full, sizeof b_full, "%d", c.borderless ? 1 : 0);
+}
+
+static int style_is_borderless(HWND hwnd)
+{
+    LONG_PTR style = GetWindowLongPtrA(hwnd, GWL_STYLE);
+    return (style & WS_POPUP) && !(style & WS_CAPTION);
+}
+
+static void windowed_origin(int was_borderless, int w, int h, int *x, int *y)
+{
+    MONITORINFO mi;
+    HMONITOR mon;
+    RECT outer;
+    if (was_borderless && s_have_place) {
+        *x = s_place.rcNormalPosition.left;
+        *y = s_place.rcNormalPosition.top;
+        return;
+    }
+    if (!was_borderless && GetWindowRect(s_game, &outer)) {
+        *x = outer.left;
+        *y = outer.top;
+        return;
+    }
+    *x = 80;
+    *y = 60;
+    mon = MonitorFromWindow(s_game, MONITOR_DEFAULTTONEAREST);
+    mi.cbSize = sizeof mi;
+    if (GetMonitorInfoA(mon, &mi)) {
+        *x = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - w) / 2;
+        *y = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - h) / 2;
+    }
+}
+
+static void place_page(void);
+
+static void resize_game(const struct display_choice *c)
+{
+    DWORD style;
+    RECT frame;
+    int was_borderless, x, y, w, h;
+
+    if (!s_game || !IsWindow(s_game) || !c)
+        return;
+    was_borderless = style_is_borderless(s_game);
+    if (c->fullscreen) {
+        MONITORINFO mi;
+        HMONITOR mon;
+        if (!was_borderless) {
+            s_place.length = sizeof s_place;
+            if (GetWindowPlacement(s_game, &s_place))
+                s_have_place = 1;
+        }
+        mon = MonitorFromWindow(s_game, MONITOR_DEFAULTTONEAREST);
+        mi.cbSize = sizeof mi;
+        if (!GetMonitorInfoA(mon, &mi)) {
+            mi.rcMonitor.left = 0;
+            mi.rcMonitor.top = 0;
+            mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
+            mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+        }
+        SetWindowLongPtrA(s_game, GWL_STYLE, (LONG_PTR)(WS_POPUP | WS_VISIBLE));
+        SetWindowPos(s_game, NULL,
+                     mi.rcMonitor.left, mi.rcMonitor.top,
+                     mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top,
+                     SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOZORDER);
+        place_page();
+        return;
+    }
+    style = WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+    frame.left = 0;
+    frame.top = 0;
+    frame.right = (LONG)c->window_w;
+    frame.bottom = (LONG)c->window_h;
+    AdjustWindowRect(&frame, style, FALSE);
+    w = frame.right - frame.left;
+    h = frame.bottom - frame.top;
+    windowed_origin(was_borderless, w, h, &x, &y);
+    SetWindowLongPtrA(s_game, GWL_STYLE, (LONG_PTR)style);
+    SetWindowPos(s_game, NULL, x, y, w, h,
+                 SWP_FRAMECHANGED | SWP_SHOWWINDOW | SWP_NOZORDER);
+    place_page();
+}
+
+static void request_opts(const struct display_choice *c)
+{
+    struct nv2a_host_opts o;
+    memset(&o, 0, sizeof o);
+    o.render_scale = c->render_scale;
+    o.present_filter = c->present_filter;
+    o.fullscreen = c->fullscreen;
+    nv2a_host_opts_request(&o, NV2A_OPT_SCALE | NV2A_OPT_FILTER | NV2A_OPT_FULLSCREEN);
+    fprintf(stderr,
+            "[PC] apply render.scale=%u filter=%s borderless=%d window=%ux%u aspect=%s\n",
+            c->render_scale, c->filter_name, c->fullscreen, c->window_w, c->window_h, c->aspect);
+}
+
+static int apply_live(const struct video_settings *s, int restyle)
+{
+    struct display_choice c;
+    int have = s_game && IsWindow(s_game);
+    bind_settings(s);
+    display_host_choose(bound_get, &c);
+    request_opts(&c);
+    if (restyle && have)
+        resize_game(&c);
+    else if (!have)
+        fprintf(stderr, "[PC] no D3D11 window yet. Size and borderless apply on the next launch.\n");
+    return have;
+}
+
+static void place_page(void)
+{
+    RECT client;
+    struct pc_rect panel;
+    POINT origin;
+    if (!s_page || !s_game || !IsWindow(s_page) || !IsWindow(s_game))
+        return;
+    if (!GetClientRect(s_game, &client))
+        return;
+    pc_options_panel_rect((unsigned)(client.right - client.left),
+                          (unsigned)(client.bottom - client.top), &panel);
+    if (panel.w < 1 || panel.h < 1)
+        return;
+    /* Screen coordinates. A child HWND is covered by the swap-chain Present. */
+    origin.x = panel.x;
+    origin.y = panel.y;
+    if (!ClientToScreen(s_game, &origin))
+        return;
+    SetWindowPos(s_page, HWND_TOP, origin.x, origin.y, panel.w, panel.h,
+                 SWP_NOACTIVATE | (IsWindowVisible(s_page) ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+}
+
+static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+static LRESULT CALLBACK game_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+
+static void ensure_class_and_page(void)
+{
+    WNDCLASSA wc;
+    if (s_page || !s_game)
+        return;
+    memset(&wc, 0, sizeof wc);
+    wc.lpfnWndProc = page_proc;
+    wc.hInstance = GetModuleHandleA(NULL);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.lpszClassName = PAGE_CLASS;
+    RegisterClassA(&wc);
+    if (!s_font)
+        s_font = CreateFontA(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    if (!s_font)
+        s_font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    if (!s_title_font)
+        s_title_font = CreateFontA(-22, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    if (!s_title_font)
+        s_title_font = s_font;
+    /* Owned popup, no caption and no taskbar button. Present covers a child. */
+    s_page = CreateWindowExA(WS_EX_TOOLWINDOW, PAGE_CLASS, "PC options", WS_POPUP,
+                             0, 0, 10, 10, s_game, NULL, wc.hInstance, NULL);
+    if (!s_page)
+        fprintf(stderr, "[PC] could not create the in-frame page (%lu)\n", GetLastError());
+}
+
+static void show_page(void)
+{
+    ensure_class_and_page();
+    if (!s_page)
+        return;
+    place_page();
+    ShowWindow(s_page, SW_SHOW);
+    SetFocus(s_page);
+    ClipCursor(NULL);
+    InvalidateRect(s_page, NULL, FALSE);
+}
+
+static void hide_page(void)
+{
+    if (s_page)
+        ShowWindow(s_page, SW_HIDE);
+    if (s_game && IsWindow(s_game))
+        SetFocus(s_game);
+}
+
+static void save_snapshot(const struct video_settings *s)
+{
+    char path[512];
+    int ok = 0;
+    if (video_config_beside_exe(path, sizeof path) == 0 && video_config_save(path, s) == 0) {
+        ok = 1;
+        fprintf(stderr, "[PC] saved %s\n", path);
+    } else {
+        fprintf(stderr, "[PC] could not save the video config\n");
+    }
+    lock();
+    pc_options_save_result(ok);
+    unlock();
+    if (s_page)
+        InvalidateRect(s_page, NULL, FALSE);
+}
+
+static void perform(const struct pc_apply *item)
+{
+    if (item->action == PC_ACT_OPENED) {
+        show_page();
+        return;
+    }
+    if (item->action == PC_ACT_SAVE) {
+        save_snapshot(&item->settings);
+        return;
+    }
+    if (item->action == PC_ACT_PREVIEW) {
+        apply_live(&item->settings, item->restyle);
+        place_page();
+        if (s_page)
+            InvalidateRect(s_page, NULL, FALSE);
+        return;
+    }
+    if (item->action == PC_ACT_REVERT) {
+        apply_live(&item->settings, 1);
+        hide_page();
+    }
+}
+
+static unsigned bit_for_vk(WPARAM vk, int open)
+{
+    if (vk == VK_UP) return PC_PAD_DPAD_UP;
+    if (vk == VK_DOWN) return PC_PAD_DPAD_DOWN;
+    if (vk == VK_LEFT) return PC_PAD_DPAD_LEFT;
+    if (vk == VK_RIGHT) return PC_PAD_DPAD_RIGHT;
+    if (vk == VK_BACK) return PC_PAD_BACK;
+    if (vk == VK_RETURN) return open ? PC_PAD_A : PC_PAD_START;
+    return 0;
+}
+
+static void note_result(const struct pc_pad_result *r, int restyle)
+{
+    const struct video_settings *src;
+    if (!r || r->action == PC_ACT_NONE) {
+        if (s_page)
+            InvalidateRect(s_page, NULL, FALSE);
+        return;
+    }
+    src = (r->action == PC_ACT_REVERT) ? pc_options_committed() : pc_options_draft();
+    enqueue(r->action, restyle, src);
+}
+
+static void on_key(WPARAM vk, int down)
+{
+    unsigned bit;
+    struct pc_pad_result r;
+    int restyle = 0;
+    int open;
+    if (vk == VK_F10 && down) {
+        lock();
+        refresh_baseline();
+        r = pc_options_on_f10();
+        restyle = (r.action == PC_ACT_REVERT);
+        note_result(&r, restyle);
+        unlock();
+        return;
+    }
+    if (vk == VK_ESCAPE && down) {
+        lock();
+        r = pc_options_on_esc();
+        note_result(&r, r.action == PC_ACT_REVERT);
+        unlock();
+        return;
+    }
+    if (!down && vk == VK_RETURN) {
+        lock();
+        pc_options_set_ui_bit(PC_PAD_A, 0);
+        r = pc_options_set_ui_bit(PC_PAD_START, 0);
+        note_result(&r, 0);
+        unlock();
+        return;
+    }
+    lock();
+    open = pc_options_is_open();
+    bit = bit_for_vk(vk, open);
+    if (!bit) {
+        unlock();
+        return;
+    }
+    if (!open)
+        refresh_baseline();
+    r = pc_options_set_ui_bit(bit, down);
+    if (r.action == PC_ACT_PREVIEW)
+        restyle = (vk == VK_LEFT || vk == VK_RIGHT || pc_options_row() == PC_ROW_RESET);
+    if (r.action == PC_ACT_REVERT)
+        restyle = 1;
+    note_result(&r, restyle);
+    unlock();
+}
+
+static void paint_page(HDC hdc, const RECT *rc)
+{
+    char titles[PC_ROW_COUNT][48];
+    char values[PC_ROW_COUNT][48];
+    char status[160];
+    char detail[240];
+    int row, open, i, y;
+    RECT line;
+    HBRUSH bg, hi;
+
+    lock();
+    open = pc_options_is_open();
+    row = pc_options_row();
+    snprintf(status, sizeof status, "%s", pc_options_status());
+    for (i = 0; i < PC_ROW_COUNT; i++) {
+        snprintf(titles[i], sizeof titles[i], "%s", pc_options_row_title(i));
+        pc_options_row_value(i, values[i], sizeof values[i]);
+    }
+    if (row <= PC_ROW_MODE)
+        snprintf(detail, sizeof detail, "%s", video_row_detail(pc_options_draft(), row));
+    else if (row == PC_ROW_APPLY)
+        snprintf(detail, sizeof detail, "%s", "Write breakdown_video.cfg beside the exe. This page stays open.");
+    else if (row == PC_ROW_RESET)
+        snprintf(detail, sizeof detail, "%s", "Preview stock settings. Locked rows stay on the launch script.");
+    else
+        snprintf(detail, sizeof detail, "%s", "Put the picture back and close. The file stays as it was.");
+    unlock();
+    if (!open)
+        return;
+
+    bg = CreateSolidBrush(COL_BG);
+    FillRect(hdc, rc, bg);
+    DeleteObject(bg);
+    SetBkMode(hdc, TRANSPARENT);
+    SelectObject(hdc, s_title_font ? s_title_font : s_font);
+    SetTextColor(hdc, COL_TEXT);
+    line.left = 16;
+    line.top = 10;
+    line.right = rc->right - 16;
+    line.bottom = 36;
+    DrawTextA(hdc, "PC options", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(hdc, s_font);
+    SetTextColor(hdc, COL_DIM);
+    line.top = 36;
+    line.bottom = 56;
+    DrawTextA(hdc, "Host page inside the 4:3 picture. Not the Xbox Options screen.",
+              -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    hi = CreateSolidBrush(COL_ROW);
+    for (i = 0; i < PC_ROW_COUNT; i++) {
+        RECT rowrc;
+        y = 64 + i * 28;
+        rowrc.left = 10;
+        rowrc.top = y;
+        rowrc.right = rc->right - 10;
+        rowrc.bottom = y + 26;
+        if (i == row)
+            FillRect(hdc, &rowrc, hi);
+        SetTextColor(hdc, i == row ? COL_TEXT : COL_DIM);
+        line = rowrc;
+        line.left = 18;
+        line.right = rc->right - 180;
+        DrawTextA(hdc, titles[i], -1, &line, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        if (values[i][0]) {
+            SetTextColor(hdc, COL_VALUE);
+            line.left = rc->right - 170;
+            line.right = rc->right - 16;
+            DrawTextA(hdc, values[i], -1, &line, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+    }
+    DeleteObject(hi);
+    SetTextColor(hdc, COL_DIM);
+    line.left = 16;
+    line.right = rc->right - 16;
+    line.top = rc->bottom - 58;
+    line.bottom = rc->bottom - 36;
+    DrawTextA(hdc, detail, -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    SetTextColor(hdc, COL_TEXT);
+    line.top = rc->bottom - 34;
+    line.bottom = rc->bottom - 10;
+    DrawTextA(hdc, status, -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+}
+
+static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        paint_page(hdc, &rc);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    if (msg == WM_ERASEBKGND)
+        return 1;
+    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+        /* F10 is handled on the game window so it is not toggled twice. */
+        if (wparam == VK_F10)
+            return 0;
+        on_key(wparam, 1);
+        return 0;
+    }
+    if (msg == WM_KEYUP || msg == WM_SYSKEYUP) {
+        on_key(wparam, 0);
+        return 0;
+    }
+    if (msg == WM_SETCURSOR && LOWORD(lparam) == HTCLIENT) {
+        SetCursor(LoadCursor(NULL, IDC_ARROW));
+        return TRUE;
+    }
+    return DefWindowProcA(hwnd, msg, wparam, lparam);
+}
+
+static int page_key(WPARAM vk)
+{
+    return vk == VK_F10 || vk == VK_ESCAPE || vk == VK_UP || vk == VK_DOWN
+        || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_RETURN || vk == VK_BACK;
+}
+
+static LRESULT CALLBACK game_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    if (msg == PC_MSG) {
+        for (;;) {
+            struct pc_apply item;
+            int got;
+            lock();
+            got = dequeue(&item);
+            unlock();
+            if (!got)
+                break;
+            perform(&item);
+        }
+        return 0;
+    }
+    if (msg == WM_SIZE || msg == WM_MOVE || msg == WM_WINDOWPOSCHANGED)
+        place_page();
+    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && page_key(wparam)) {
+        int repeat = (lparam & (1L << 30)) != 0;
+        int focused = s_page && GetFocus() == s_page;
+        if (!(wparam == VK_F10 && repeat) && (wparam == VK_F10 || !focused))
+            on_key(wparam, 1);
+        if (wparam == VK_F10 || (s_page && IsWindowVisible(s_page)))
+            return 0;
+    }
+    if ((msg == WM_KEYUP || msg == WM_SYSKEYUP) && page_key(wparam)) {
+        if (!(s_page && GetFocus() == s_page))
+            on_key(wparam, 0);
+        if (wparam == VK_F10 || (s_page && IsWindowVisible(s_page)))
+            return 0;
+    }
+    if (s_old)
+        return CallWindowProcA(s_old, hwnd, msg, wparam, lparam);
+    return DefWindowProcA(hwnd, msg, wparam, lparam);
+}
+
+_Static_assert(sizeof(WNDPROC) == sizeof(LONG_PTR), "WNDPROC width");
+
+static LONG_PTR proc_to_long(WNDPROC fn)
+{
+    LONG_PTR v = 0;
+    memcpy(&v, &fn, sizeof fn);
+    return v;
+}
+
+static WNDPROC proc_from_long(LONG_PTR v)
+{
+    WNDPROC fn = NULL;
+    memcpy(&fn, &v, sizeof fn);
+    return fn;
+}
+
+static void attach_game(HWND hwnd)
+{
+    LONG_PTR prev;
+    if (s_game)
+        return;
+    s_game = hwnd;
+    prev = SetWindowLongPtrA(hwnd, GWLP_WNDPROC, proc_to_long(game_proc));
+    s_old = proc_from_long(prev);
+    fprintf(stderr, "[PC] Back+Start opens PC options inside the 4:3 picture. F10 toggles it.\n");
+}
+
+static DWORD WINAPI wait_for_game(LPVOID unused)
+{
+    (void)unused;
+    for (;;) {
+        HWND hwnd = FindWindowA(GAME_CLASS, NULL);
+        if (hwnd) {
+            attach_game(hwnd);
+            return 0;
+        }
+        Sleep(200);
+    }
+}
+
+void pc_options_host_start(void)
+{
+    HANDLE thread;
+    if (s_started)
+        return;
+    s_started = 1;
+    ensure_lock();
+    s_place.length = sizeof s_place;
+    fprintf(stderr,
+            "[PC] in-frame PC options (host page, not the Xbox Options screen) "
+            "when the D3D11 window (%s) exists. Back+Start opens it. F10 toggles it.\n",
+            GAME_CLASS);
+    thread = CreateThread(NULL, 0, wait_for_game, NULL, 0, NULL);
+    if (thread)
+        CloseHandle(thread);
+    else
+        fprintf(stderr, "[PC] could not watch for the D3D11 window\n");
+}
+
+struct pc_pad_result pc_options_host_on_port(int port, unsigned buttons)
+{
+    struct pc_pad_result r;
+    int restyle;
+    ensure_lock();
+    lock();
+    refresh_baseline();
+    r = pc_options_on_port(port, buttons);
+    restyle = 0;
+    if (r.action == PC_ACT_PREVIEW)
+        restyle = video_row_needs_window(pc_options_row()) || pc_options_row() == PC_ROW_RESET;
+    if (r.action == PC_ACT_REVERT)
+        restyle = 1;
+    note_result(&r, restyle);
+    unlock();
+    return r;
+}

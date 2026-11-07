@@ -16,7 +16,7 @@ if MARK in s:
 inc_old = '#include <stddef.h>   /* ptrdiff_t */\n'
 eax_old = 'extern uint32_t g_eax;\n'
 assert s.count(inc_old) == 1 and s.count(eax_old) == 1, 'recomp_manual.c changed - patch by hand'
-s = s.replace(inc_old, inc_old + '#include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */\n')
+s = s.replace(inc_old, inc_old + '#include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */\n#include "pc_options_host.h"\n')
 s = s.replace(eax_old, '/* g_eax: declared thread-local by recomp_types.h (a plain extern here would name the wrong copy) */\n')
 s += '\n' + MARK + r'''
 /* Breakdown's XAPI gamepad calls -> the toolkit's host input (xbox_Input*). All are __stdcall: on entry
@@ -58,9 +58,19 @@ void sub_00205261(void)
 void sub_00205439(void)
 {
     uint32_t h = MEM32(g_esp + 4), dst = MEM32(g_esp + 8), i;
+    uint32_t port = h & 3u;
     HostPadState st;
-    const uint8_t *b = (const uint8_t *)&st;
-    if (xbox_InputGetState(h & 3u, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    const uint8_t *b;
+    struct pc_pad_result pr;
+    if (xbox_InputGetState(port, &st) != 0) { g_eax = 1167; g_esp += 12; return; }   /* ERROR_DEVICE_NOT_CONNECTED */
+    /* PC options is a host page. Start alone still reaches the guest. */
+    pr = pc_options_host_on_port((int)port, st.wButtons);
+    st.wButtons = (uint16_t)pr.guest_buttons;
+    if (pr.suppress_motion) {
+        memset(st.bAnalog, 0, sizeof st.bAnalog);
+        memset(st.thumb, 0, sizeof st.thumb);
+    }
+    b = (const uint8_t *)&st;
     for (i = 0; i < 22; i++) MEM8(dst + i) = b[i];
     g_eax = 0; g_esp += 12;
 }
