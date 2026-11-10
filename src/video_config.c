@@ -158,7 +158,8 @@ static void store_settings(const struct video_settings *s)
              video_settings_aspect_name(c.aspect));
     snprintf(s_val[KEY_FILTER], sizeof s_val[KEY_FILTER], "%s",
              video_settings_filter_name(c.filter));
-    snprintf(s_val[KEY_FULL], sizeof s_val[KEY_FULL], "%d", c.borderless ? 1 : 0);
+    snprintf(s_val[KEY_FULL], sizeof s_val[KEY_FULL], "%s",
+             video_settings_fullscreen_token(c.borderless));
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -189,17 +190,18 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# A set RECOMP_* environment variable overrides that line.\n"
                 "# run_native.cmd sets some of these, so it ignores this file\n"
                 "# until those variables are unset.\n"
-                "# Hor+ and exclusive fullscreen are not settings.\n"
+                "# RECOMP_PRESENT_FULLSCREEN: 0 windowed, 1 borderless, exclusive.\n"
+                "# Hor+ is not a setting on this toolkit pin.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
                 "RECOMP_PRESENT_FILTER=%s\n"
-                "RECOMP_PRESENT_FULLSCREEN=%d\n",
+                "RECOMP_PRESENT_FULLSCREEN=%s\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
                 video_settings_filter_name(s.filter),
-                s.borderless ? 1 : 0) < 0) {
+                video_settings_fullscreen_token(s.borderless)) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -273,7 +275,10 @@ void video_settings_clamp(struct video_settings *s)
         s->filter = 0;
     if (s->filter > 2)
         s->filter = 2;
-    s->borderless = s->borderless ? 1 : 0;
+    if (s->borderless < DISPLAY_WINDOWED)
+        s->borderless = DISPLAY_WINDOWED;
+    if (s->borderless > DISPLAY_EXCLUSIVE)
+        s->borderless = DISPLAY_EXCLUSIVE;
 }
 
 int video_settings_aspect_index(const char *name)
@@ -302,6 +307,24 @@ const char *video_settings_filter_name(int index)
     return s_filters[index];
 }
 
+const char *video_settings_fullscreen_token(int mode)
+{
+    if (mode == DISPLAY_EXCLUSIVE)
+        return "exclusive";
+    if (mode == DISPLAY_BORDERLESS)
+        return "1";
+    return "0";
+}
+
+static const char *window_mode_label(int mode)
+{
+    if (mode == DISPLAY_EXCLUSIVE)
+        return "Exclusive";
+    if (mode == DISPLAY_BORDERLESS)
+        return "Borderless";
+    return "Windowed";
+}
+
 void video_settings_from_choice(const struct display_choice *c, struct video_settings *s)
 {
     unsigned ws;
@@ -317,7 +340,7 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->aspect = aspect < 0 ? 0 : aspect;
     if (c->present_filter >= 0 && c->present_filter <= 2)
         s->filter = c->present_filter;
-    s->borderless = c->fullscreen ? 1 : 0;
+    s->borderless = c->fullscreen;
     video_settings_clamp(s);
 }
 
@@ -382,9 +405,9 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         s->filter = wrap_index(s->filter, 3, dir);
         return s->filter != before;
     case VIDEO_ROW_MODE:
-        before = s->borderless ? 1 : 0;
-        s->borderless = before ? 0 : 1;
-        return 1;
+        before = s->borderless;
+        s->borderless = wrap_index(s->borderless, 3, dir);
+        return s->borderless != before;
     default:
         return 0;
     }
@@ -412,7 +435,7 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
             snprintf(buf, n, "%s", s_filter_labels[s->filter]);
         break;
     case VIDEO_ROW_MODE:
-        snprintf(buf, n, "%s", s->borderless ? "Borderless" : "Windowed");
+        snprintf(buf, n, "%s", window_mode_label(s->borderless));
         break;
     default:
         break;
@@ -428,14 +451,15 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_WINDOW:
         return "Height is 480 times this. Width follows the aspect. Resizes the window now.";
     case VIDEO_ROW_ASPECT:
-        return "Letterbox the 4:3 frame. Hor+ is not available.";
+        return "Letterbox the 4:3 frame. Hor+ is not available on this toolkit pin.";
     case VIDEO_ROW_FILTER:
         if (s && s->render_scale <= 1 && s->aspect != 0 && s->filter == 0)
             return "Nearest at internal 1x in a wide window keeps the image at the top left. "
                    "Linear or integer centres it.";
         return "Nearest, linear, or integer. Changes on the next frame.";
     case VIDEO_ROW_MODE:
-        return "Windowed, or borderless on the monitor. Exclusive fullscreen is not available.";
+        return "Windowed, borderless on the monitor, or exclusive at this window size. "
+               "The 4:3 frame stays letterboxed. Hor+ is not available.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:

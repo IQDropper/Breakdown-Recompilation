@@ -29,7 +29,9 @@ The rows are:
 | Window size | `RECOMP_WINDOW_SCALE` 1..6 | Resizes the window now. Height is 480 times this. |
 | Aspect | `RECOMP_DISPLAY_ASPECT` `4:3`, `16:9`, `16:10`, `21:9` | Resizes now. Letterbox only. Hor+ is not available. |
 | Present filter | `RECOMP_PRESENT_FILTER` `nearest`, `linear`, `integer` | Next frame. `integer` is the present path’s integer fit: the largest whole multiple of the frame that fits in the window, letterboxed. It does not stretch to fill. See [widescreen-hires.md](widescreen-hires.md). |
-| Window mode | `RECOMP_PRESENT_FULLSCREEN` `0` or `1` | Windowed, or borderless on the monitor. Exclusive fullscreen is not available. |
+| Window mode | `RECOMP_PRESENT_FULLSCREEN` `0`, `1`, or `exclusive` (`2` is read too) | Windowed, borderless on the monitor, or exclusive. Left and Right cycle the three. Exclusive needs `APPLY_DISPLAY_PATCHES.cmd` and a toolkit rebuild; without it the game logs a line and uses borderless. The cfg line is `0`, `1`, or `exclusive`, so a file from before this option still loads. |
+
+Exclusive is DXGI `SetFullscreenState` on the desktop mode of the monitor the window is on. The 4:3 frame stays letterboxed in that client (bars on a wide monitor); window size and aspect only matter when you leave exclusive, and the window comes back at the size it had before. It is entered on the first frame after the window has focus, retried every 30 frames (20 times) if Windows says it is not available yet and again when the window gains focus, left on Alt+Tab (DXGI minimises the window) and entered again when you come back, and left when the window is closed so the desktop mode is restored. Alt+Enter does nothing. The PC options page is a separate owned window; whether it shows over an exclusive swap chain is checked in game (see docs/widescreen-hires.md for the coordinator smoke).
 
 A wide aspect at internal 1x with nearest still pins the image to the top left. That is the present path, not a menu bug. The filter row says so. Linear or integer centres it. The same rule as a launch with those variables.
 

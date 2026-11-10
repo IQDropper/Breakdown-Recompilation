@@ -33,11 +33,11 @@ PC OPTIONS (owned borderless host overlay over the 4:3 picture, not drawn into t
   F10 ....................... same page, backup toggle
        Start alone still pauses and still advances the title.
        Internal resolution, window size, letterbox aspect (4:3, 16:9,
-       16:10, 21:9), present filter, windowed or borderless.
+       16:10, 21:9), present filter, window mode (windowed, borderless, exclusive).
        Apply writes breakdown_video.cfg. Reset previews stock.
        Esc, B, or Revert puts the picture back.
        A row marked "launch script" follows that RECOMP_* variable.
-       Hor+ and exclusive fullscreen are not on this page.
+       Hor+ is not on this page. Exclusive needs the D3D11 patch; Alt+Tab leaves it.
        Details: docs/video-options.md
 
 KEYBOARD (same in both layouts)

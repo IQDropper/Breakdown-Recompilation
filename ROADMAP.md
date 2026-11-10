@@ -20,14 +20,14 @@ Player-facing **Options → Video** (and an accessibility section in that same p
    - [ ] Hor+ (a wider camera). This toolkit pin logs any `display.aspect` other than 4:3 and keeps 4:3. Still its own item: the video menu may offer letterboxed aspects now, and offers hor+ only once this pin implements it.
      Severity: Low — wider camera. Letterbox play is intact.
 3. **Higher internal / output resolutions** beyond the Xbox default.
-   Severity: Medium — exclusive fullscreen acts as borderless. Render scale and window scale already play.
+   Severity: Medium — exclusive fullscreen is in code (patch_d3d11_exclusive.py) but not smoked in game. Render scale and window scale already play.
    - [x] `RECOMP_RENDER_SCALE` 1..4 and `RECOMP_WINDOW_SCALE` 1..6. `run_native.cmd` uses 2 and 16:9.
-   - [ ] Modes other than borderless fullscreen (`RECOMP_PRESENT_FULLSCREEN=1` is the borderless switch). Exclusive fullscreen is not on this present path yet.
-     Severity: Medium — exclusive fullscreen acts as borderless (`SetFullscreenState` fails). Borderless is still playable.
+   - [ ] Exclusive fullscreen (`RECOMP_PRESENT_FULLSCREEN=exclusive`): written, unit-tested for the setting, not built into the game or run yet. Enter/leave 5 times, Alt+Tab, and exit still to be checked.
+     Severity: Medium — the earlier try failed (`SetFullscreenState` while the window had no focus, and a ResizeBuffers flag mismatch); the retry-on-focus version is unverified. Borderless is still playable.
 4. **In-game Video / Graphics menu** — full in-game control, not env-only. Required so weaker PCs can choose performance against clarity. The menu persists choices and applies them through the existing `RECOMP_*` host knobs (launch scripts keep working; a normal launch reads the saved config when those vars are unset). Items below are the parity goals. They are not all implemented. This slice ships the Video rows and the config file ([docs/video-options.md](docs/video-options.md)). Accessibility, presets, VSync, exclusive fullscreen, and hor+ are still open.
    Severity: Medium — the page is an owned borderless host overlay over the 4:3 picture, not drawn into the frame and not the Xbox Options screen. Play-test is still open.
    - **Display**
-     - [x] Resolution and window mode: windowed and borderless, from PC options (Back+Start, F10 backup) and from `breakdown_video.cfg` beside the exe. Sizes are `RECOMP_WINDOW_SCALE` 1..6 × `RECOMP_DISPLAY_ASPECT`. The page calls the second mode borderless. Exclusive fullscreen is still item 3 and is not offered.
+     - [x] Resolution and window mode: windowed and borderless, from PC options (Back+Start, F10 backup) and from `breakdown_video.cfg` beside the exe. Sizes are `RECOMP_WINDOW_SCALE` 1..6 × `RECOMP_DISPLAY_ASPECT`. The page calls the second mode borderless. Exclusive is a third value of the window mode row, unverified in game (item 3).
      - [x] Aspect: letterbox `4:3`, `16:9`, `16:10`, or `21:9`. Hor+ is not offered (item 2).
      - [ ] VSync and a frame cap, once the present path can support them. `RECOMP_PRESENT_PACING` only changes how lowered spin-waits sleep. It is not this option.
        Severity: Low — no frame cap yet. Play stays at a usable framerate.
