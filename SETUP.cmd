@@ -58,6 +58,10 @@ call APPLY_DISPLAY_PATCHES.cmd
 set DISP_ERR=%ERRORLEVEL%
 
 echo.
+echo --- Render patch (D3D11 polygon offset for shadow decals) ---
+call APPLY_RENDER_PATCHES.cmd
+
+echo.
 echo --- Running: breakdown doctor ---
 call breakdown.cmd doctor
 echo.
