@@ -315,3 +315,82 @@ void sub_00161680(void)
     }
     g_esp += 4;   /* cdecl: pop return address only */
 }
+
+/* [fps60] */
+/* cdecl void SetFrameInterval(int vblanks) @ 0x21C50: clamps to 1..4 and stores it at 0x434F60. Render_SubmitFrame
+ * (0x18EA30) then spins until the vblank counter 0x434F90 (++ in the vblank callback 0x18C880) reaches it, and resets
+ * the counter. Menus pass 1 (60 FPS); entering gameplay (0x1BE70) passes 2, the 30 FPS cap (S8, seen running with
+ * RECOMP_PEEK: 1 in menus, 2 in play). Game_Main (0x113B0) steps its logic by measured time
+ * (dt = 1/60 x max(elapsed, one frame) / one frame, capped); seen running: dt 0.0167 at 60 FPS.
+ *
+ * RECOMP_FPS60=1: in play, one vblank per frame, but only while the game is not reading files. Forcing 1 for the
+ * whole time made the save load take ~80 s instead of 1.3 s (S8): with the single emulated guest CPU the loader
+ * thread mostly runs while the main thread idles in that vblank spin (inferred). So the game's own interval stays
+ * in force from SetFrameInterval until ReadFile (0x1AAF3E) has been quiet for FPS60_QUIET_MS, and comes back while
+ * reads resume (streaming). Unset or 0 keeps the original behaviour exactly. */
+#define FPS60_QUIET_MS 500u
+extern unsigned long __stdcall GetTickCount(void);
+extern void sub_001AAF3E_gen(void);
+extern void sub_0018C880_gen(void);
+static int s_fps60 = -1;
+static volatile uint32_t s_fps60_game_iv;      /* what the game last asked for (1..4) */
+static volatile uint32_t s_fps60_last_read;    /* GetTickCount() at the last ReadFile */
+static volatile uint32_t s_fps60_reads;        /* ReadFile calls since the last report */
+static uint32_t s_fps60_vblanks;
+
+static int fps60_on(void)
+{
+    if (s_fps60 < 0) {
+        const char *e = getenv("RECOMP_FPS60");
+        s_fps60 = e && *e == '1';
+        if (s_fps60) {
+            fprintf(stderr, "[FPS60] on: 1 vblank per frame in play once file reads are quiet for %u ms\n", FPS60_QUIET_MS);
+            fflush(stderr);
+        }
+    }
+    return s_fps60;
+}
+
+void sub_00021C50(void)
+{
+    int32_t want = (int32_t)MEM32(g_esp + 4);
+    uint32_t v = want <= 0 ? 1u : want >= 4 ? 4u : (uint32_t)want;   /* the original clamp */
+    if (fps60_on()) {
+        s_fps60_game_iv = v;
+        s_fps60_last_read = GetTickCount();   /* start quiet-timing from here: the load follows this call */
+        fprintf(stderr, "[FPS60] SetFrameInterval(%d) from 0x%08X; kept until reads go quiet\n", (int)want, MEM32(g_esp));
+        fflush(stderr);
+    }
+    MEM32(0x434F60) = v;
+    g_eax = v;
+    g_esp += 4;   /* cdecl: pop return address only */
+}
+
+/* BOOL ReadFile(...) @ 0x1AAF3E (XAPI): note the time, then the original. */
+void sub_001AAF3E(void)
+{
+    if (s_fps60 == 1) { s_fps60_last_read = GetTickCount(); s_fps60_reads++; }
+    sub_001AAF3E_gen();
+}
+
+/* The vblank callback @ 0x18C880 (++0x434F90): the original, then pick this frame interval. */
+void sub_0018C880(void)
+{
+    sub_0018C880_gen();
+    if (s_fps60 != 1 || s_fps60_game_iv <= 1u)
+        return;
+    {
+        uint32_t quiet = GetTickCount() - s_fps60_last_read >= FPS60_QUIET_MS;
+        uint32_t want = quiet ? 1u : s_fps60_game_iv, cur = MEM32(0x434F60);
+        if (cur != want && (cur == 1u || cur == s_fps60_game_iv)) {
+            MEM32(0x434F60) = want;
+            fprintf(stderr, "[FPS60] interval %u -> %u (%s)\n", cur, want, quiet ? "reads quiet" : "reading");
+            fflush(stderr);
+        }
+    }
+    if (++s_fps60_vblanks % 600u == 0u) {
+        fprintf(stderr, "[FPS60] last 10 s: %u ReadFile calls, interval %u\n", s_fps60_reads, MEM32(0x434F60));
+        fflush(stderr);
+        s_fps60_reads = 0;
+    }
+}
