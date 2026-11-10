@@ -36,6 +36,8 @@ void sub_00204CDD(void)
     uint32_t ret = MEM32(g_esp), pins = MEM32(g_esp + 8), prem = MEM32(g_esp + 12), now = 0, ins = 0, rem = 0, p;
     if (ret >= 0x0018C5A0u && ret < 0x0018C830u) {
         for (p = 0; p < 4; p++) if (xbox_InputIsConnected(p)) now |= 1u << p;
+        /* RECOMP_KEYBOARD=1: port 0 answers with no pad plugged in; report it so a keyboard-only player gets a pad. */
+        if (recomp_env_on(RENV_KEYBOARD)) now |= 1u;
         ins = now & ~s_pads_known; rem = s_pads_known & ~now; s_pads_known = now;
         if (ins | rem) { fprintf(stderr, "[INPUT] pads now 0x%X (inserted 0x%X removed 0x%X)\n", now, ins, rem); fflush(stderr); }
     }

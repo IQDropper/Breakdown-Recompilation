@@ -68,7 +68,8 @@ Player-facing **Options → Video** (and an accessibility section in that same p
 
 ### Parallel / next after P0–P1
 - Mouse/keyboard (Modern punches LT/RT; auto-apply patches) — in progress
-  Severity: Unplayable (high) — mouse/keyboard gated on controller presence. M&K-only (no pad) cannot control the game.
+  Severity: Medium. M&K-only (no pad) now gets a pad: the input bridge reports port 0 as inserted when `RECOMP_KEYBOARD=1` (`src/recomp_manual.c`, XGetDeviceChanges). Seen running with the keyboard alone: START skips the intro, A works the menus, and save slot 2 loads into play. A 2-minute M&K play check is still open.
+  Was: Unplayable (high). Mouse/keyboard depended on a controller being plugged in, because `xbox_InputIsConnected` only counts real pads.
 - Full remapping + Legacy vs Modern control schemes (keep original melee combos)
   Severity: Low — schemes are not switchable in game. Shipped defaults are the play path when input works.
 - Character skin swaps in Extras
