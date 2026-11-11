@@ -315,3 +315,367 @@ void sub_00161680(void)
     }
     g_esp += 4;   /* cdecl: pop return address only */
 }
+
+/* [fps60] */
+/* cdecl void SetFrameInterval(int vblanks) @ 0x21C50: clamps to 1..4 and stores it at 0x434F60. Render_SubmitFrame
+ * (0x18EA30) then spins until the vblank counter 0x434F90 (++ in the vblank callback 0x18C880) reaches it, and resets
+ * the counter. Menus pass 1 (60 FPS); entering gameplay (0x1BE70) passes 2, the 30 FPS cap (S8, seen running with
+ * RECOMP_PEEK: 1 in menus, 2 in play). Game_Main (0x113B0) steps its logic by measured time
+ * (dt = 1/60 x max(elapsed, one frame) / one frame, capped); seen running: dt 0.0167 at 60 FPS.
+ *
+ * RECOMP_FPS60=1: in play, one vblank per frame, but only while the game is not reading files. Forcing 1 for the
+ * whole time made the save load take ~80 s instead of 1.3 s (S8): with the single emulated guest CPU the loader
+ * thread mostly runs while the main thread idles in that vblank spin (inferred). So the game's own interval stays
+ * in force from SetFrameInterval until ReadFile (0x1AAF3E) has been quiet for FPS60_QUIET_MS, and comes back while
+ * reads resume (streaming). Unset or 0 keeps the original behaviour exactly. */
+#define FPS60_QUIET_MS 500u
+extern unsigned long __stdcall GetTickCount(void);
+extern void sub_001AAF3E_gen(void);
+extern void sub_0018C880_gen(void);
+static int s_fps60 = -1;
+static volatile uint32_t s_fps60_game_iv;      /* what the game last asked for (1..4) */
+static volatile uint32_t s_fps60_last_read;    /* GetTickCount() at the last ReadFile */
+static volatile uint32_t s_fps60_reads;        /* ReadFile calls since the last report */
+static uint32_t s_fps60_vblanks;
+
+static int fps60_on(void)
+{
+    if (s_fps60 < 0) {
+        const char *e = getenv("RECOMP_FPS60");
+        s_fps60 = e && *e == '1';
+        if (s_fps60) {
+            fprintf(stderr, "[FPS60] on: 1 vblank per frame in play once file reads are quiet for %u ms\n", FPS60_QUIET_MS);
+            fflush(stderr);
+        }
+    }
+    return s_fps60;
+}
+
+void sub_00021C50(void)
+{
+    int32_t want = (int32_t)MEM32(g_esp + 4);
+    uint32_t v = want <= 0 ? 1u : want >= 4 ? 4u : (uint32_t)want;   /* the original clamp */
+    if (fps60_on()) {
+        s_fps60_game_iv = v;
+        s_fps60_last_read = GetTickCount();   /* start quiet-timing from here: the load follows this call */
+        fprintf(stderr, "[FPS60] SetFrameInterval(%d) from 0x%08X; kept until reads go quiet\n", (int)want, MEM32(g_esp));
+        fflush(stderr);
+    }
+    MEM32(0x434F60) = v;
+    g_eax = v;
+    g_esp += 4;   /* cdecl: pop return address only */
+}
+
+/* BOOL ReadFile(...) @ 0x1AAF3E (XAPI): note the time, then the original. */
+void sub_001AAF3E(void)
+{
+    if (s_fps60 == 1) { s_fps60_last_read = GetTickCount(); s_fps60_reads++; }
+    sub_001AAF3E_gen();
+}
+
+/* The vblank callback @ 0x18C880 (++0x434F90): the original, then pick this frame interval. */
+void sub_0018C880(void)
+{
+    sub_0018C880_gen();
+    if (s_fps60 != 1 || s_fps60_game_iv <= 1u)
+        return;
+    {
+        uint32_t quiet = GetTickCount() - s_fps60_last_read >= FPS60_QUIET_MS;
+        uint32_t want = quiet ? 1u : s_fps60_game_iv, cur = MEM32(0x434F60);
+        if (cur != want && (cur == 1u || cur == s_fps60_game_iv)) {
+            MEM32(0x434F60) = want;
+            fprintf(stderr, "[FPS60] interval %u -> %u (%s)\n", cur, want, quiet ? "reads quiet" : "reading");
+            fflush(stderr);
+        }
+    }
+    if (++s_fps60_vblanks % 600u == 0u) {
+        fprintf(stderr, "[FPS60] last 10 s: %u ReadFile calls, interval %u\n", s_fps60_reads, MEM32(0x434F60));
+        fflush(stderr);
+        s_fps60_reads = 0;
+    }
+}
+
+/* [pb-pipeline] */
+/* D3D_BlockOnTime @ 0x1C0B10 (XDK D3D, recon name): wait until the GPU's completed "time" (read through
+ * device+0x30) reaches a target. Under 0x2000 bytes outstanding it writes two NOPs, kicks, and spins on that
+ * memory (loc_001C0C47). At 0x2000 or more it puts a NOP-with-notify in the pushbuffer and sleeps on an event
+ * only a GPU interrupt signals (loc_001C0C58, KeWaitForSingleObject via 0x20BC18). Nothing raises that
+ * interrupt here, which is why the toolkit keeps the title within one segment of the walker (its KickOff
+ * flush wait) and the game waits ~15 ms a frame in busy rooms (S8).
+ * RECOMP_PB_PIPELINE=1 (with the toolkit's patch_pb_pipeline.py, which acks KickOff at once) lets the title run
+ * ahead, so this wait must poll in both cases: the body below is the generated one, verbatim, except for the one
+ * jump marked [pb-pipeline]. Unset or 0 keeps the generated behaviour exactly. */
+#include "gen/recomp_funcs.h"
+static int s_pb_pipeline = -1;
+static int pb_pipeline_on(void)
+{
+    if (s_pb_pipeline < 0) {
+        const char *e = getenv("RECOMP_PB_PIPELINE");
+        s_pb_pipeline = e && *e == '1';
+        if (s_pb_pipeline) { fprintf(stderr, "[PB-PIPELINE] on: D3D_BlockOnTime polls instead of waiting on the GPU event\n"); fflush(stderr); }
+    }
+    return s_pb_pipeline;
+}
+#define eax g_eax
+#define ecx g_ecx
+#define edx g_edx
+#define esp g_esp
+#define ebx g_ebx
+#define esi g_esi
+#define edi g_edi
+void sub_001C0B10(void)
+{
+    uint32_t ebp = 0;
+    ebp = g_ebp;  /* frameless: caller's frame */
+    int _flags = 0; /* fallback flag var */
+    uint32_t _fa = 0, _fb = 0;
+    int32_t _fas = 0, _fbs = 0;
+    (void)_fa; (void)_fb; (void)_fas; (void)_fbs;
+    ebp = g_seh_ebp; /* fpo_leaf: inherit caller's frame */
+
+loc_001C0B10: ;
+    PUSH32(esp, esi);
+    esi = MEM32(0x1CE378);
+    eax = MEM32(esi + 0x30);
+    ecx = MEM32(eax);
+    eax = MEM32(esi + 0x2C);
+    edx = eax;
+    _fb = (uint32_t)(ecx) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* sub source, before the write */
+    edx = edx - ecx;
+    _fa = (uint32_t)(edx) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* sub result */
+    PUSH32(esp, edi);
+    edi = MEM32(esp + 0xC);
+    ecx = eax;
+    _fb = (uint32_t)(edi) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* sub source, before the write */
+    ecx = ecx - edi;
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* sub result */
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fb = (uint32_t)(edx) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp ecx, edx (32-bit) */
+    if (CMP_AE(_fa, _fb)) goto loc_001C0C53; /* jae: above or equal (unsigned >=) */
+
+loc_001C0B34: ;
+    _fa = (uint32_t)(edi) & 0xFFFFFFFFu; _fb = (uint32_t)(eax) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp edi, eax (32-bit) */
+    if (CMP_NE(_fa, _fb)) goto loc_001C0B3F; /* jne: not equal / not zero */
+
+loc_001C0B38: ;
+    PUSH32(esp, 0);
+    PUSH32(esp, 0x001C0B3Fu); RECOMP_ABI_CALL(0x001C0A50u, sub_001C0A50); /* call 0x001C0A50 */
+
+loc_001C0B3F: ;
+    PUSH32(esp, ebp);
+    eax = edi;
+    PUSH32(esp, 0x001C0B47u); RECOMP_ABI_CALL(0x001C0660u, sub_001C0660); /* call 0x001C0660 */
+
+loc_001C0B47: ;
+    ebp = eax;
+    _fa = (uint32_t)(ebp) & 0xFFFFFFFFu; _fb = (uint32_t)(0) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp ebp, 0 (32-bit) */
+    if (CMP_EQ(_fa, _fb)) goto loc_001C0C52; /* je: equal / zero */
+
+loc_001C0B51: ;
+    PUSH32(esp, 0);
+    PUSH32(esp, esi);
+    PUSH32(esp, 0x001C0B59u); RECOMP_ABI_CALL(0x001C07E0u, sub_001C07E0); /* call 0x001C07E0 */
+
+loc_001C0B59: ;
+    edx = MEM32(esi);
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(edx) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, edx (32-bit) */
+    if (CMP_A(_fa, _fb)) goto loc_001C0B62; /* ja: above (unsigned >) */
+
+loc_001C0B5F: ;
+    _fb = (uint32_t)(MEM32(esi + 0x44)) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* add source, before the write */
+    eax = eax + MEM32(esi + 0x44);
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* add result */
+
+loc_001C0B62: ;
+    ecx = MEM32(ebp + 4);
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fb = (uint32_t)(edx) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp ecx, edx (32-bit) */
+    if (CMP_A(_fa, _fb)) goto loc_001C0B6C; /* ja: above (unsigned >) */
+
+loc_001C0B69: ;
+    _fb = (uint32_t)(MEM32(esi + 0x44)) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* add source, before the write */
+    ecx = ecx + MEM32(esi + 0x44);
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* add result */
+
+loc_001C0B6C: ;
+    _fb = (uint32_t)(eax) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* sub source, before the write */
+    ecx = ecx - eax;
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* sub result */
+    PUSH32(esp, ebx);
+    ebx = MEM32(esp + 0x18);
+    if ((_fas < 0)) goto loc_001C0C1B; /* js: sign (negative) */
+
+loc_001C0B79: ;
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fb = (uint32_t)(0x2400) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp ecx, 0x2400 (32-bit) */
+    if (CMP_B(_fa, _fb)) goto loc_001C0C1B; /* jb: below (unsigned <) */
+
+loc_001C0B85: ;
+    eax = MEM32(esi + 0x19FC);
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(0) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, 0 (32-bit) */
+    if (CMP_EQ(_fa, _fb)) goto loc_001C0BBA; /* je: equal / zero */
+
+loc_001C0B8F: ;
+    (void)0; /* emms - empty MMX state */
+    { uint32_t _icall_esp = g_esp;
+    PUSH32(esp, ebx);
+    MEM32(esi + 0x1A00) = edi;
+    { uint32_t _icall_target = MEM32(esi + 0x19FC); PUSH32(esp, 0x001C0B9Eu); RECOMP_ICALL_SAFE_AT_CC(_icall_target, _icall_esp, 0x001C0B98u); } /* indirect call */
+    }
+
+loc_001C0B9E: ;
+    _fb = (uint32_t)(4) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* add source, before the write */
+    esp = esp + 4;
+    _fa = (uint32_t)(esp) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* add result */
+    PUSH32(esp, 0);
+    PUSH32(esp, esi);
+    PUSH32(esp, 0x001C0BA9u); RECOMP_ABI_CALL(0x001C07E0u, sub_001C07E0); /* call 0x001C07E0 */
+
+loc_001C0BA9: ;
+    PUSH32(esp, eax);
+    edx = ebp;
+    ecx = esi;
+    PUSH32(esp, 0x001C0BB3u); RECOMP_ABI_CALL(0x001C04F0u, sub_001C04F0); /* call 0x001C04F0 */
+
+loc_001C0BB3: ;
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(0x2000) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, 0x2000 (32-bit) */
+    if (CMP_B(_fa, _fb)) goto loc_001C0C1B; /* jb: below (unsigned <) */
+
+loc_001C0BBA: ;
+    edi = MEM32(ebp + 4);
+    eax = 0; /* xor self */
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* xor result */
+    _fa = (uint32_t)((LO8(ebx)) & (8)) & 0xFFu; _fb = (uint32_t)(0) & 0xFFu;
+    _fas = (int32_t)(int8_t)(_fa); _fbs = (int32_t)(int8_t)(_fb); /* test LO8(ebx), 8 (8-bit) */
+    MEM32(esi + 0x1DD0) = eax;
+    if (CMP_NE(_fa, _fb)) goto loc_001C0BD4; /* jne: not equal / not zero */
+
+loc_001C0BCA: ;
+    MEM32(edi + 0x10) = 0x40110;
+    MEM32(edi + 0x14) = eax;
+
+loc_001C0BD4: ;
+    MEM32(edi + 0x18) = 0x40100;
+    MEM32(edi + 0x1C) = 5;
+    PUSH32(esp, 0x001C0BE7u); RECOMP_ABI_CALL(0x001C0860u, sub_001C0860); /* call 0x001C0860 */
+
+loc_001C0BE7: ;
+    PUSH32(esp, 1);
+    PUSH32(esp, esi);
+    PUSH32(esp, 0x001C0BEFu); RECOMP_ABI_CALL(0x001C07E0u, sub_001C07E0); /* call 0x001C07E0 */
+
+loc_001C0BEF: ;
+    PUSH32(esp, eax);
+    edx = ebp;
+    ecx = esi;
+    PUSH32(esp, 0x001C0BF9u); RECOMP_ABI_CALL(0x001C04F0u, sub_001C04F0); /* call 0x001C04F0 */
+
+loc_001C0BF9: ;
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(0x2000) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, 0x2000 (32-bit) */
+    if (CMP_AE(_fa, _fb) && !pb_pipeline_on()) goto loc_001C0C58; /* [pb-pipeline] jae >= 0x2000 outstanding: notify + GPU-event wait, which nothing raises */
+
+loc_001C0C00: ;
+    eax = 0x40100;
+    ecx = 0; /* xor self */
+    _fa = (uint32_t)(ecx) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* xor result */
+    MEM32(edi + 0x10) = eax;
+    MEM32(edi + 0x14) = ecx;
+    MEM32(edi + 0x18) = eax;
+    MEM32(edi + 0x1C) = ecx;
+    PUSH32(esp, 0x001C0C18u); RECOMP_ABI_CALL(0x001C0860u, sub_001C0860); /* call 0x001C0860 */
+
+loc_001C0C18: ;
+    edi = MEM32(ebp);
+
+loc_001C0C1B: ;
+    eax = MEM32(esi + 0x19FC);
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(0) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, 0 (32-bit) */
+    if (CMP_EQ(_fa, _fb)) goto loc_001C0C3D; /* je: equal / zero */
+
+loc_001C0C25: ;
+    (void)0; /* emms - empty MMX state */
+    ebx = ebx | 0x80000000u;
+    _fa = (uint32_t)(ebx) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* or result */
+    { uint32_t _icall_esp = g_esp;
+    PUSH32(esp, ebx);
+    MEM32(esi + 0x1A00) = edi;
+    { uint32_t _icall_target = MEM32(esi + 0x19FC); PUSH32(esp, 0x001C0C3Au); RECOMP_ICALL_SAFE_AT_CC(_icall_target, _icall_esp, 0x001C0C34u); } /* indirect call */
+    }
+
+loc_001C0C3A: ;
+    _fb = (uint32_t)(4) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* add source, before the write */
+    esp = esp + 4;
+    _fa = (uint32_t)(esp) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* add result */
+
+loc_001C0C3D: ;
+    edx = MEM32(esi + 0x30);
+    esi = MEM32(esi + 0x2C);
+    eax = esi;
+    _fb = (uint32_t)(edi) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* sub source, before the write */
+    eax = eax - edi;
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* sub result */
+
+loc_001C0C47: ;
+    ecx = MEM32(edx);
+    edi = esi;
+    _fb = (uint32_t)(ecx) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* sub source, before the write */
+    edi = edi - ecx;
+    _fa = (uint32_t)(edi) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* sub result */
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(edi) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, edi (32-bit) */
+    if (CMP_B(_fa, _fb)) { RECOMP_BACK_EDGE(0x001C0C4Fu); goto loc_001C0C47; } /* jb: below (unsigned <) */
+
+loc_001C0C51: ;
+    POP32(esp, ebx);
+
+loc_001C0C52: ;
+    POP32(esp, ebp);
+
+loc_001C0C53: ;
+    POP32(esp, edi);
+    POP32(esp, esi);
+    esp += 12; return; /* ret 8 */
+
+loc_001C0C58: ;
+    edi = MEM32(0x20BC18);
+    _fb = (uint32_t)(0x1DCC) & 0xFFFFFFFFu; _fbs = (int32_t)(int32_t)(_fb); /* add source, before the write */
+    esi = esi + 0x1DCC;
+    _fa = (uint32_t)(esi) & 0xFFFFFFFFu; _fas = (int32_t)(int32_t)(_fa); /* add result */
+
+loc_001C0C64: ;
+    { uint32_t _icall_esp = g_esp;
+    PUSH32(esp, 0);
+    PUSH32(esp, 0);
+    PUSH32(esp, 1);
+    PUSH32(esp, 6);
+    PUSH32(esp, esi);
+    { uint32_t _icall_target = edi; PUSH32(esp, 0x001C0C6Fu); RECOMP_ICALL_SAFE_AT(_icall_target, _icall_esp, 0x001C0C6Du); } /* indirect call */
+    }
+
+loc_001C0C6F: ;
+    _fa = (uint32_t)(eax) & 0xFFFFFFFFu; _fb = (uint32_t)(0) & 0xFFFFFFFFu;
+    _fas = (int32_t)(int32_t)(_fa); _fbs = (int32_t)(int32_t)(_fb); /* cmp eax, 0 (32-bit) */
+    if (CMP_NE(_fa, _fb)) { RECOMP_BACK_EDGE(0x001C0C71u); goto loc_001C0C64; } /* jne: not equal / not zero */
+
+loc_001C0C73: ;
+    POP32(esp, ebx);
+    POP32(esp, ebp);
+    POP32(esp, edi);
+    POP32(esp, esi);
+    esp += 12; return; /* ret 8 */
+
+}
+#undef eax
+#undef ecx
+#undef edx
+#undef esp
+#undef ebx
+#undef esi
+#undef edi
