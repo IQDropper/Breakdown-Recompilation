@@ -183,15 +183,26 @@ static const char *display_source(const char *key)
     return "default";
 }
 
+/* The D3D11 backend's init() calls this hook before its once-only check, and
+ * d3d11_on_draw() calls init() on every draw, so it ran ~370 times a frame in
+ * busy rooms (S8: seen in gdb stack samples of the nv2a-ack thread). Only the
+ * first answer is used (the window is created once), so compute it once. */
 static void display_apply_window(unsigned int *w, unsigned int *h)
 {
-    struct display_choice c;
-    /* Same precedence as startup: a set RECOMP_* var beats the config file. */
-    display_host_choose(display_getenv_layered, &c);
+    static int done;
+    static unsigned int cw, ch;
+    if (!done) {
+        struct display_choice c;
+        /* Same precedence as startup: a set RECOMP_* var beats the config file. */
+        display_host_choose(display_getenv_layered, &c);
+        cw = c.window_w;
+        ch = c.window_h;
+        done = 1;
+    }
     if (w)
-        *w = c.window_w;
+        *w = cw;
     if (h)
-        *h = c.window_h;
+        *h = ch;
 }
 
 void display_host_init(void)
