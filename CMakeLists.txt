@@ -65,6 +65,8 @@ set(GAME_SOURCES
     src/pc_options_host.c
     src/debug_text_host.c
     src/mem_search_host.c
+    src/tuning.c
+    src/tuning_host.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c
