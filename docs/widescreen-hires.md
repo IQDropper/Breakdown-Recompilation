@@ -43,7 +43,7 @@ Hor+ (render extra horizontal FOV, then pin the HUD) is the unimplemented slice 
 - Read the real display mode from a dump (present extent in the flip log) and record it here if it is not 640×480.
 - Hor+: a wider view, with HUD anchored to the 4:3 safe area or to the new edges. The toolkit does not do this yet, and this repo does not patch the game’s projection.
 - A stretch-to-fill option. Not added. It would distort the HUD. Letterbox is the HUD-safe framing.
-- Exclusive fullscreen and arbitrary output modes beyond borderless + the window sizes below.
+- Arbitrary output modes. Exclusive fullscreen is the desktop mode only (see video-options.md).
 - P2 art (original vs updated). Out of scope.
 
 ## What this change adds

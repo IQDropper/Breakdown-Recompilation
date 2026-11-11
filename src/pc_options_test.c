@@ -310,16 +310,52 @@ static void test_rows_are_real(void)
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
-        expect("no exclusive row", !t || strstr(t, "Exclusive") == NULL);
+        expect("no row is titled Exclusive (it is a value of Window mode)", !t || strstr(t, "Exclusive") == NULL);
         expect("no hor+ row", !t || strstr(t, "Hor+") == NULL);
     }
     expect("page name is not Xbox Options",
            strstr(pc_options_row_title(PC_ROW_APPLY), "Xbox") == NULL);
 }
 
+static void test_window_mode_row_has_exclusive(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    char buf[64];
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(0);
+    pc_options_on_f10();
+    while (pc_options_row() != PC_ROW_MODE)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_MODE, buf, sizeof buf);
+    expect("mode starts windowed", strcmp(buf, "Windowed") == 0);
+    r = pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    expect("right: borderless",
+           r.action == PC_ACT_PREVIEW && pc_options_draft()->borderless == 1);
+    pulse(0);
+    r = pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_MODE, buf, sizeof buf);
+    expect("right again: exclusive",
+           r.action == PC_ACT_PREVIEW && pc_options_draft()->borderless == 2
+           && strcmp(buf, "Exclusive") == 0);
+    expect("committed is still windowed", pc_options_committed()->borderless == 0);
+    pulse(0);
+    r = pc_options_on_port(0, PC_PAD_DPAD_LEFT);
+    expect("left: back to borderless", pc_options_draft()->borderless == 1);
+    pulse(0);
+    pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    while (pc_options_row() != PC_ROW_RESET)
+        pulse(PC_PAD_DPAD_DOWN);
+    r = pc_options_on_port(0, PC_PAD_A);
+    expect("reset leaves exclusive", pc_options_draft()->borderless == 0);
+    pc_options_on_esc();
+}
+
 int main(void)
 {
     test_start_alone();
+    test_window_mode_row_has_exclusive();
     test_chord();
     test_same_poll_chord();
     test_nav_filter_repeat_and_dedup();

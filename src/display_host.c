@@ -2,9 +2,11 @@
  * display_host.c - RECOMP_RENDER_SCALE, RECOMP_WINDOW_SCALE,
  * RECOMP_DISPLAY_ASPECT, RECOMP_PRESENT_FILTER, RECOMP_PRESENT_FULLSCREEN.
  *
- * Read with getenv so they work without the enhancements layer. The layer's
- * display.aspect other than 4:3 is still unimplemented there (hor+). Here
- * aspect only sizes the output window; present letterboxes the 4:3 frame.
+ * Read with getenv so they work without the enhancements layer. At toolkit
+ * pin 0692070 that layer's display.aspect other than 4:3 is logged and
+ * forced back to 4:3 (Hor+). Here aspect only sizes the output window;
+ * present letterboxes the 4:3 frame. RECOMP_PRESENT_FULLSCREEN=exclusive
+ * asks for DXGI exclusive on the desktop mode (patch_d3d11_exclusive.py).
  */
 #include "display_host.h"
 
@@ -67,9 +69,18 @@ static int choose_filter(const char *s, struct display_choice *o)
     return -1;
 }
 
-static int truth(const char *s)
+/* 0 windowed, 1 borderless, 2 exclusive. Unknown words are windowed, which
+ * is what a non-empty value other than 1/true/yes used to be. */
+static int choose_fullscreen(const char *s)
 {
-    return s && (strcmp(s, "1") == 0 || strcmp(s, "true") == 0 || strcmp(s, "yes") == 0);
+    if (!s)
+        return DISPLAY_WINDOWED;
+    if (strcmp(s, "exclusive") == 0 || strcmp(s, "2") == 0)
+        return DISPLAY_EXCLUSIVE;
+    if (strcmp(s, "1") == 0 || strcmp(s, "true") == 0 || strcmp(s, "yes") == 0
+        || strcmp(s, "borderless") == 0)
+        return DISPLAY_BORDERLESS;
+    return DISPLAY_WINDOWED;
 }
 
 static display_getenv_fn s_layered_env;
@@ -157,7 +168,7 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
         o->filter_promoted = 1;
     }
 
-    o->fullscreen = truth(env_get(get, "RECOMP_PRESENT_FULLSCREEN"));
+    o->fullscreen = choose_fullscreen(env_get(get, "RECOMP_PRESENT_FULLSCREEN"));
 }
 
 #if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
@@ -181,6 +192,24 @@ static const char *display_source(const char *key)
     if (video_config_getenv(key))
         return "file";
     return "default";
+}
+
+static int exclusive_linked(void)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    return &breakdown_display_set_exclusive != 0;
+#else
+    return 1;
+#endif
+}
+
+static const char *fullscreen_word(int mode)
+{
+    if (mode == DISPLAY_EXCLUSIVE)
+        return "exclusive";
+    if (mode == DISPLAY_BORDERLESS)
+        return "borderless";
+    return "windowed";
 }
 
 /* The D3D11 backend's init() calls this hook before its once-only check, and
@@ -235,14 +264,23 @@ void display_host_init(void)
     opts.render_scale = c.render_scale;
     opts.present_filter = c.present_filter;
     opts.fullscreen = c.fullscreen;
+    /* Unpatched toolkit: any non-zero fullscreen is borderless at the
+     * monitor size. Do not hand it 2, or exclusive would silently cover
+     * the desktop. The saved word stays exclusive for the next launch. */
+    if (opts.fullscreen == DISPLAY_EXCLUSIVE && !exclusive_linked()) {
+        fprintf(stderr, "[DISPLAY] exclusive fullscreen needs the D3D11 patch;"
+                " using borderless (run APPLY_DISPLAY_PATCHES.cmd and rebuild)\n");
+        opts.fullscreen = DISPLAY_BORDERLESS;
+    }
     nv2a_host_opts_set(&opts);
     fprintf(stderr,
-            "[DISPLAY] render.scale=%u%s present.filter=%s%s fullscreen=%d"
+            "[DISPLAY] render.scale=%u%s present.filter=%s%s fullscreen=%d (%s)"
             " window=%ux%u aspect=%s%s (letterbox, 4:3 frame; hor+ is not in this pin)\n",
             c.render_scale, c.scale_clamped ? " (clamped to 1..4)" : "",
             c.filter_name,
             c.filter_promoted ? " (promoted so a wide window letterboxes)" : "",
-            c.fullscreen, c.window_w, c.window_h, c.aspect,
+            opts.fullscreen, fullscreen_word(opts.fullscreen),
+            c.window_w, c.window_h, c.aspect,
             c.aspect_unknown ? " (unknown aspect, using 4:3)" : "");
     if (c.window_clamped)
         fprintf(stderr, "[DISPLAY] RECOMP_WINDOW_SCALE clamped to 1..6\n");
@@ -378,6 +416,34 @@ int main(void)
     display_host_choose(test_get, &c);
     expect("integer", c.present_filter == 2);
     expect("fullscreen", c.fullscreen == 1);
+
+    s_n = 0;
+    setenv_test("RECOMP_PRESENT_FULLSCREEN", "exclusive");
+    setenv_test("RECOMP_DISPLAY_ASPECT", "16:9");
+    setenv_test("RECOMP_WINDOW_SCALE", "2");
+    display_host_choose(test_get, &c);
+    expect("exclusive word", c.fullscreen == DISPLAY_EXCLUSIVE);
+    expect("exclusive keeps letterbox size", c.window_w == 1707 && c.window_h == 960);
+
+    s_n = 0;
+    setenv_test("RECOMP_PRESENT_FULLSCREEN", "2");
+    display_host_choose(test_get, &c);
+    expect("exclusive digit", c.fullscreen == 2);
+
+    s_n = 0;
+    setenv_test("RECOMP_PRESENT_FULLSCREEN", "borderless");
+    display_host_choose(test_get, &c);
+    expect("borderless word", c.fullscreen == DISPLAY_BORDERLESS);
+
+    s_n = 0;
+    setenv_test("RECOMP_PRESENT_FULLSCREEN", "true");
+    display_host_choose(test_get, &c);
+    expect("true is borderless", c.fullscreen == 1);
+
+    s_n = 0;
+    setenv_test("RECOMP_PRESENT_FULLSCREEN", "nope");
+    display_host_choose(test_get, &c);
+    expect("unknown fullscreen is windowed", c.fullscreen == 0);
 
     /* File-backed defaults: a second getenv used only when the env one is
      * unset or empty. An explicit env value, including fullscreen "0", wins. */

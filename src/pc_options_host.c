@@ -43,7 +43,7 @@ static char b_scale[8];
 static char b_window[8];
 static char b_aspect[8];
 static char b_filter[12];
-static char b_full[4];
+static char b_full[12]; /* "0", "1", "exclusive" */
 
 struct pc_apply {
     int action;
@@ -159,7 +159,7 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_window, sizeof b_window, "%u", c.window_scale);
     snprintf(b_aspect, sizeof b_aspect, "%s", video_settings_aspect_name(c.aspect));
     snprintf(b_filter, sizeof b_filter, "%s", video_settings_filter_name(c.filter));
-    snprintf(b_full, sizeof b_full, "%d", c.borderless ? 1 : 0);
+    snprintf(b_full, sizeof b_full, "%s", video_settings_fullscreen_token(c.borderless));
 }
 
 static int style_is_borderless(HWND hwnd)
@@ -195,6 +195,22 @@ static void windowed_origin(int was_borderless, int w, int h, int *x, int *y)
 
 static void place_page(void);
 
+/* Window thread only. Set by the D3D11 exclusive patch; NULL on a toolkit
+ * without it. */
+static int exclusive_active(void)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    if (!&breakdown_display_exclusive_active)
+        return 0;
+#endif
+    return breakdown_display_exclusive_active();
+}
+
+/* A restyle asked for while DXGI owns the window. DXGI puts the old windowed
+ * size back when the flip leaves exclusive; this runs after that. */
+static struct display_choice s_held;
+static int s_held_valid;
+
 static void resize_game(const struct display_choice *c)
 {
     DWORD style;
@@ -203,8 +219,22 @@ static void resize_game(const struct display_choice *c)
 
     if (!s_game || !IsWindow(s_game) || !c)
         return;
+    if (exclusive_active()) {
+        /* Moving the window under DXGI fights the mode switch. Staying in
+         * exclusive needs nothing; anything else waits for the flip to leave. */
+        if (c->fullscreen != DISPLAY_EXCLUSIVE) {
+            s_held = *c;
+            s_held_valid = 1;
+        }
+        place_page();
+        return;
+    }
+    s_held_valid = 0;
     was_borderless = style_is_borderless(s_game);
-    if (c->fullscreen) {
+    /* Exclusive is entered from the windowed client size (the path below):
+     * the D3D11 patch calls SetFullscreenState on the next flip and DXGI
+     * puts this size back when it leaves. */
+    if (c->fullscreen == DISPLAY_BORDERLESS) {
         MONITORINFO mi;
         HMONITOR mon;
         if (!was_borderless) {
@@ -255,7 +285,7 @@ static void request_opts(const struct display_choice *c)
     o.fullscreen = c->fullscreen;
     nv2a_host_opts_request(&o, NV2A_OPT_SCALE | NV2A_OPT_FILTER | NV2A_OPT_FULLSCREEN);
     fprintf(stderr,
-            "[PC] apply render.scale=%u filter=%s borderless=%d window=%ux%u aspect=%s\n",
+            "[PC] apply render.scale=%u filter=%s fullscreen=%d (0 win, 1 borderless, 2 exclusive) window=%ux%u aspect=%s\n",
             c->render_scale, c->filter_name, c->fullscreen, c->window_w, c->window_h, c->aspect);
 }
 
@@ -651,6 +681,12 @@ static LRESULT CALLBACK game_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
             pc_options_release_ui();
             unlock();
         }
+    }
+    if ((msg == WM_SIZE || msg == WM_MOVE || msg == WM_WINDOWPOSCHANGED)
+        && s_held_valid && !exclusive_active()) {
+        struct display_choice held = s_held;
+        s_held_valid = 0;
+        resize_game(&held);
     }
     if (msg == WM_SIZE || msg == WM_MOVE || msg == WM_WINDOWPOSCHANGED)
         place_page();
