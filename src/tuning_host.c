@@ -6,6 +6,9 @@
  * min..max and ideal, coloured green (at ideal), yellow (in range) or red (out of range). Keys:
  *   Up/Down row, Left/Right change (Shift x10), I copy current -> ideal, D back to default, Tab next tab,
  *   P save preset, L load preset, F finalize (asks why), X export snapshot, Esc close.
+ * Controller (src/tuning_pad.h): LS + RS click opens / closes it; D-pad up/down row, left/right change (hold RT x10),
+ *   LB/RB tab, Y ideal, X default, B close, Start finalize -> A yes / B no. While it is open the game gets no buttons
+ *   or triggers (sticks still work), see tuning_host_pad.
  * Files: <repo>/tuning/tuning_ranges.json, tuning_final.json, history/ and CHANGELOG.md (all in RECOMP_TUNING_DIR if set);
  * presets and snapshots in %LOCALAPPDATA%\xboxrecomp\tuning. The finalized file is applied in every build, window
  * or not: once per hero (when the hero's status block appears). Only the owner's F + Enter finalizes.
@@ -15,6 +18,7 @@
  */
 #include "tuning_host.h"
 #include "tuning.h"
+#include "tuning_pad.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -28,6 +32,7 @@ extern ptrdiff_t g_xbox_mem_offset;
 
 #define GAME_CLASS "RecompNv2aD3D11"
 #define TU_CLASS   "BreakdownTuningRange"
+#define WM_TU_PAD  (WM_APP + 7)   /* wParam = TPA_ action, lParam = arg (from the game thread) */
 
 static CRITICAL_SECTION s_lock;
 static volatile int s_ready;
@@ -35,9 +40,10 @@ static int s_on = -1, s_have_final;
 static volatile uint32_t s_st, s_applied_st;
 static volatile float s_move = 1.0f;
 static char s_dir[MAX_PATH], s_ranges[MAX_PATH], s_final[MAX_PATH], s_log[MAX_PATH], s_user[MAX_PATH];
-static HWND s_win, s_edit, s_game;
+static HWND volatile s_win;
+static HWND s_edit, s_game;
 static int s_tab, s_sel, s_prompt;
-static char s_status[200] = "F6 closes. Left/Right change, I = ideal, F = finalize.";
+static char s_status[200] = "F6 or LS + RS click closes. Left/Right change, I (Y) = ideal, F (Start) = finalize.";
 
 static float rf(uint32_t va) { return *(volatile float *)((uintptr_t)va + g_xbox_mem_offset); }
 static void wf(uint32_t va, float v) { *(volatile float *)((uintptr_t)va + g_xbox_mem_offset) = v; }
@@ -261,6 +267,8 @@ static void paint(HWND hwnd, HDC dc)
     }
     SetTextColor(dc, RGB(150, 160, 180));
     snprintf(b, sizeof b, "Up/Down row  Left/Right change (Shift x10)  I ideal  D default  Tab tab  P/L preset  F finalize  X snapshot  Esc close");
+    TextOutA(dc, 12, rc.bottom - 76, b, (int)strlen(b));
+    snprintf(b, sizeof b, "Pad: D-pad row / change (hold RT x10)  LB/RB tab  Y ideal  X default  Start finalize  B or LS+RS close");
     TextOutA(dc, 12, rc.bottom - 52, b, (int)strlen(b));
     SetTextColor(dc, RGB(255, 230, 120));
     TextOutA(dc, 12, rc.bottom - 28, s_status, (int)strlen(s_status));
@@ -277,11 +285,13 @@ static void close_window(void)
         SetForegroundWindow(s_game);
 }
 
-static void finalize_now(void)
+static void finalize_now(const char *fallback)
 {
     char note[200] = "", date[32];
     int n;
     GetWindowTextA(s_edit, note, sizeof note);
+    if (!note[0] && fallback)
+        snprintf(note, sizeof note, "%s", fallback);
     now_str(date, sizeof date, 0);
     CreateDirectoryA(s_dir, NULL);
     EnterCriticalSection(&s_lock);
@@ -302,15 +312,123 @@ static void finalize_now(void)
     SetFocus(s_win);
 }
 
+static void open_window(void)
+{
+    static int s_placed;
+    RECT gr;
+    if (!s_placed && GetWindowRect(s_game, &gr)) {   /* first open: over the game's top-left */
+        SetWindowPos(s_win, NULL, gr.left + 24, gr.top + 48, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        s_placed = 1;
+    }
+    ShowWindow(s_win, SW_SHOW);
+    SetForegroundWindow(s_win);
+    SetFocus(s_win);
+}
+
+static void toggle_window(void)
+{
+    if (IsWindowVisible(s_win))
+        close_window();
+    else
+        open_window();
+}
+
+static void move_tab(int d) { s_tab = (s_tab + TUNE_TAB_COUNT + d) % TUNE_TAB_COUNT; s_sel = 0; }
+
+static void move_row(int d)
+{
+    int n = visible_count();
+    if (d < 0 && s_sel > 0)
+        s_sel--;
+    if (d > 0 && s_sel + 1 < n)
+        s_sel++;
+}
+
+/* The selected row: change by steps, back to default, or current -> ideal (saved in tuning_ranges.json). */
+static void row_change(int steps)
+{
+    int i = visible_index(s_sel);
+    struct tune_row *r;
+    if (i < 0)
+        return;
+    r = tuning_row(i);
+    EnterCriticalSection(&s_lock);
+    if (r->have_cur)
+        live_write(r, s_st, tuning_nudge(i, steps));
+    LeaveCriticalSection(&s_lock);
+}
+
+static void row_default(void)
+{
+    int i = visible_index(s_sel);
+    struct tune_row *r;
+    if (i < 0)
+        return;
+    r = tuning_row(i);
+    EnterCriticalSection(&s_lock);
+    if (r->have_def)
+        live_write(r, s_st, tuning_set(i, r->def));
+    LeaveCriticalSection(&s_lock);
+}
+
+static void row_ideal(void)
+{
+    int i = visible_index(s_sel);
+    struct tune_row *r;
+    if (i < 0)
+        return;
+    r = tuning_row(i);
+    EnterCriticalSection(&s_lock);
+    if (r->have_cur) {
+        r->ideal = r->cur;
+        r->have_ideal = 1;
+        CreateDirectoryA(s_dir, NULL);
+        status(tuning_save_ranges(s_ranges) == 1 ? "Ideal set and saved in %s" : "Could not save %s", s_ranges);
+    }
+    LeaveCriticalSection(&s_lock);
+}
+
+/* Rows Finalize would write (non-state, Current differs from Default). */
+static int changed_count(void)
+{
+    int i, n = 0;
+    EnterCriticalSection(&s_lock);
+    for (i = 0; i < tuning_count(); i++) {
+        const struct tune_row *r = tuning_row(i);
+        n += !r->state && r->have_cur && r->have_def && fabsf(r->cur - r->def) > 1e-6f;
+    }
+    LeaveCriticalSection(&s_lock);
+    return n;
+}
+
+/* One controller action, posted by tuning_host_pad. Only the owner's A after Start finalizes. */
+static void pad_action(int what, int arg)
+{
+    char m[16];
+    switch (what) {
+    case TPA_TOGGLE: toggle_window(); break;
+    case TPA_CLOSE: close_window(); break;
+    case TPA_ROW: move_row(arg); break;
+    case TPA_TAB: move_tab(arg); break;
+    case TPA_CHANGE: row_change(arg); break;
+    case TPA_DEFAULT: row_default(); break;
+    case TPA_IDEAL: row_ideal(); break;
+    case TPA_ASK_FINAL:
+        snprintf(m, sizeof m, "%d", changed_count());
+        status("Finalize %s changed values? A = yes, B = no.", m);
+        break;
+    case TPA_FINAL_YES: finalize_now("finalized from the controller"); break;
+    case TPA_FINAL_NO: status("Finalize cancelled.%s", ""); break;
+    }
+}
+
 static void key(WPARAM vk)
 {
-    int shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0, n = visible_count(), i;
-    struct tune_row *r;
+    int shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0, i;
     char path[MAX_PATH], date[32];
     if (vk == VK_ESCAPE) { close_window(); return; }
-    if (vk == VK_TAB) { s_tab = (s_tab + 1) % TUNE_TAB_COUNT; s_sel = 0; return; }
-    if (vk == VK_UP && s_sel > 0) { s_sel--; return; }
-    if (vk == VK_DOWN && s_sel + 1 < n) { s_sel++; return; }
+    if (vk == VK_TAB) { move_tab(1); return; }
+    if (vk == VK_UP || vk == VK_DOWN) { move_row(vk == VK_DOWN ? 1 : -1); return; }
     if (vk == 'P' || vk == 'L') {
         CreateDirectoryA(s_user, NULL);
         snprintf(path, sizeof path, "%s\\preset.json", s_user);
@@ -344,28 +462,18 @@ static void key(WPARAM vk)
         status("Finalize: why? Type a note, Enter to finalize, Esc to cancel.%s", "");
         return;
     }
-    i = visible_index(s_sel);
-    if (i < 0)
-        return;
-    r = tuning_row(i);
-    EnterCriticalSection(&s_lock);
-    if ((vk == VK_LEFT || vk == VK_RIGHT) && r->have_cur) {
-        live_write(r, s_st, tuning_nudge(i, (vk == VK_RIGHT ? 1 : -1) * (shift ? 10 : 1)));
-    } else if (vk == 'D' && r->have_def) {
-        live_write(r, s_st, tuning_set(i, r->def));
-    } else if (vk == 'I' && r->have_cur) {
-        r->ideal = r->cur;
-        r->have_ideal = 1;
-        CreateDirectoryA(s_dir, NULL);
-        status(tuning_save_ranges(s_ranges) == 1 ? "Ideal set and saved in %s" : "Could not save %s", s_ranges);
-    }
-    LeaveCriticalSection(&s_lock);
+    if (vk == VK_LEFT || vk == VK_RIGHT)
+        row_change((vk == VK_RIGHT ? 1 : -1) * (shift ? 10 : 1));
+    else if (vk == 'D')
+        row_default();
+    else if (vk == 'I')
+        row_ideal();
 }
 
 static WNDPROC s_edit_proc;
 static LRESULT CALLBACK edit_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 {
-    if (msg == WM_KEYDOWN && wp == VK_RETURN) { finalize_now(); InvalidateRect(s_win, NULL, FALSE); return 0; }
+    if (msg == WM_KEYDOWN && wp == VK_RETURN) { finalize_now(NULL); InvalidateRect(s_win, NULL, FALSE); return 0; }
     if (msg == WM_KEYDOWN && wp == VK_ESCAPE) {
         s_prompt = 0;
         ShowWindow(h, SW_HIDE);
@@ -403,7 +511,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 1;
     case WM_SIZE:
         if (s_edit)
-            MoveWindow(s_edit, 12, HIWORD(lp) - 84, LOWORD(lp) - 24, 24, TRUE);
+            MoveWindow(s_edit, 12, HIWORD(lp) - 108, LOWORD(lp) - 24, 24, TRUE);
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     case WM_KEYDOWN:
@@ -414,6 +522,10 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_CLOSE:
         close_window();
+        return 0;
+    case WM_TU_PAD:
+        pad_action((int)wp, (int)lp);
+        InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     }
     return DefWindowProcA(hwnd, msg, wp, lp);
@@ -450,21 +562,8 @@ static DWORD WINAPI tu_thread(LPVOID unused)
         if (m.message == WM_TIMER && m.hwnd == s_win) {
             int d6 = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
             HWND fg = GetForegroundWindow();
-            if (d6 && !was6 && (fg == s_game || fg == s_win)) {
-                if (IsWindowVisible(s_win))
-                    close_window();
-                else {
-                    static int s_placed;
-                    RECT gr;
-                    if (!s_placed && GetWindowRect(s_game, &gr)) {   /* first open: over the game's top-left */
-                        SetWindowPos(s_win, NULL, gr.left + 24, gr.top + 48, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-                        s_placed = 1;
-                    }
-                    ShowWindow(s_win, SW_SHOW);
-                    SetForegroundWindow(s_win);
-                    SetFocus(s_win);
-                }
-            }
+            if (d6 && !was6 && (fg == s_game || fg == s_win))
+                toggle_window();
             was6 = d6;
             if (IsWindowVisible(s_win)) {
                 EnterCriticalSection(&s_lock);
@@ -478,6 +577,29 @@ static DWORD WINAPI tu_thread(LPVOID unused)
         DispatchMessageA(&m);
     }
     return 0;
+}
+
+/* Game thread, every XInputGetState (src/recomp_manual.c). Reads the pad for the window and hides from the game
+ * what the window uses: every button and trigger while it is open, then anything still held until let go.
+ * blocked = the PC options page has the pad. The pad only drives the window while the game or the window has the
+ * focus. */
+void tuning_host_pad(int port, uint16_t *wbuttons, uint8_t analog[8], int blocked)
+{
+    struct tp_result r;
+    HWND w = s_win, fg;
+    unsigned bits;
+    int i;
+    if (!s_ready || !on() || !w)
+        return;
+    fg = GetForegroundWindow();
+    bits = (blocked || (fg != s_game && fg != w)) ? 0 : tp_bits(*wbuttons, analog);
+    r = tp_step(port, bits, IsWindowVisible(w), GetTickCount());
+    for (i = 0; i < r.n; i++)
+        PostMessageA(w, WM_TU_PAD, (WPARAM)r.act[i].what, (LPARAM)r.act[i].arg);
+    *wbuttons = (uint16_t)(*wbuttons & ~(r.strip & 0xFFu));
+    for (i = 0; i < 8; i++)
+        if (r.strip & (0x100u << i))
+            analog[i] = 0;
 }
 
 void tuning_host_start(void)

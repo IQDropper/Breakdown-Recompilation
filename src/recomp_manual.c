@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "recomp_env.h"
 #include "pc_options_host.h"
+#include "tuning_host.h"     /* tuning_host_pad: the tuning window's controller */
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
@@ -261,6 +262,7 @@ void sub_00205439(void)
     /* PC options is a host page. Start alone still reaches the guest. */
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;
+    tuning_host_pad((int)port, &st.wButtons, st.bAnalog, pr.suppress_motion);   /* LS + RS: tuning window */
     if (pr.suppress_motion) {
         memset(st.bAnalog, 0, sizeof st.bAnalog);
         memset(st.thumb, 0, sizeof st.thumb);

@@ -69,6 +69,7 @@ set(GAME_SOURCES
     src/mem_search_host.c
     src/tuning.c
     src/tuning_host.c
+    src/tuning_pad.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c
