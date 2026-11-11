@@ -185,6 +185,7 @@ void recomp_icall_not_code_log(uint32_t va)
  * cause rather than wherever the damage surfaces. */
 #include <stdlib.h>
 #include <string.h>
+#include "debug_text_host.h"
 
 void recomp_unimpl(const char *text, uint32_t va)
 {
@@ -278,8 +279,13 @@ void sub_002054AC(void)
     MEM32(fb) = 0; g_eax = 0; g_esp += 12;
 }
 
+/* Set when F9 switched the MENU task to the debug menu (sub_0001B9F0 below). */
+static uint32_t s_dbgmenu_task;
 /* [game-log] */
-/* cdecl void DebugPrintf(const char *fmt, ...) - retail stub (ret). Minimal guest-side formatter. */
+/* cdecl void DebugPrintf(const char *fmt, ...) - retail stub (ret). Minimal guest-side formatter.
+ * RECOMP_GAME_LOG=1 writes each print to stderr. With the debug text overlay on (src/debug_text_host.c:
+ * RECOMP_DEBUG_MENU=1 or RECOMP_DEBUG_TEXT=1) each print also lands on the screen at the game's cursor, and
+ * Render_SubmitFrame's own print (from 0x18EA4E, once per frame) ends the frame. */
 static int s_game_log = -1;
 static void glog_str(char *o, size_t *n, size_t cap, uint32_t p)
 {
@@ -289,9 +295,20 @@ static void glog_str(char *o, size_t *n, size_t cap, uint32_t p)
 }
 void sub_00161680(void)
 {
-    char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k;
+    char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k, text;
     if (s_game_log < 0) { const char *e = getenv("RECOMP_GAME_LOG"); s_game_log = e && *e == '1'; }
-    if (s_game_log) {
+    text = debug_text_on();
+    if (s_dbgmenu_task && getenv("RECOMP_DEBUG_MENU_PROBE")) {
+        static uint32_t last[4];
+        uint32_t v[4] = { MEM32(0x2988F0), MEM32(0x2988F4), MEM32(0x2988F8), MEM32(0x29BEB0) };
+        if (memcmp(v, last, sizeof v)) {
+            memcpy(last, v, sizeof v);
+            fprintf(stderr, "[DEBUG-MENU] pad F0=%08X F4=%08X F8=%08X BEB0=%08X\n", v[0], v[1], v[2], v[3]);
+        }
+    }
+    if (text && MEM32(g_esp) == 0x0018EA4Eu)
+        debug_text_frame_end();
+    if (s_game_log || text) {
         fmt = MEM32(g_esp + 4); ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
@@ -309,11 +326,34 @@ void sub_00161680(void)
             n += (size_t)snprintf(out + n, sizeof out - n, spec, MEM32(ap)); ap += 4;
             if (n >= sizeof out) n = sizeof out - 1;
         }
-        while (n && (out[n-1] == '\n' || out[n-1] == '\r')) n--;
         out[n] = 0;
-        fprintf(stderr, "[GAME] %s  (from 0x%08X)\n", out, MEM32(g_esp)); fflush(stderr);
+        if (text && MEM32(g_esp) != 0x0018EA4Eu)
+            debug_text_put(out);
+        if (s_game_log) {
+            while (n && (out[n-1] == '\n' || out[n-1] == '\r')) n--;
+            out[n] = 0;
+            fprintf(stderr, "[GAME] %s  (from 0x%08X)\n", out, MEM32(g_esp)); fflush(stderr);
+        }
     }
     g_esp += 4;   /* cdecl: pop return address only */
+}
+
+/* cdecl void DebugColor(int r, int g, int b) @ 0x18F570: the debug text colour. */
+extern void sub_0018F570_gen(void);
+void sub_0018F570(void)
+{
+    if (debug_text_on())
+        debug_text_color((int)MEM32(g_esp + 4), (int)MEM32(g_esp + 8), (int)MEM32(g_esp + 12));
+    sub_0018F570_gen();
+}
+
+/* cdecl void DebugLocate(short col, short row) @ 0x18F5C0: the debug text cursor (0x43573C/E). */
+extern void sub_0018F5C0_gen(void);
+void sub_0018F5C0(void)
+{
+    if (debug_text_on())
+        debug_text_locate((int16_t)MEM16(g_esp + 4), (int16_t)MEM16(g_esp + 8));
+    sub_0018F5C0_gen();
 }
 
 /* [fps60] */
@@ -793,4 +833,106 @@ void sub_0011C140(void)
         MEM8(0x3EA597) = 4;
     else if (MEM8(0x3EA597) != 4)
         video_row_keep_label(MEM32(g_esp), before == 4);   /* the original's ret popped its return address: [esp] = menu */
+}
+
+/* ---- Developer debug menu (research: kit reports/research/debug-menu-notes.md) ----
+ * Game init (0x113B0) always creates a "MENU" task ([0x299B04]) with the developers' menu table 0x227730
+ * (MAKINO MENU, HASHI/MINE/KONDOH/MATTY/KOMATSUO TEST ...). Its idle mode 0x1B9F0 switches to the debug
+ * menu mode 0x1B900 when the START task ([0x2A8DE0]) has both boot steps at 8; in the retail game that never
+ * happens. RECOMP_DEBUG_MENU=1: F9 (game window focused) makes the idle mode switch, exactly as its own code
+ * does (+0x20 = 0x1B900, +0x34 = 0, 0x17E2D0(0x298A40, task)). Unset = the original. */
+extern void sub_0001B9F0_gen(void);
+extern void sub_0017E2D0(void);
+extern short __stdcall GetAsyncKeyState(int vk);
+extern void *__stdcall GetForegroundWindow(void);
+extern unsigned long __stdcall GetWindowThreadProcessId(void *hwnd, unsigned long *pid);
+extern unsigned long __stdcall GetCurrentProcessId(void);
+static int s_debug_menu = -1;
+static volatile int s_dbgmenu_open_req;
+
+static int debug_menu_on(void)
+{
+    if (s_debug_menu < 0) {
+        const char *e = getenv("RECOMP_DEBUG_MENU");
+        s_debug_menu = e && *e == '1';
+        if (s_debug_menu) {
+            fprintf(stderr, "[DEBUG-MENU] on: F9 opens the developers' debug menu\n");
+            fflush(stderr);
+        }
+    }
+    return s_debug_menu;
+}
+
+/* F9: the Product debug menu (mode 0x1B900). F8: the developers' F026 menu (mode 0x1B640, table 0x227730). */
+static int s_dbgmenu_dev;
+static int debug_menu_key(void)
+{
+    static int s_was, s_was8;
+    unsigned long pid = 0;
+    int down = (GetAsyncKeyState(0x78) & 0x8000) != 0, rose = down && !s_was;     /* VK_F9 */
+    int down8 = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose8 = down8 && !s_was8; /* VK_F8 */
+    s_was = down;
+    s_was8 = down8;
+    if (!rose && !rose8)
+        return 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    if (pid != GetCurrentProcessId())
+        return 0;
+    s_dbgmenu_dev = rose8;
+    return 1;
+}
+
+void sub_0001B9F0(void)
+{
+    uint32_t task, save;
+    if (!debug_menu_on() || !debug_menu_key()) {
+        sub_0001B9F0_gen();
+        return;
+    }
+    task = MEM32(g_esp + 4);
+    fprintf(stderr, "[DEBUG-MENU] F%d: task 0x%08X -> %s\n", s_dbgmenu_dev ? 8 : 9, task,
+            s_dbgmenu_dev ? "developers' F026 menu (0x1B640)" : "Product debug menu (0x1B900)");
+    fflush(stderr);
+    s_dbgmenu_task = task;
+    s_dbgmenu_open_req = !s_dbgmenu_dev;
+    if (s_dbgmenu_dev) {
+        /* The F026 lists end at the first entry whose function is 0x161680, but the retail build pointed
+         * every removed test at that same emptied DebugPrintf, so each list stopped after its first removed
+         * entry. Blank the removed ones (the menu skips function 0) and mark the real end. Guest memory
+         * only; the files are untouched. */
+        int i;
+        MEM32(0x227730 + 1 * 8) = 0;                          /* SHUJI TEST (removed); KIRIYAMA stays the end */
+        for (i = 5; i <= 8; i++)
+            MEM32(0x2418B0 + i * 8) = 0;                      /* SYSTEM LOAD / SAVE / LOAD TEST, SAVEDATA VIEWER */
+        MEM32(0x2418B0 + 13 * 8) = 0x161680u;                 /* end after TGS - C */
+    }
+    MEM32(task + 0x20) = s_dbgmenu_dev ? 0x1B640u : 0x1B900u;
+    MEM32(task + 0x34) = 0;
+    save = g_esp;
+    g_esp -= 4; MEM32(g_esp) = task;
+    g_esp -= 4; MEM32(g_esp) = 0x298A40;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    sub_0017E2D0();
+    g_esp = save + 4;               /* the original's ret */
+}
+
+/* Debug-menu mode @ 0x1B900, step +0x34: 0 = set up, 1 = closed (opens after Start+Back are held ~1.8 s),
+ * 2 = open the menu (0x1B5F0 builds it from the task's table). F9 asks for step 2 directly, since our PC
+ * options overlay already uses Back+Start. */
+extern void sub_0001B900_gen(void);
+
+void sub_0001B900(void)
+{
+    uint32_t t = MEM32(g_esp + 4);
+    if (debug_menu_on()) {
+        if (debug_menu_key())
+            s_dbgmenu_open_req = 1;
+        if (s_dbgmenu_open_req && MEM32(t + 0x34) == 1) {
+            s_dbgmenu_open_req = 0;
+            MEM32(t + 0x34) = 2;
+            fprintf(stderr, "[DEBUG-MENU] F9: open the menu (table 0x%08X)\n", MEM32(t + 0x38));
+            fflush(stderr);
+        }
+    }
+    sub_0001B900_gen();
 }

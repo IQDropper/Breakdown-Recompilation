@@ -63,6 +63,7 @@ set(GAME_SOURCES
     src/video_menu.c
     src/pc_options.c
     src/pc_options_host.c
+    src/debug_text_host.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c
