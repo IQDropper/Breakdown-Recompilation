@@ -33,6 +33,7 @@ extern "C" {
 #define PC_LOCK_MODE   0x10u
 #define PC_LOCK_FPS60  0x20u
 #define PC_LOCK_PIPE   0x40u
+#define PC_LOCK_VSYNC  0x80u
 
 enum {
     PC_ROW_SCALE = 0,
@@ -42,6 +43,7 @@ enum {
     PC_ROW_MODE,
     PC_ROW_FPS60,
     PC_ROW_PIPELINE,
+    PC_ROW_VSYNC,
     PC_ROW_APPLY,
     PC_ROW_RESET,
     PC_ROW_REVERT,

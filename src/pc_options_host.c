@@ -44,7 +44,7 @@ static char b_window[8];
 static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
-static char b_fps60[2], b_pipe[2];
+static char b_fps60[2], b_pipe[2], b_vsync[2];
 
 struct pc_apply {
     int action;
@@ -82,6 +82,9 @@ static void unlock(void)
 
 /* src/recomp_manual.c: switch 60 FPS gameplay on or off now. */
 extern void breakdown_fps60_set(int on);
+/* patch_d3d11_vsync.py: Present's sync interval, live. Weak: an unpatched toolkit leaves it NULL and VSync then
+ * changes on the next launch (RECOMP_PRESENT_VSYNC is read at startup). */
+extern void nv2a_d3d11_set_vsync(int on) __attribute__((weak));
 
 static unsigned env_locks(void)
 {
@@ -100,6 +103,7 @@ static unsigned env_locks(void)
     /* These two are copied from the file into the environment at startup; lock only launch values. */
     if (display_host_launch_set("RECOMP_FPS60")) mask |= PC_LOCK_FPS60;
     if (display_host_launch_set("RECOMP_PB_PIPELINE")) mask |= PC_LOCK_PIPE;
+    if (display_host_launch_set("RECOMP_PRESENT_VSYNC")) mask |= PC_LOCK_VSYNC;
     return mask;
 }
 
@@ -157,6 +161,7 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_PRESENT_FULLSCREEN") == 0) return b_full;
     if (strcmp(name, "RECOMP_FPS60") == 0) return b_fps60;
     if (strcmp(name, "RECOMP_PB_PIPELINE") == 0) return b_pipe;
+    if (strcmp(name, "RECOMP_PRESENT_VSYNC") == 0) return b_vsync;
     return NULL;
 }
 
@@ -171,6 +176,7 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_full, sizeof b_full, "%s", video_settings_fullscreen_token(c.borderless));
     snprintf(b_fps60, sizeof b_fps60, "%d", c.fps60 ? 1 : 0);
     snprintf(b_pipe, sizeof b_pipe, "%d", c.pipeline ? 1 : 0);
+    snprintf(b_vsync, sizeof b_vsync, "%d", c.vsync ? 1 : 0);
 }
 
 static int style_is_borderless(HWND hwnd)
@@ -308,6 +314,15 @@ static int apply_live(const struct video_settings *s, int restyle)
     display_host_choose(bound_get, &c);
     request_opts(&c);
     breakdown_fps60_set(s->fps60);   /* 60 FPS switches at once; the renderer setting waits for a restart */
+    if (nv2a_d3d11_set_vsync) {
+        static int s_vs = -1;
+        nv2a_d3d11_set_vsync(s->vsync);
+        if (s_vs != (s->vsync ? 1 : 0)) {
+            s_vs = s->vsync ? 1 : 0;
+            fprintf(stderr, "[PC] VSync %s (live)\n", s_vs ? "on" : "off");
+            fflush(stderr);
+        }
+    }
     if (restyle && have)
         resize_game(&c);
     else if (!have)
@@ -568,7 +583,7 @@ static void paint_page(HDC hdc, const RECT *rc)
         snprintf(titles[i], sizeof titles[i], "%s", pc_options_row_title(i));
         pc_options_row_value(i, values[i], sizeof values[i]);
     }
-    if (row <= PC_ROW_PIPELINE)
+    if (row <= PC_ROW_VSYNC)
         snprintf(detail, sizeof detail, "%s", video_row_detail(pc_options_draft(), row));
     else if (row == PC_ROW_APPLY)
         snprintf(detail, sizeof detail, "%s", "Write breakdown_video.cfg beside the exe. This page stays open.");

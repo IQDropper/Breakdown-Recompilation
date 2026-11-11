@@ -75,6 +75,7 @@ static void test_roundtrip(void)
     s.borderless = 1;
     s.fps60 = 1;
     s.pipeline = 1;
+    s.vsync = 1;
     expect("save", video_config_save(path, &s) == 0);
     video_config_reset();
     expect("saved cleared", video_config_getenv("RECOMP_RENDER_SCALE") == NULL);
@@ -93,9 +94,13 @@ static void test_roundtrip(void)
     expect("loaded renderer setting",
            video_config_getenv("RECOMP_PB_PIPELINE")
            && strcmp(video_config_getenv("RECOMP_PB_PIPELINE"), "1") == 0);
+    expect("loaded vsync",
+           video_config_getenv("RECOMP_PRESENT_VSYNC")
+           && strcmp(video_config_getenv("RECOMP_PRESENT_VSYNC"), "1") == 0);
     display_host_set_sources(env_empty, video_config_getenv);
     display_host_choose(display_getenv_layered, &c);
     video_settings_from_choice(&c, &loaded);
+    expect("roundtrip vsync", loaded.vsync == 1 && c.vsync == 1);
     expect("roundtrip scale", loaded.render_scale == 2 && loaded.window_scale == 3);
     expect("roundtrip aspect", loaded.aspect == s.aspect && loaded.filter == 2);
     expect("roundtrip borderless", loaded.borderless == 1);

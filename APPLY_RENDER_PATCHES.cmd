@@ -59,6 +59,14 @@ if errorlevel 1 (
 )
 
 echo [ok] Opt-in pushbuffer pipelining (RECOMP_PB_PIPELINE=1).
+echo --- patch_d3d11_vsync.py ---
+%PY% patch_d3d11_vsync.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_vsync.py failed
+  exit /b 1
+)
+
+echo [ok] VSync can be switched while running (PC settings page).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
 exit /b 0

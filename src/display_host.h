@@ -34,6 +34,7 @@ struct display_choice {
     char     filter_name[12];
     int      fps60;            /* RECOMP_FPS60=1: gameplay at 60 FPS */
     int      pipeline;         /* RECOMP_PB_PIPELINE=1: game doesn't wait for the renderer */
+    int      vsync;            /* RECOMP_PRESENT_VSYNC=1: Present waits for the display */
 };
 
 /* Same type as getenv (char *getenv(const char *)). A const-returning
@@ -53,7 +54,7 @@ char *display_getenv_layered(const char *name);
  * optional D3D11 window hook when the toolkit patch defined it. */
 void display_host_init(void);
 /* 1 when the launch environment (not breakdown_video.cfg) set this key before display_host_init.
- * display_host_init copies the file's RECOMP_FPS60 / RECOMP_PB_PIPELINE into the environment so
+ * display_host_init copies the file's RECOMP_FPS60 / RECOMP_PB_PIPELINE / RECOMP_PRESENT_VSYNC into the environment so
  * getenv readers see them; the PC options page uses this to lock only real launch-script values. */
 int display_host_launch_set(const char *key);
 

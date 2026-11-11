@@ -173,6 +173,8 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     o->fps60 = s && s[0] == '1';
     s = env_get(get, "RECOMP_PB_PIPELINE");
     o->pipeline = s && s[0] == '1';
+    s = env_get(get, "RECOMP_PRESENT_VSYNC");
+    o->vsync = s && s[0] == '1';
 }
 
 #if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
@@ -180,6 +182,7 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
 #include "video_config.h"
 #include "video_menu.h"
 #include "kernel/nv2a_tex_pack.h"
+#include "platform/recomp_env.h"
 #include "debug_text_host.h"
 #include "mem_search_host.h"
 #include <windows.h>
@@ -281,8 +284,8 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
         *h = ch;
 }
 
-static const char *const s_speed_keys[] = { "RECOMP_FPS60", "RECOMP_PB_PIPELINE" };
-static int s_speed_from_launch[2];
+static const char *const s_speed_keys[] = { "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC" };
+static int s_speed_from_launch[3];
 
 int display_host_launch_set(const char *key)
 {
@@ -312,17 +315,24 @@ void display_host_init(void)
     /* Real environment first. video_config_getenv is the file, and it
      * returns char * so it matches display_getenv_fn on mingw. */
     display_host_set_sources(getenv, video_config_getenv);
-    /* The two speed settings are read with getenv by the 60 FPS override (src/recomp_manual.c)
-     * and by the toolkit (patch_pb_pipeline.py), which starts after this. A value saved in the
-     * file reaches them here, unless a real environment variable is already set. */
+    /* 60 FPS, pipelining and VSync are read by the 60 FPS override (src/recomp_manual.c, getenv) and by
+     * the toolkit, which starts after this. A value saved in the file reaches them here, unless a real
+     * environment variable is already set. The toolkit's own settings (recomp_env, e.g.
+     * RECOMP_PRESENT_VSYNC) were snapshotted by recomp_env_init before the file was read, so the
+     * snapshot is reloaded when a file value was copied in. */
     {
         size_t k;
+        int copied = 0;
         for (k = 0; k < sizeof s_speed_keys / sizeof s_speed_keys[0]; k++) {
             const char *e = getenv(s_speed_keys[k]), *f = video_config_getenv(s_speed_keys[k]);
             s_speed_from_launch[k] = e && e[0];
-            if (!s_speed_from_launch[k] && f && f[0])
+            if (!s_speed_from_launch[k] && f && f[0]) {
                 _putenv_s(s_speed_keys[k], f);
+                copied = 1;
+            }
         }
+        if (copied)
+            recomp_env_reload();
     }
 
     /* Address is NULL when the patched backend is not in this link. */
