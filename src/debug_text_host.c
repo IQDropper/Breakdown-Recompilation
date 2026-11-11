@@ -103,6 +103,7 @@ void debug_text_frame_end(void)
         memset(s_work[r], 0, sizeof s_work[r]);
     s_work_used = 0;
     s_color = RGB(250, 250, 250);
+    s_row = -1000;   /* a print with no position this frame (AI chatter) lands nowhere */
     LeaveCriticalSection(&s_lock);
 }
 

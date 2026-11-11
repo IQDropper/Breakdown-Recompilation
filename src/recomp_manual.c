@@ -936,3 +936,55 @@ void sub_0001B900(void)
     }
     sub_0001B900_gen();
 }
+
+/* In-game "Debug Mode Select" (EVENT_DEBUG task [0x2A8DDC], draw 0x25AD0). Gameplay start calls
+ * 0x258D0(debug switch) from the game task (0x1C130), but in retail the task only exists after MATTY TEST
+ * (0x110F30) created it with 0x25FA0(parent). With RECOMP_DEBUG_MENU=1 and the switch on (DEGUG ON in the F9
+ * menu), create it under the calling game task (still in esi at the call) so pause shows the debug page. */
+extern void sub_000258D0_gen(void);
+extern void sub_00025FA0(void);
+void sub_000258D0(void)
+{
+    if (debug_menu_on() && MEM32(g_esp + 4) == 1 && MEM32(0x2A8DDC) == 0 && g_esi) {
+        uint32_t save = g_esp, eax = g_eax, ecx = g_ecx, edx = g_edx;
+        g_esp -= 4; MEM32(g_esp) = g_esi;
+        g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+        sub_00025FA0();
+        g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
+        fprintf(stderr, "[DEBUG-MENU] in-game debug task created: 0x%08X (parent 0x%08X)\n", MEM32(0x2A8DDC), g_esi);
+        fflush(stderr);
+    }
+    sub_000258D0_gen();
+}
+
+/* EVENT_DEBUG draw @ 0x25AD0. Start toggles its debug pause, but the game's normal pause handler sees the
+ * same Start and ends it in the same frame (seen: USER PAUSE / USER PAUSE END together). F7 toggles that pause
+ * directly instead (0x21C00 = paused?, 0x21B90 = pause, 0x21BB0 = resume); while paused the page draws. */
+extern void sub_00025AD0_gen(void);
+extern void sub_00021C00(void);
+extern void sub_00021B90(void);
+extern void sub_00021BB0(void);
+static void call0(void (*fn)(void))
+{
+    uint32_t save = g_esp;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    fn();
+    g_esp = save;
+}
+void sub_00025AD0(void)
+{
+    static int s_was7;
+    int d7 = (GetAsyncKeyState(0x76) & 0x8000) != 0;   /* VK_F7 */
+    if (debug_menu_on() && d7 && !s_was7) {
+        unsigned long pid = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+        if (pid == GetCurrentProcessId()) {
+            uint32_t eax = g_eax, ecx = g_ecx, edx = g_edx;
+            call0(sub_00021C00);
+            call0(g_eax == 0 ? sub_00021B90 : sub_00021BB0);
+            g_eax = eax; g_ecx = ecx; g_edx = edx;
+        }
+    }
+    s_was7 = d7;
+    sub_00025AD0_gen();
+}
