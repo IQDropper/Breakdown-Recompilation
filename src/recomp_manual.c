@@ -186,6 +186,7 @@ void recomp_icall_not_code_log(uint32_t va)
 #include <stdlib.h>
 #include <string.h>
 #include "debug_text_host.h"
+#include "speedrun_host.h"
 
 void recomp_unimpl(const char *text, uint32_t va)
 {
@@ -308,6 +309,8 @@ void sub_00161680(void)
     }
     if (text && MEM32(g_esp) == 0x0018EA4Eu)
         debug_text_frame_end();
+    if (MEM32(g_esp) == 0x0018EA4Eu && speedrun_on())
+        speedrun_frame(MEM32(0x29F6E0) == 1);   /* speedrun timer: the pause flag, 0 = playing, 1 = paused */
     fmt = MEM32(g_esp + 4);
     /* Some task slots point at this stub (task +0x28/+0x2C, called from 0x219D0/0x17E389 with the task) and the
      * hero update passes its status block (0x3EA99): the "format" is then a heap struct, printed as garbage.
