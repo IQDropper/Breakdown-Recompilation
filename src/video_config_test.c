@@ -73,6 +73,8 @@ static void test_roundtrip(void)
     s.aspect = video_settings_aspect_index("21:9");
     s.filter = 2;
     s.borderless = 1;
+    s.fps60 = 1;
+    s.pipeline = 1;
     expect("save", video_config_save(path, &s) == 0);
     video_config_reset();
     expect("saved cleared", video_config_getenv("RECOMP_RENDER_SCALE") == NULL);
@@ -86,12 +88,18 @@ static void test_roundtrip(void)
            strcmp(video_config_getenv("RECOMP_PRESENT_FILTER"), "integer") == 0);
     expect("loaded fullscreen",
            strcmp(video_config_getenv("RECOMP_PRESENT_FULLSCREEN"), "1") == 0);
+    expect("loaded 60 FPS",
+           video_config_getenv("RECOMP_FPS60") && strcmp(video_config_getenv("RECOMP_FPS60"), "1") == 0);
+    expect("loaded renderer setting",
+           video_config_getenv("RECOMP_PB_PIPELINE")
+           && strcmp(video_config_getenv("RECOMP_PB_PIPELINE"), "1") == 0);
     display_host_set_sources(env_empty, video_config_getenv);
     display_host_choose(display_getenv_layered, &c);
     video_settings_from_choice(&c, &loaded);
     expect("roundtrip scale", loaded.render_scale == 2 && loaded.window_scale == 3);
     expect("roundtrip aspect", loaded.aspect == s.aspect && loaded.filter == 2);
     expect("roundtrip borderless", loaded.borderless == 1);
+    expect("roundtrip speed settings", loaded.fps60 == 1 && loaded.pipeline == 1 && c.fps60 && c.pipeline);
     expect("roundtrip size", c.window_w == 3360 && c.window_h == 1440);
     s.borderless = DISPLAY_EXCLUSIVE;
     expect("save exclusive", video_config_save(path, &s) == 0);
@@ -232,6 +240,8 @@ static void test_menu_model(void)
            && strcmp(video_row_title(VIDEO_ROW_ASPECT), "Aspect") == 0
            && strcmp(video_row_title(VIDEO_ROW_FILTER), "Present filter") == 0
            && strcmp(video_row_title(VIDEO_ROW_MODE), "Window mode") == 0
+           && strcmp(video_row_title(VIDEO_ROW_FPS60), "60 FPS gameplay") == 0
+           && strcmp(video_row_title(VIDEO_ROW_PIPELINE), "Don't wait for renderer") == 0
            && strcmp(video_row_title(VIDEO_ROW_APPLY), "Apply") == 0
            && strcmp(video_row_title(VIDEO_ROW_OK), "OK") == 0
            && strcmp(video_row_title(VIDEO_ROW_CANCEL), "Cancel") == 0);

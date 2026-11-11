@@ -22,6 +22,8 @@ enum {
     KEY_ASPECT,
     KEY_FILTER,
     KEY_FULL,
+    KEY_FPS60,
+    KEY_PIPE,
     KEY_COUNT
 };
 
@@ -31,6 +33,8 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_DISPLAY_ASPECT",
     "RECOMP_PRESENT_FILTER",
     "RECOMP_PRESENT_FULLSCREEN",
+    "RECOMP_FPS60",
+    "RECOMP_PB_PIPELINE",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -160,11 +164,15 @@ static void store_settings(const struct video_settings *s)
              video_settings_filter_name(c.filter));
     snprintf(s_val[KEY_FULL], sizeof s_val[KEY_FULL], "%s",
              video_settings_fullscreen_token(c.borderless));
+    snprintf(s_val[KEY_FPS60], sizeof s_val[KEY_FPS60], "%d", c.fps60 ? 1 : 0);
+    snprintf(s_val[KEY_PIPE], sizeof s_val[KEY_PIPE], "%d", c.pipeline ? 1 : 0);
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
     s_have[KEY_FILTER] = 1;
     s_have[KEY_FULL] = 1;
+    s_have[KEY_FPS60] = 1;
+    s_have[KEY_PIPE] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -192,16 +200,21 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# until those variables are unset.\n"
                 "# RECOMP_PRESENT_FULLSCREEN: 0 windowed, 1 borderless, exclusive.\n"
                 "# Hor+ is not a setting on this toolkit pin.\n"
+                "# RECOMP_FPS60: 1 = gameplay at 60 FPS. RECOMP_PB_PIPELINE: 1 = the game\n"
+                "# does not wait for the renderer (takes effect on the next launch).\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
                 "RECOMP_PRESENT_FILTER=%s\n"
-                "RECOMP_PRESENT_FULLSCREEN=%s\n",
+                "RECOMP_PRESENT_FULLSCREEN=%s\n"
+                "RECOMP_FPS60=%d\n"
+                "RECOMP_PB_PIPELINE=%d\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
                 video_settings_filter_name(s.filter),
-                video_settings_fullscreen_token(s.borderless)) < 0) {
+                video_settings_fullscreen_token(s.borderless),
+                s.fps60 ? 1 : 0, s.pipeline ? 1 : 0) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -253,6 +266,8 @@ void video_settings_stock(struct video_settings *s)
     s->aspect = 0;
     s->filter = 0;
     s->borderless = 0;
+    s->fps60 = 0;
+    s->pipeline = 0;
 }
 
 void video_settings_clamp(struct video_settings *s)
@@ -279,6 +294,8 @@ void video_settings_clamp(struct video_settings *s)
         s->borderless = DISPLAY_WINDOWED;
     if (s->borderless > DISPLAY_EXCLUSIVE)
         s->borderless = DISPLAY_EXCLUSIVE;
+    s->fps60 = s->fps60 ? 1 : 0;
+    s->pipeline = s->pipeline ? 1 : 0;
 }
 
 int video_settings_aspect_index(const char *name)
@@ -341,6 +358,8 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     if (c->present_filter >= 0 && c->present_filter <= 2)
         s->filter = c->present_filter;
     s->borderless = c->fullscreen;
+    s->fps60 = c->fps60;
+    s->pipeline = c->pipeline;
     video_settings_clamp(s);
 }
 
@@ -352,6 +371,8 @@ const char *video_row_title(int row)
         "Aspect",
         "Present filter",
         "Window mode",
+        "60 FPS gameplay",
+        "Don't wait for renderer",
         "Apply",
         "OK",
         "Cancel",
@@ -408,6 +429,12 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->borderless;
         s->borderless = wrap_index(s->borderless, 3, dir);
         return s->borderless != before;
+    case VIDEO_ROW_FPS60:
+        s->fps60 = !s->fps60;
+        return 1;
+    case VIDEO_ROW_PIPELINE:
+        s->pipeline = !s->pipeline;
+        return 1;
     default:
         return 0;
     }
@@ -437,6 +464,12 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_MODE:
         snprintf(buf, n, "%s", window_mode_label(s->borderless));
         break;
+    case VIDEO_ROW_FPS60:
+        snprintf(buf, n, "%s", s->fps60 ? "On" : "Off");
+        break;
+    case VIDEO_ROW_PIPELINE:
+        snprintf(buf, n, "%s", s->pipeline ? "On" : "Off");
+        break;
     default:
         break;
     }
@@ -460,6 +493,11 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_MODE:
         return "Windowed, borderless on the monitor, or exclusive at this window size. "
                "The 4:3 frame stays letterboxed. Hor+ is not available.";
+    case VIDEO_ROW_FPS60:
+        return "Play at 60 frames per second instead of the game's 30. Changes at once.";
+    case VIDEO_ROW_PIPELINE:
+        return "Faster in busy rooms: the game stops waiting for the renderer. "
+               "Takes effect the next time you start the game.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:
