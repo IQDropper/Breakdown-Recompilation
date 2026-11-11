@@ -185,6 +185,7 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
 #include "platform/recomp_env.h"
 #include "debug_text_host.h"
 #include "mem_search_host.h"
+#include "tuning_host.h"
 #include <windows.h>
 
 /* Texture packs are normally loaded by the toolkit's enhancements layer, which this build does not start.
@@ -359,6 +360,7 @@ void display_host_init(void)
     display_load_pack();
     debug_text_host_start();
     mem_search_start();
+    tuning_host_start();
     fprintf(stderr,
             "[DISPLAY] render.scale=%u%s present.filter=%s%s fullscreen=%d (%s)"
             " window=%ux%u aspect=%s%s (letterbox, 4:3 frame; hor+ is not in this pin)\n",
