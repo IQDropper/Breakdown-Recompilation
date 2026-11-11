@@ -27,6 +27,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo --- patch_d3d11_prof.py ---
+%PY% patch_d3d11_prof.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_prof.py failed
+  exit /b 1
+)
+
+echo [ok] D3D11 draw-path timing applied ([D3D11-PROF] lines with RECOMP_FLIP_LOG).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
 exit /b 0
