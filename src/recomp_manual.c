@@ -187,6 +187,8 @@ void recomp_icall_not_code_log(uint32_t va)
 #include <string.h>
 #include "debug_text_host.h"
 #include "speedrun_host.h"
+#include "qol.h"
+#include "qol_host.h"
 
 void recomp_unimpl(const char *text, uint32_t va)
 {
@@ -294,6 +296,54 @@ static void glog_str(char *o, size_t *n, size_t cap, uint32_t p)
     if (!p) { const char *z = "(null)"; while (*z && *n < cap) o[(*n)++] = *z++; return; }
     for (k = 0; k < 200 && *n < cap; k++) { char ch = (char)MEM8(p + k); if (!ch) break; o[(*n)++] = ch; }
 }
+/* RECOMP_SKIP_INTRO=1: skip the ~2 minute opening movie (opening_b*.xmv) once, the first time it plays.
+ * The boot task (0x26760 -> 0x26630, step at task +0x38) plays namcologo, warning, dolby, then opening_b
+ * (0x26500 -> movie player 0x11B30 with mode 0), and step 7 only waits for the player's "playing" bit
+ * ([0x29C61C] +0x34 bit 0) to clear; common/base.pak has already finished loading at step 3. The movie update
+ * (0x11F70) already skips on any button: 0x118F0 sees a press, 0x11880 starts a fade-out (+0xE4 = 1,
+ * +0xD0 = 0, +0xD4 = +0xD8) unless the mode says unskippable (+0xCC bit 1) or under 0.5 s have played (+0xC8).
+ * The fade then ends the movie through the normal end path. This makes the same three writes 0x11880 makes.
+ * Notes: kit reports/research/intro-skip-notes.md. */
+static void intro_skip_frame(void)
+{
+    static int s_done;
+    uint32_t mv, bits;
+    char name[24];
+    float played;
+    size_t k;
+    if (s_done)
+        return;
+    mv = MEM32(0x29C61Cu);
+    if (!mv)
+        return;
+    for (k = 0; k < sizeof name - 1; k++) {
+        name[k] = (char)MEM8(mv + 0x98 + k);
+        if (!name[k])
+            break;
+    }
+    name[k] = 0;
+    bits = MEM32(mv + 0xC8);
+    memcpy(&played, &bits, sizeof played);
+    switch (qol_intro_decide(name, MEM32(mv + 0x34), MEM32(mv + 0xCC), played, MEM32(mv + 0xE4))) {
+    case QOL_INTRO_SKIP:
+        MEM32(mv + 0xE4) = 1;                  /* fading out */
+        MEM32(mv + 0xD0) = 0;                  /* fade time so far */
+        MEM32(mv + 0xD4) = MEM32(mv + 0xD8);   /* fade length (the game's own value) */
+        s_done = 1;
+        fprintf(stderr, "[SKIP-INTRO] %s: fading out at %.1f s (RECOMP_SKIP_INTRO=1)\n", name, (double)played);
+        fflush(stderr);
+        qol_note("intro skipped");
+        break;
+    case QOL_INTRO_LEAVE:
+        s_done = 1;
+        fprintf(stderr, "[SKIP-INTRO] %s already fading or unskippable: left alone\n", name);
+        fflush(stderr);
+        break;
+    default:
+        break;
+    }
+}
+
 void sub_00161680(void)
 {
     char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k, text;
@@ -311,6 +361,11 @@ void sub_00161680(void)
         debug_text_frame_end();
     if (MEM32(g_esp) == 0x0018EA4Eu && speedrun_on())
         speedrun_frame(MEM32(0x29F6E0) == 1);   /* speedrun timer: the pause flag, 0 = playing, 1 = paused */
+    if (MEM32(g_esp) == 0x0018EA4Eu) {
+        qol_frame();   /* FPS overlay + F12 screenshot (src/qol_host.c) */
+        if (qol_skip_intro_on())
+            intro_skip_frame();
+    }
     fmt = MEM32(g_esp + 4);
     /* Some task slots point at this stub (task +0x28/+0x2C, called from 0x219D0/0x17E389 with the task) and the
      * hero update passes its status block (0x3EA99): the "format" is then a heap struct, printed as garbage.
