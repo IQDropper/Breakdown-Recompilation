@@ -51,6 +51,14 @@ if errorlevel 1 (
 )
 
 echo [ok] D3D11 retired render targets reused (RECOMP_D3D11_RT_PARK=0 re-creates them).
+echo --- patch_pb_pipeline.py ---
+%PY% patch_pb_pipeline.py
+if errorlevel 1 (
+  echo [error] patch_pb_pipeline.py failed
+  exit /b 1
+)
+
+echo [ok] Opt-in pushbuffer pipelining (RECOMP_PB_PIPELINE=1).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
 exit /b 0
