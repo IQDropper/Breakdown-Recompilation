@@ -179,6 +179,47 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
 #include "kernel/nv2a_backend_common.h"
 #include "video_config.h"
 #include "video_menu.h"
+#include "kernel/nv2a_tex_pack.h"
+#include <windows.h>
+
+/* Texture packs are normally loaded by the toolkit's enhancements layer, which this build does not start.
+ * RECOMP_TEXTURES_PACK=<file> (beside the exe unless absolute) loads one here. With RECOMP_VIDEO_ROW=1 and no
+ * pack named, menu_labels.pack (tools/make_menu_labels.py: the VIDEO SETTINGS label) is used when present. */
+static void display_load_pack(void)
+{
+    const char *p = getenv("RECOMP_TEXTURES_PACK"), *row = getenv("RECOMP_VIDEO_ROW");
+    char path[MAX_PATH], err[128];
+    int n, quiet = 0;
+    DWORD len;
+    char *slash;
+
+    if (!p || !p[0]) {
+        if (!row || row[0] != '1')
+            return;
+        p = "menu_labels.pack";
+        quiet = 1;
+    }
+    if (!strcmp(p, "none"))
+        return;
+    if (p[0] == 0x5C || p[0] == '/' || (p[0] && p[1] == ':')) {
+        snprintf(path, sizeof path, "%s", p);
+    } else {
+        len = GetModuleFileNameA(NULL, path, sizeof path);
+        slash = len ? strrchr(path, 0x5C) : NULL;
+        if (!slash)
+            return;
+        snprintf(slash + 1, sizeof path - (size_t)(slash + 1 - path), "%s", p);
+    }
+    if (quiet && GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
+        fprintf(stderr, "[VIDEO-ROW] no %s; run tools/make_menu_labels.py for the VIDEO SETTINGS label\n", p);
+        return;
+    }
+    n = nv2a_tex_pack_load(path, err, sizeof err);
+    if (n < 0)
+        fprintf(stderr, "[TEXPACK] %s: %s; no pack\n", path, err);
+    else
+        fprintf(stderr, "[TEXPACK] %s: %d entries\n", path, n);
+}
 
 /* Defined by patch_d3d11_window.py inside nv2a_pb_d3d11.c. Weak so an
  * unpatched toolkit still links; the pointer stays NULL and the window
@@ -303,6 +344,7 @@ void display_host_init(void)
         opts.fullscreen = DISPLAY_BORDERLESS;
     }
     nv2a_host_opts_set(&opts);
+    display_load_pack();
     fprintf(stderr,
             "[DISPLAY] render.scale=%u%s present.filter=%s%s fullscreen=%d (%s)"
             " window=%ux%u aspect=%s%s (letterbox, 4:3 frame; hor+ is not in this pin)\n",
