@@ -834,3 +834,20 @@ struct pc_pad_result pc_options_host_on_port(int port, unsigned buttons)
     flush_inline_save();
     return r;
 }
+
+/* The game's own Options list (VIDEO SETTINGS row, recomp_manual.c) opens this page. */
+void pc_options_host_open(void)
+{
+    struct pc_pad_result r;
+    ensure_lock();
+    lock();
+    if (pc_options_is_open()) {
+        unlock();
+        return;
+    }
+    refresh_baseline();
+    r = pc_options_on_f10();
+    note_result(&r, 0);
+    unlock();
+    flush_inline_save();
+}

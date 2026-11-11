@@ -697,3 +697,49 @@ loc_001C0C73: ;
 #undef ebx
 #undef esi
 #undef edi
+
+/* ---- VIDEO SETTINGS row in the main-menu Options list (research: kit reports/research/game-menus-notes.md) ----
+ * The list handler @ 0x11C140 already has a 5th entry, a cut "SAVE SETTINGS" row: its scene objects, focus
+ * animations (table 0x2708A0[4]) and A-press case (jump table 0x11C310[4] = "not allowed" sound) all exist; only
+ * the up/down wrap (0..3) hides it. RECOMP_VIDEO_ROW=1: the wrap includes row 4, and A on it opens the PC options
+ * page. Off (default) keeps the original exactly. */
+extern void sub_0011C140_gen(void);
+extern void pc_options_host_open(void);
+static int s_video_row = -1;
+
+static int video_row_on(void)
+{
+    if (s_video_row < 0) {
+        const char *e = getenv("RECOMP_VIDEO_ROW");
+        s_video_row = e && *e == '1';
+        if (s_video_row) {
+            fprintf(stderr, "[VIDEO-ROW] on: 5th row in the main-menu Options list opens the video settings\n");
+            fflush(stderr);
+        }
+    }
+    return s_video_row;
+}
+
+void sub_0011C140(void)
+{
+    uint8_t before, after;
+    uint32_t f;
+    if (!video_row_on()) {
+        sub_0011C140_gen();
+        return;
+    }
+    before = MEM8(0x3EA597);
+    f = MEM32(0x3EA574);
+    if (before == 4 && (((f >> 8) & 1u) || (f & 0x10u))) {   /* A (or Start) on our row */
+        pc_options_host_open();
+        g_eax = 0x11C140;   /* stay on this list */
+        g_esp += 4;         /* pop the return address, as the original's ret */
+        return;
+    }
+    sub_0011C140_gen();
+    after = MEM8(0x3EA597);
+    /* The original wraps 3 -> 0 (down) and 0 -> 3 (up); put row 4 in between. 4 -> 3 (up) and 4 -> 5 -> 0 (down)
+     * already work. The returned state 0x11C330 then focuses the cursor's row. */
+    if (g_eax == 0x11C330 && ((before == 3 && after == 0) || (before == 0 && after == 3)))
+        MEM8(0x3EA597) = 4;
+}
