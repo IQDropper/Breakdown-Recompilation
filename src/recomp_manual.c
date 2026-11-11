@@ -308,8 +308,14 @@ void sub_00161680(void)
     }
     if (text && MEM32(g_esp) == 0x0018EA4Eu)
         debug_text_frame_end();
+    fmt = MEM32(g_esp + 4);
+    /* Some task slots point at this stub (task +0x28/+0x2C, called from 0x219D0/0x17E389 with the task) and the
+     * hero update passes its status block (0x3EA99): the "format" is then a heap struct, printed as garbage.
+     * Real formats are literals in the XBE image. */
+    if (fmt < 0x10000u || fmt >= 0x00400000u)
+        text = 0;
     if (s_game_log || text) {
-        fmt = MEM32(g_esp + 4); ap = g_esp + 8;
+        ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
             if (!c) break;
@@ -328,7 +334,7 @@ void sub_00161680(void)
         }
         out[n] = 0;
         if (text && MEM32(g_esp) != 0x0018EA4Eu)
-            debug_text_put(out);
+            debug_text_put_from(out, MEM32(g_esp));
         if (s_game_log) {
             while (n && (out[n-1] == '\n' || out[n-1] == '\r')) n--;
             out[n] = 0;
@@ -1077,6 +1083,19 @@ void sub_0003E710(void)
     sub_0003E710_gen();
     if (nodmg)
         hero_fill_life(st);
+    /* "Player Position Disp" (bit 13) only prints from the developers' free-fly camera (0x1E5C0); in normal play
+     * show the hero's position and life on the bottom line instead. */
+    if (task && task == hero && dbg_switch(13)) {
+        char line[96];
+        if (!st)
+            st = hero_status(hero);
+        if (st) {
+            snprintf(line, sizeof line, "POS %.1f %.1f %.1f  LIFE %.0f/%.0f", MEMF(st + 0x00), MEMF(st + 0x04),
+                     MEMF(st + 0x08), MEMF(st + 0x5AB0), MEMF(st + 0x5AB4));
+            debug_text_locate(2, 28);
+            debug_text_put(line);
+        }
+    }
 }
 /* 0x48D50(life block, amount) and 0x48DA0(life block, source, amount): add to life, clamped to [0, max]. */
 void sub_00048D50(void)

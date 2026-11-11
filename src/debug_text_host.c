@@ -36,6 +36,7 @@ static COLORREF s_color = RGB(250, 250, 250);
 static int s_work_used, s_show_used;
 static unsigned s_version;
 static int s_col, s_row, s_left;
+static unsigned s_owner;   /* return address of the first print after the last locate */
 static HWND s_win;
 static HFONT s_font;
 static int s_font_h;
@@ -58,14 +59,31 @@ void debug_text_locate(int x, int y)
     EnterCriticalSection(&s_lock);
     s_col = s_left = x;
     s_row = y;
+    s_owner = 0;
     LeaveCriticalSection(&s_lock);
 }
 
 void debug_text_put(const char *s)
 {
+    debug_text_put_from(s, 0);
+}
+
+/* ra = the print's return address. The first print after a locate owns the cursor; prints from far away in the
+ * code (another function's unpositioned chatter, e.g. the enemy weapon AI's "Meicyuuritu"/"no ammo" from
+ * 0x8ACDD) would otherwise run on along the owner's line, so they are dropped. */
+void debug_text_put_from(const char *s, unsigned ra)
+{
     if (!debug_text_on() || !ready() || !s)
         return;
     EnterCriticalSection(&s_lock);
+    if (ra) {
+        if (!s_owner)
+            s_owner = ra;
+        else if ((ra > s_owner ? ra - s_owner : s_owner - ra) > 0x1000u) {
+            LeaveCriticalSection(&s_lock);
+            return;
+        }
+    }
     for (; *s; s++) {
         unsigned char c = (unsigned char)*s;
         if (c == '\n') {
@@ -104,6 +122,7 @@ void debug_text_frame_end(void)
     s_work_used = 0;
     s_color = RGB(250, 250, 250);
     s_row = -1000;   /* a print with no position this frame (AI chatter) lands nowhere */
+    s_owner = 0;
     LeaveCriticalSection(&s_lock);
 }
 
