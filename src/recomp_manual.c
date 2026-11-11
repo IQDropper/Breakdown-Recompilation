@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Manual function overrides and ICALL diagnostics
  *
  * This file provides:
@@ -25,7 +25,7 @@
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
 
-/* ── ICALL trace ring buffer ───────────────────────────────── */
+/* â”€â”€ ICALL trace ring buffer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /*
  * These globals are written by the RECOMP_ICALL macro (defined in
@@ -47,12 +47,12 @@ extern volatile uint64_t g_icall_count;
 
 typedef void (*recomp_func_t)(void);
 
-/* ── Register state (defined in xbox_memory_layout.c) ──────── */
+/* â”€â”€ Register state (defined in xbox_memory_layout.c) â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* g_eax: declared thread-local by recomp_types.h (a plain extern here would name the wrong copy) */
 extern ptrdiff_t g_xbox_mem_offset;
 
-/* ── Manual function overrides ─────────────────────────────── */
+/* â”€â”€ Manual function overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /*
  * Return a function pointer to override the given Xbox VA, or NULL
@@ -102,7 +102,7 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
     return (recomp_func_t)0;
 }
 
-/* ── ICALL failure logging ─────────────────────────────────── */
+/* â”€â”€ ICALL failure logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /*
  * Called when RECOMP_ICALL cannot resolve a target address.
@@ -176,7 +176,7 @@ void recomp_icall_not_code_log(uint32_t va)
     fflush(stderr);
 }
 
-/* ── Untranslated instructions ───────────────────────────────────────────
+/* â”€â”€ Untranslated instructions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *
  * The lifter emits RECOMP_UNIMPL(text, va) at every instruction it has no
  * translation for, in place of the bare comment it used to leave. The
@@ -185,6 +185,7 @@ void recomp_icall_not_code_log(uint32_t va)
  * cause rather than wherever the damage surfaces. */
 #include <stdlib.h>
 #include <string.h>
+#include "debug_text_host.h"
 
 void recomp_unimpl(const char *text, uint32_t va)
 {
@@ -278,8 +279,13 @@ void sub_002054AC(void)
     MEM32(fb) = 0; g_eax = 0; g_esp += 12;
 }
 
+/* Set when F9 switched the MENU task to the debug menu (sub_0001B9F0 below). */
+static uint32_t s_dbgmenu_task;
 /* [game-log] */
-/* cdecl void DebugPrintf(const char *fmt, ...) - retail stub (ret). Minimal guest-side formatter. */
+/* cdecl void DebugPrintf(const char *fmt, ...) - retail stub (ret). Minimal guest-side formatter.
+ * RECOMP_GAME_LOG=1 writes each print to stderr. With the debug text overlay on (src/debug_text_host.c:
+ * RECOMP_DEBUG_MENU=1 or RECOMP_DEBUG_TEXT=1) each print also lands on the screen at the game's cursor, and
+ * Render_SubmitFrame's own print (from 0x18EA4E, once per frame) ends the frame. */
 static int s_game_log = -1;
 static void glog_str(char *o, size_t *n, size_t cap, uint32_t p)
 {
@@ -289,10 +295,27 @@ static void glog_str(char *o, size_t *n, size_t cap, uint32_t p)
 }
 void sub_00161680(void)
 {
-    char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k;
+    char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k, text;
     if (s_game_log < 0) { const char *e = getenv("RECOMP_GAME_LOG"); s_game_log = e && *e == '1'; }
-    if (s_game_log) {
-        fmt = MEM32(g_esp + 4); ap = g_esp + 8;
+    text = debug_text_on();
+    if (s_dbgmenu_task && getenv("RECOMP_DEBUG_MENU_PROBE")) {
+        static uint32_t last[4];
+        uint32_t v[4] = { MEM32(0x2988F0), MEM32(0x2988F4), MEM32(0x2988F8), MEM32(0x29BEB0) };
+        if (memcmp(v, last, sizeof v)) {
+            memcpy(last, v, sizeof v);
+            fprintf(stderr, "[DEBUG-MENU] pad F0=%08X F4=%08X F8=%08X BEB0=%08X\n", v[0], v[1], v[2], v[3]);
+        }
+    }
+    if (text && MEM32(g_esp) == 0x0018EA4Eu)
+        debug_text_frame_end();
+    fmt = MEM32(g_esp + 4);
+    /* Some task slots point at this stub (task +0x28/+0x2C, called from 0x219D0/0x17E389 with the task) and the
+     * hero update passes its status block (0x3EA99): the "format" is then a heap struct, printed as garbage.
+     * Real formats are literals in the XBE image. */
+    if (fmt < 0x10000u || fmt >= 0x00400000u)
+        text = 0;
+    if (s_game_log || text) {
+        ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
             if (!c) break;
@@ -309,11 +332,34 @@ void sub_00161680(void)
             n += (size_t)snprintf(out + n, sizeof out - n, spec, MEM32(ap)); ap += 4;
             if (n >= sizeof out) n = sizeof out - 1;
         }
-        while (n && (out[n-1] == '\n' || out[n-1] == '\r')) n--;
         out[n] = 0;
-        fprintf(stderr, "[GAME] %s  (from 0x%08X)\n", out, MEM32(g_esp)); fflush(stderr);
+        if (text && MEM32(g_esp) != 0x0018EA4Eu)
+            debug_text_put_from(out, MEM32(g_esp));
+        if (s_game_log) {
+            while (n && (out[n-1] == '\n' || out[n-1] == '\r')) n--;
+            out[n] = 0;
+            fprintf(stderr, "[GAME] %s  (from 0x%08X)\n", out, MEM32(g_esp)); fflush(stderr);
+        }
     }
     g_esp += 4;   /* cdecl: pop return address only */
+}
+
+/* cdecl void DebugColor(int r, int g, int b) @ 0x18F570: the debug text colour. */
+extern void sub_0018F570_gen(void);
+void sub_0018F570(void)
+{
+    if (debug_text_on())
+        debug_text_color((int)MEM32(g_esp + 4), (int)MEM32(g_esp + 8), (int)MEM32(g_esp + 12));
+    sub_0018F570_gen();
+}
+
+/* cdecl void DebugLocate(short col, short row) @ 0x18F5C0: the debug text cursor (0x43573C/E). */
+extern void sub_0018F5C0_gen(void);
+void sub_0018F5C0(void)
+{
+    if (debug_text_on())
+        debug_text_locate((int16_t)MEM16(g_esp + 4), (int16_t)MEM16(g_esp + 8));
+    sub_0018F5C0_gen();
 }
 
 /* [fps60] */
@@ -697,3 +743,377 @@ loc_001C0C73: ;
 #undef ebx
 #undef esi
 #undef edi
+
+/* ---- VIDEO SETTINGS row in the main-menu Options list (research: kit reports/research/game-menus-notes.md) ----
+ * The list handler @ 0x11C140 already has a 5th entry, a cut "SAVE SETTINGS" row: its scene objects, focus
+ * animations (table 0x2708A0[4]) and A-press case (jump table 0x11C310[4] = "not allowed" sound) all exist; only
+ * the up/down wrap (0..3) hides it. RECOMP_VIDEO_ROW=1: the wrap includes row 4, and A on it opens the PC options
+ * page. Off (default) keeps the original exactly. */
+extern void sub_0011C140_gen(void);
+extern void pc_options_host_open(void);
+static int s_video_row = -1;
+
+static int video_row_on(void)
+{
+    if (s_video_row < 0) {
+        const char *e = getenv("RECOMP_VIDEO_ROW");
+        s_video_row = e && *e == '1';
+        if (s_video_row) {
+            fprintf(stderr, "[VIDEO-ROW] on: 5th row in the main-menu Options list opens the video settings\n");
+            fflush(stderr);
+        }
+    }
+    return s_video_row;
+}
+
+extern void sub_0013DF00(void);
+/* The scene object an animation script moves: CAE::GetScript (0x13DF00, thiscall on the scene's animation
+ * engine [scene+0x38]) finds the script by path name; the script's +4 is its root object. 0 if not found. */
+static uint32_t video_row_script_obj(uint32_t menu, uint32_t name_va)
+{
+    uint32_t save = g_esp, ecx = g_ecx, eax = g_eax, scene, engine, script;
+    scene = MEM32(menu + 0x38);
+    engine = scene ? MEM32(scene + 0x38) : 0;
+    if (!engine || !MEM32(engine + 0x7C))
+        return 0;
+    g_esp -= 4; MEM32(g_esp) = name_va;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused: the call returns to C) */
+    g_ecx = engine;
+    sub_0013DF00();
+    script = g_eax;
+    g_esp = save; g_ecx = ecx; g_eax = eax;
+    return script ? MEM32(script + 4) : 0;
+}
+
+/* The cut row's label has no always-on object (the list's opening animation, |w_optmenu00, leaves it out):
+ * only its focus animation (0x2708A0[4][0], "...|Loc_SaveSet|SaveSet|c_Forcus") gives the label object its
+ * sprite, and the unfocus resets it to a blank 16x16 default. While another row is selected, keep that
+ * animation playing so VIDEO SETTINGS stays readable. Seen running: it shows white (the focus colour; writing a
+ * darker colour does not stick while the animation runs) and its hexagon slot stays empty. */
+extern void sub_00137F60(void);
+static void video_row_keep_label(uint32_t menu, int left)
+{
+    static unsigned s_wait;
+    uint32_t name = MEM32(0x2708A0 + 4 * 16), obj = video_row_script_obj(menu, name);
+    uint32_t save, ecx, eax;
+    if (left)
+        s_wait = 0;                                     /* the unfocus just stopped it: play again now */
+    else if (!obj || MEM32(obj + 0xE0) != 0x41800000u) {   /* sprite applied (width is no longer the 16.0 default) */
+        s_wait = 0;
+        return;
+    }
+    if (s_wait && --s_wait)                             /* just asked: give the animation a few frames to apply */
+        return;
+    save = g_esp; ecx = g_ecx; eax = g_eax;            /* FUN_00137F60(scene, name, -1, 0): play, cdecl */
+    g_esp -= 4; MEM32(g_esp) = 0;
+    g_esp -= 4; MEM32(g_esp) = 0xFFFFFFFFu;
+    g_esp -= 4; MEM32(g_esp) = name;
+    g_esp -= 4; MEM32(g_esp) = MEM32(menu + 0x38);
+    g_esp -= 4; MEM32(g_esp) = 0;                       /* return address (unused: returns to C) */
+    sub_00137F60();
+    g_esp = save; g_ecx = ecx; g_eax = eax;
+    s_wait = 8;
+}
+
+void sub_0011C140(void)
+{
+    uint8_t before, after;
+    uint32_t f;
+    if (!video_row_on()) {
+        sub_0011C140_gen();
+        return;
+    }
+    before = MEM8(0x3EA597);
+    f = MEM32(0x3EA574);
+    if (before == 4 && (((f >> 8) & 1u) || (f & 0x10u))) {   /* A (or Start) on our row */
+        pc_options_host_open();
+        g_eax = 0x11C140;   /* stay on this list */
+        g_esp += 4;         /* pop the return address, as the original's ret */
+        return;
+    }
+    sub_0011C140_gen();
+    after = MEM8(0x3EA597);
+    /* The original wraps 3 -> 0 (down) and 0 -> 3 (up); put row 4 in between. 4 -> 3 (up) and 4 -> 5 -> 0 (down)
+     * already work. The returned state 0x11C330 then focuses the cursor's row. */
+    if (g_eax == 0x11C330 && ((before == 3 && after == 0) || (before == 0 && after == 3)))
+        MEM8(0x3EA597) = 4;
+    else if (MEM8(0x3EA597) != 4)
+        video_row_keep_label(MEM32(g_esp), before == 4);   /* the original's ret popped its return address: [esp] = menu */
+}
+
+/* ---- Developer debug menu (research: kit reports/research/debug-menu-notes.md) ----
+ * Game init (0x113B0) always creates a "MENU" task ([0x299B04]) with the developers' menu table 0x227730
+ * (MAKINO MENU, HASHI/MINE/KONDOH/MATTY/KOMATSUO TEST ...). Its idle mode 0x1B9F0 switches to the debug
+ * menu mode 0x1B900 when the START task ([0x2A8DE0]) has both boot steps at 8; in the retail game that never
+ * happens. RECOMP_DEBUG_MENU=1: F9 (game window focused) makes the idle mode switch, exactly as its own code
+ * does (+0x20 = 0x1B900, +0x34 = 0, 0x17E2D0(0x298A40, task)). Unset = the original. */
+extern void sub_0001B9F0_gen(void);
+extern void sub_0017E2D0(void);
+extern short __stdcall GetAsyncKeyState(int vk);
+extern void *__stdcall GetForegroundWindow(void);
+extern unsigned long __stdcall GetWindowThreadProcessId(void *hwnd, unsigned long *pid);
+extern unsigned long __stdcall GetCurrentProcessId(void);
+static int s_debug_menu = -1;
+static volatile int s_dbgmenu_open_req;
+
+static int debug_menu_on(void)
+{
+    if (s_debug_menu < 0) {
+        const char *e = getenv("RECOMP_DEBUG_MENU");
+        s_debug_menu = e && *e == '1';
+        if (s_debug_menu) {
+            fprintf(stderr, "[DEBUG-MENU] on: F9 opens the developers' debug menu\n");
+            fflush(stderr);
+        }
+    }
+    return s_debug_menu;
+}
+
+/* F9: the Product debug menu (mode 0x1B900). F8: the developers' F026 menu (mode 0x1B640, table 0x227730). */
+static int s_dbgmenu_dev;
+static int debug_menu_key(void)
+{
+    static int s_was, s_was8;
+    unsigned long pid = 0;
+    int down = (GetAsyncKeyState(0x78) & 0x8000) != 0, rose = down && !s_was;     /* VK_F9 */
+    int down8 = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose8 = down8 && !s_was8; /* VK_F8 */
+    s_was = down;
+    s_was8 = down8;
+    if (!rose && !rose8)
+        return 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    if (pid != GetCurrentProcessId())
+        return 0;
+    s_dbgmenu_dev = rose8;
+    return 1;
+}
+
+void sub_0001B9F0(void)
+{
+    uint32_t task, save;
+    if (!debug_menu_on() || !debug_menu_key()) {
+        sub_0001B9F0_gen();
+        return;
+    }
+    task = MEM32(g_esp + 4);
+    fprintf(stderr, "[DEBUG-MENU] F%d: task 0x%08X -> %s\n", s_dbgmenu_dev ? 8 : 9, task,
+            s_dbgmenu_dev ? "developers' F026 menu (0x1B640)" : "Product debug menu (0x1B900)");
+    fflush(stderr);
+    s_dbgmenu_task = task;
+    s_dbgmenu_open_req = !s_dbgmenu_dev;
+    if (s_dbgmenu_dev) {
+        /* The F026 lists end at the first entry whose function is 0x161680, but the retail build pointed
+         * every removed test at that same emptied DebugPrintf, so each list stopped after its first removed
+         * entry. Blank the removed ones (the menu skips function 0) and mark the real end. Guest memory
+         * only; the files are untouched. */
+        int i;
+        MEM32(0x227730 + 1 * 8) = 0;                          /* SHUJI TEST (removed); KIRIYAMA stays the end */
+        for (i = 5; i <= 8; i++)
+            MEM32(0x2418B0 + i * 8) = 0;                      /* SYSTEM LOAD / SAVE / LOAD TEST, SAVEDATA VIEWER */
+        MEM32(0x2418B0 + 13 * 8) = 0x161680u;                 /* end after TGS - C */
+    }
+    MEM32(task + 0x20) = s_dbgmenu_dev ? 0x1B640u : 0x1B900u;
+    MEM32(task + 0x34) = 0;
+    save = g_esp;
+    g_esp -= 4; MEM32(g_esp) = task;
+    g_esp -= 4; MEM32(g_esp) = 0x298A40;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    sub_0017E2D0();
+    g_esp = save + 4;               /* the original's ret */
+}
+
+/* Debug-menu mode @ 0x1B900, step +0x34: 0 = set up, 1 = closed (opens after Start+Back are held ~1.8 s),
+ * 2 = open the menu (0x1B5F0 builds it from the task's table). F9 asks for step 2 directly, since our PC
+ * options overlay already uses Back+Start. */
+extern void sub_0001B900_gen(void);
+
+void sub_0001B900(void)
+{
+    uint32_t t = MEM32(g_esp + 4);
+    if (debug_menu_on()) {
+        if (debug_menu_key())
+            s_dbgmenu_open_req = 1;
+        if (s_dbgmenu_open_req && MEM32(t + 0x34) == 1) {
+            s_dbgmenu_open_req = 0;
+            MEM32(t + 0x34) = 2;
+            fprintf(stderr, "[DEBUG-MENU] F9: open the menu (table 0x%08X)\n", MEM32(t + 0x38));
+            fflush(stderr);
+        }
+    }
+    sub_0001B900_gen();
+}
+
+/* In-game "Debug Mode Select" (EVENT_DEBUG task [0x2A8DDC], draw 0x25AD0). Gameplay start calls
+ * 0x258D0(debug switch) from the game task (0x1C130), but in retail the task only exists after MATTY TEST
+ * (0x110F30) created it with 0x25FA0(parent). With RECOMP_DEBUG_MENU=1 and the switch on (DEGUG ON in the F9
+ * menu), create it under the calling game task (still in esi at the call) so pause shows the debug page. */
+extern void sub_000258D0_gen(void);
+extern void sub_00025FA0(void);
+void sub_000258D0(void)
+{
+    if (debug_menu_on() && MEM32(g_esp + 4) == 1 && MEM32(0x2A8DDC) == 0 && g_esi) {
+        uint32_t save = g_esp, eax = g_eax, ecx = g_ecx, edx = g_edx;
+        g_esp -= 4; MEM32(g_esp) = g_esi;
+        g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+        sub_00025FA0();
+        g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
+        fprintf(stderr, "[DEBUG-MENU] in-game debug task created: 0x%08X (parent 0x%08X)\n", MEM32(0x2A8DDC), g_esi);
+        fflush(stderr);
+    }
+    sub_000258D0_gen();
+}
+
+/* In-game Debug Mode Select = the EVENT_DEBUG task's draw (0x25AD0); it shows while the game is paused. Its own
+ * Start toggles that pause, but the game task's pause handler sees the same Start and ends it in the same frame
+ * (seen: USER PAUSE / USER PAUSE END together), so it never shows. F7 is a Start press that only the game task
+ * (0x1C130) sees: it reads Start from the pad block at 0x29BEB0 (+4 = pressed), the page from 0x2988F0. The game
+ * task then pauses and unpauses through its own path (calling 0x21B90/0x21BB0 directly worked, but skipped
+ * 0x11770 and left the pause menu's help line on screen in play, following the keys). */
+extern void sub_0001C130_gen(void);
+void sub_0001C130(void)
+{
+    static int s_was7, s_f7_close;
+    int d7 = (GetAsyncKeyState(0x76) & 0x8000) != 0;   /* VK_F7 */
+    if (debug_menu_on() && d7 && !s_was7 && MEM32(0x2A8DDC)) {
+        unsigned long pid = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+        if (pid == GetCurrentProcessId()) {
+            if (MEM32(0x29F6E0) == 0) {
+                MEM32(MEM32(0x2A8DDC) + 0xA8) = 0;   /* open on the switch list (White; Black = value list) */
+                MEM32(0x29BEB4) |= 0x10;             /* Start: pause */
+            } else
+                s_f7_close = 3;   /* paused: the pause menu task (0x1275F0) owns the exit; press B for it */
+        }
+    }
+    if (s_f7_close > 0) {
+        if (MEM32(0x29F6E0) == 1) {
+            MEM32(0x2988F0) |= 0x200;   /* the pause menu reads 0x2988F0: held, pressed, repeat */
+            MEM32(0x2988F4) |= 0x200;
+            MEM32(0x2988F8) |= 0x200;
+            s_f7_close--;
+        } else
+            s_f7_close = 0;
+    }
+    s_was7 = d7;
+    sub_0001C130_gen();
+}
+/* Debug Mode Select switches whose code the retail game dropped: "Player NoDamage" (bit 16) and "Player FastMove"
+ * (bit 21) of [EVENT_DEBUG task + 0x48]. Nothing in retail reads those bits (only the getters 0x25930..0x25A90
+ * exist, for other bits), so they are rebuilt here around the hero's update, 0x3E710 (the TSS_EHP_MAN task;
+ * hero = [0x2A92D0]).
+ *   NoDamage: the hero's status block is 0x4FF20(hero+0x142); life is a float at +0x5AB0, max at +0x5AB4 (the
+ *     update hands both to the HUD gauge, 0x12A3C0/0x12A3E0). Life is held at max before and after each update,
+ *     and the two "change life" helpers (0x48D50, 0x48DA0) ignore losses for the hero while the switch is on.
+ *   FastMove: the hero's position is status +0x00 (x) / +0x08 (z) (the task's matrix at +0x60 is a copy). The
+ *     horizontal step taken between two updates is stretched (RECOMP_FASTMOVE_SCALE, default 2); big jumps
+ *     (warps, loads) are left alone. */
+#include "mem_search_host.h"
+extern void sub_0003E710_gen(void);
+extern void sub_00048D50_gen(void);
+extern void sub_00048DA0_gen(void);
+extern void sub_0004FF20(void);
+static int dbg_switch(int bit)
+{
+    uint32_t t = MEM32(0x2A8DDC);
+    return debug_menu_on() && t && ((MEM32(t + 0x48) >> bit) & 1);
+}
+static uint32_t hero_status(uint32_t hero)
+{
+    uint32_t save = g_esp, eax = g_eax, ecx = g_ecx, edx = g_edx, st;
+    g_esp -= 4; MEM32(g_esp) = (uint32_t)(int32_t)(int16_t)MEM16(hero + 0x142);
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    sub_0004FF20();
+    st = g_eax;
+    g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
+    return st;
+}
+static uint32_t s_hero_life_block;   /* status + 0x5AAC of the hero, refreshed by every hero update */
+static void hero_fill_life(uint32_t st)
+{
+    if (st && MEMF(st + 0x5AB4) > 0.0f && MEMF(st + 0x5AB0) < MEMF(st + 0x5AB4))
+        MEMF(st + 0x5AB0) = MEMF(st + 0x5AB4);
+}
+static float fastmove_scale(void)
+{
+    static float s = -1.0f;
+    if (s < 0.0f) {
+        const char *e = getenv("RECOMP_FASTMOVE_SCALE");
+        s = e && *e ? (float)atof(e) : 2.0f;
+        if (s < 1.0f || s > 8.0f)
+            s = 2.0f;
+    }
+    return s;
+}
+void sub_0003E710(void)
+{
+    static uint32_t s_fm_st;
+    static float s_fm_x, s_fm_z;
+    uint32_t task = MEM32(g_esp + 4), hero = MEM32(0x2A92D0), st = 0;
+    int nodmg = 0;
+    if (task && task == hero) {
+        nodmg = dbg_switch(16);
+        if (nodmg || dbg_switch(21))
+            st = hero_status(hero);
+        if (nodmg) {
+            s_hero_life_block = st ? st + 0x5AAC : 0;
+            mem_search_name("herolife", st ? st + 0x5AB0 : 0);
+            hero_fill_life(st);
+        }
+        if (st)
+            mem_search_name("herostatus", st);
+        if (st && dbg_switch(21)) {
+            /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
+             * update; remember the stretched position so the next step is measured from it. */
+            float x = MEMF(st + 0x00), z = MEMF(st + 0x08);
+            if (s_fm_st == st) {
+                float dx = x - s_fm_x, dz = z - s_fm_z, k = fastmove_scale() - 1.0f, d2 = dx * dx + dz * dz;
+                if (d2 > 1e-6f && d2 < 40.0f * 40.0f) {   /* a normal step, not a warp */
+                    x += dx * k;
+                    z += dz * k;
+                    MEMF(st + 0x00) = x;
+                    MEMF(st + 0x08) = z;
+                }
+            }
+            s_fm_st = st;
+            s_fm_x = x;
+            s_fm_z = z;
+        } else
+            s_fm_st = 0;
+    }
+    sub_0003E710_gen();
+    if (nodmg)
+        hero_fill_life(st);
+    /* "Player Position Disp" (bit 13) only prints from the developers' free-fly camera (0x1E5C0); in normal play
+     * show the hero's position and life on the bottom line instead. */
+    if (task && task == hero && dbg_switch(13)) {
+        char line[96];
+        if (!st)
+            st = hero_status(hero);
+        if (st) {
+            snprintf(line, sizeof line, "POS %.1f %.1f %.1f  LIFE %.0f/%.0f", MEMF(st + 0x00), MEMF(st + 0x04),
+                     MEMF(st + 0x08), MEMF(st + 0x5AB0), MEMF(st + 0x5AB4));
+            debug_text_locate(2, 28);
+            debug_text_put(line);
+        }
+    }
+}
+/* 0x48D50(life block, amount) and 0x48DA0(life block, source, amount): add to life, clamped to [0, max]. */
+void sub_00048D50(void)
+{
+    uint32_t blk = MEM32(g_esp + 4);
+    if (blk && blk == s_hero_life_block && MEMF(g_esp + 8) < 0.0f && dbg_switch(16))
+    {
+        g_esp += 4;   /* ret, as the generated function would */
+        return;   /* NoDamage: the hero's life does not go down */
+    }
+    sub_00048D50_gen();
+}
+void sub_00048DA0(void)
+{
+    uint32_t blk = MEM32(g_esp + 4);
+    if (blk && blk == s_hero_life_block && MEMF(g_esp + 12) < 0.0f && dbg_switch(16)) {
+        g_esp += 4;
+        return;
+    }
+    sub_00048DA0_gen();
+}
