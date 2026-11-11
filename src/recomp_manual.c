@@ -720,6 +720,55 @@ static int video_row_on(void)
     return s_video_row;
 }
 
+extern void sub_0013DF00(void);
+/* The scene object an animation script moves: CAE::GetScript (0x13DF00, thiscall on the scene's animation
+ * engine [scene+0x38]) finds the script by path name; the script's +4 is its root object. 0 if not found. */
+static uint32_t video_row_script_obj(uint32_t menu, uint32_t name_va)
+{
+    uint32_t save = g_esp, ecx = g_ecx, eax = g_eax, scene, engine, script;
+    scene = MEM32(menu + 0x38);
+    engine = scene ? MEM32(scene + 0x38) : 0;
+    if (!engine || !MEM32(engine + 0x7C))
+        return 0;
+    g_esp -= 4; MEM32(g_esp) = name_va;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused: the call returns to C) */
+    g_ecx = engine;
+    sub_0013DF00();
+    script = g_eax;
+    g_esp = save; g_ecx = ecx; g_eax = eax;
+    return script ? MEM32(script + 4) : 0;
+}
+
+/* The cut row's label has no always-on object (the list's opening animation, |w_optmenu00, leaves it out):
+ * only its focus animation (0x2708A0[4][0], "...|Loc_SaveSet|SaveSet|c_Forcus") gives the label object its
+ * sprite, and the unfocus resets it to a blank 16x16 default. While another row is selected, keep that
+ * animation playing so VIDEO SETTINGS stays readable. Seen running: it shows white (the focus colour; writing a
+ * darker colour does not stick while the animation runs) and its hexagon slot stays empty. */
+extern void sub_00137F60(void);
+static void video_row_keep_label(uint32_t menu, int left)
+{
+    static unsigned s_wait;
+    uint32_t name = MEM32(0x2708A0 + 4 * 16), obj = video_row_script_obj(menu, name);
+    uint32_t save, ecx, eax;
+    if (left)
+        s_wait = 0;                                     /* the unfocus just stopped it: play again now */
+    else if (!obj || MEM32(obj + 0xE0) != 0x41800000u) {   /* sprite applied (width is no longer the 16.0 default) */
+        s_wait = 0;
+        return;
+    }
+    if (s_wait && --s_wait)                             /* just asked: give the animation a few frames to apply */
+        return;
+    save = g_esp; ecx = g_ecx; eax = g_eax;            /* FUN_00137F60(scene, name, -1, 0): play, cdecl */
+    g_esp -= 4; MEM32(g_esp) = 0;
+    g_esp -= 4; MEM32(g_esp) = 0xFFFFFFFFu;
+    g_esp -= 4; MEM32(g_esp) = name;
+    g_esp -= 4; MEM32(g_esp) = MEM32(menu + 0x38);
+    g_esp -= 4; MEM32(g_esp) = 0;                       /* return address (unused: returns to C) */
+    sub_00137F60();
+    g_esp = save; g_ecx = ecx; g_eax = eax;
+    s_wait = 8;
+}
+
 void sub_0011C140(void)
 {
     uint8_t before, after;
@@ -742,4 +791,6 @@ void sub_0011C140(void)
      * already work. The returned state 0x11C330 then focuses the cursor's row. */
     if (g_eax == 0x11C330 && ((before == 3 && after == 0) || (before == 0 && after == 3)))
         MEM8(0x3EA597) = 4;
+    else if (MEM8(0x3EA597) != 4)
+        video_row_keep_label(MEM32(g_esp), before == 4);   /* the original's ret popped its return address: [esp] = menu */
 }
