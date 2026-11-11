@@ -981,10 +981,120 @@ void sub_00025AD0(void)
         if (pid == GetCurrentProcessId()) {
             uint32_t eax = g_eax, ecx = g_ecx, edx = g_edx;
             call0(sub_00021C00);
+            if (g_eax == 0 && MEM32(0x2A8DDC))
+                MEM32(MEM32(0x2A8DDC) + 0xA8) = 0;   /* open on the switch list (White; Black = value list) */
             call0(g_eax == 0 ? sub_00021B90 : sub_00021BB0);
             g_eax = eax; g_ecx = ecx; g_edx = edx;
         }
     }
     s_was7 = d7;
     sub_00025AD0_gen();
+}
+
+/* Debug Mode Select switches whose code the retail game dropped: "Player NoDamage" (bit 16) and "Player FastMove"
+ * (bit 21) of [EVENT_DEBUG task + 0x48]. Nothing in retail reads those bits (only the getters 0x25930..0x25A90
+ * exist, for other bits), so they are rebuilt here around the hero's update, 0x3E710 (the TSS_EHP_MAN task;
+ * hero = [0x2A92D0]).
+ *   NoDamage: the hero's status block is 0x4FF20(hero+0x142); life is a float at +0x5AB0, max at +0x5AB4 (the
+ *     update hands both to the HUD gauge, 0x12A3C0/0x12A3E0). Life is held at max before and after each update,
+ *     and the two "change life" helpers (0x48D50, 0x48DA0) ignore losses for the hero while the switch is on.
+ *   FastMove: the hero's position is status +0x00 (x) / +0x08 (z) (the task's matrix at +0x60 is a copy). The
+ *     horizontal step taken between two updates is stretched (RECOMP_FASTMOVE_SCALE, default 2); big jumps
+ *     (warps, loads) are left alone. */
+#include "mem_search_host.h"
+extern void sub_0003E710_gen(void);
+extern void sub_00048D50_gen(void);
+extern void sub_00048DA0_gen(void);
+extern void sub_0004FF20(void);
+static int dbg_switch(int bit)
+{
+    uint32_t t = MEM32(0x2A8DDC);
+    return debug_menu_on() && t && ((MEM32(t + 0x48) >> bit) & 1);
+}
+static uint32_t hero_status(uint32_t hero)
+{
+    uint32_t save = g_esp, eax = g_eax, ecx = g_ecx, edx = g_edx, st;
+    g_esp -= 4; MEM32(g_esp) = (uint32_t)(int32_t)(int16_t)MEM16(hero + 0x142);
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    sub_0004FF20();
+    st = g_eax;
+    g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
+    return st;
+}
+static uint32_t s_hero_life_block;   /* status + 0x5AAC of the hero, refreshed by every hero update */
+static void hero_fill_life(uint32_t st)
+{
+    if (st && MEMF(st + 0x5AB4) > 0.0f && MEMF(st + 0x5AB0) < MEMF(st + 0x5AB4))
+        MEMF(st + 0x5AB0) = MEMF(st + 0x5AB4);
+}
+static float fastmove_scale(void)
+{
+    static float s = -1.0f;
+    if (s < 0.0f) {
+        const char *e = getenv("RECOMP_FASTMOVE_SCALE");
+        s = e && *e ? (float)atof(e) : 2.0f;
+        if (s < 1.0f || s > 8.0f)
+            s = 2.0f;
+    }
+    return s;
+}
+void sub_0003E710(void)
+{
+    static uint32_t s_fm_st;
+    static float s_fm_x, s_fm_z;
+    uint32_t task = MEM32(g_esp + 4), hero = MEM32(0x2A92D0), st = 0;
+    int nodmg = 0;
+    if (task && task == hero) {
+        nodmg = dbg_switch(16);
+        if (nodmg || dbg_switch(21))
+            st = hero_status(hero);
+        if (nodmg) {
+            s_hero_life_block = st ? st + 0x5AAC : 0;
+            mem_search_name("herolife", st ? st + 0x5AB0 : 0);
+            hero_fill_life(st);
+        }
+        if (st)
+            mem_search_name("herostatus", st);
+        if (st && dbg_switch(21)) {
+            /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
+             * update; remember the stretched position so the next step is measured from it. */
+            float x = MEMF(st + 0x00), z = MEMF(st + 0x08);
+            if (s_fm_st == st) {
+                float dx = x - s_fm_x, dz = z - s_fm_z, k = fastmove_scale() - 1.0f, d2 = dx * dx + dz * dz;
+                if (d2 > 1e-6f && d2 < 40.0f * 40.0f) {   /* a normal step, not a warp */
+                    x += dx * k;
+                    z += dz * k;
+                    MEMF(st + 0x00) = x;
+                    MEMF(st + 0x08) = z;
+                }
+            }
+            s_fm_st = st;
+            s_fm_x = x;
+            s_fm_z = z;
+        } else
+            s_fm_st = 0;
+    }
+    sub_0003E710_gen();
+    if (nodmg)
+        hero_fill_life(st);
+}
+/* 0x48D50(life block, amount) and 0x48DA0(life block, source, amount): add to life, clamped to [0, max]. */
+void sub_00048D50(void)
+{
+    uint32_t blk = MEM32(g_esp + 4);
+    if (blk && blk == s_hero_life_block && MEMF(g_esp + 8) < 0.0f && dbg_switch(16))
+    {
+        g_esp += 4;   /* ret, as the generated function would */
+        return;   /* NoDamage: the hero's life does not go down */
+    }
+    sub_00048D50_gen();
+}
+void sub_00048DA0(void)
+{
+    uint32_t blk = MEM32(g_esp + 4);
+    if (blk && blk == s_hero_life_block && MEMF(g_esp + 12) < 0.0f && dbg_switch(16)) {
+        g_esp += 4;
+        return;
+    }
+    sub_00048DA0_gen();
 }
