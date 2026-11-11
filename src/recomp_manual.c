@@ -1008,6 +1008,7 @@ void sub_0001C130(void)
  *     horizontal step taken between two updates is stretched (RECOMP_FASTMOVE_SCALE, default 2); big jumps
  *     (warps, loads) are left alone. */
 #include "mem_search_host.h"
+#include "tuning_host.h"
 extern void sub_0003E710_gen(void);
 extern void sub_00048D50_gen(void);
 extern void sub_00048DA0_gen(void);
@@ -1050,10 +1051,14 @@ void sub_0003E710(void)
     static float s_fm_x, s_fm_z;
     uint32_t task = MEM32(g_esp + 4), hero = MEM32(0x2A92D0), st = 0;
     int nodmg = 0;
+    float move_k = 0.0f;
     if (task && task == hero) {
         nodmg = dbg_switch(16);
-        if (nodmg || dbg_switch(21))
+        /* Step stretch: the FastMove switch times the tuning range's "Move speed x" (src/tuning_host.c). */
+        move_k = (dbg_switch(21) ? fastmove_scale() : 1.0f) * tuning_host_move_speed() - 1.0f;
+        if (nodmg || move_k > 1e-3f || move_k < -1e-3f || tuning_host_active())
             st = hero_status(hero);
+        tuning_host_hero(st);   /* the window reads this; finalized values are applied once per new hero */
         if (nodmg) {
             s_hero_life_block = st ? st + 0x5AAC : 0;
             mem_search_name("herolife", st ? st + 0x5AB0 : 0);
@@ -1061,12 +1066,12 @@ void sub_0003E710(void)
         }
         if (st)
             mem_search_name("herostatus", st);
-        if (st && dbg_switch(21)) {
+        if (st && (move_k > 1e-3f || move_k < -1e-3f)) {
             /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
              * update; remember the stretched position so the next step is measured from it. */
             float x = MEMF(st + 0x00), z = MEMF(st + 0x08);
             if (s_fm_st == st) {
-                float dx = x - s_fm_x, dz = z - s_fm_z, k = fastmove_scale() - 1.0f, d2 = dx * dx + dz * dz;
+                float dx = x - s_fm_x, dz = z - s_fm_z, k = move_k, d2 = dx * dx + dz * dz;
                 if (d2 > 1e-6f && d2 < 40.0f * 40.0f) {   /* a normal step, not a warp */
                     x += dx * k;
                     z += dz * k;
