@@ -35,6 +35,22 @@ if errorlevel 1 (
 )
 
 echo [ok] D3D11 draw-path timing applied ([D3D11-PROF] lines with RECOMP_FLIP_LOG).
+echo --- patch_d3d11_omcache.py ---
+%PY% patch_d3d11_omcache.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_omcache.py failed
+  exit /b 1
+)
+
+echo [ok] D3D11 output-merger bind cache (RECOMP_D3D11_OM_CACHE=0 turns it off).
+echo --- patch_d3d11_rtpark.py ---
+%PY% patch_d3d11_rtpark.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_rtpark.py failed
+  exit /b 1
+)
+
+echo [ok] D3D11 retired render targets reused (RECOMP_D3D11_RT_PARK=0 re-creates them).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
 exit /b 0
