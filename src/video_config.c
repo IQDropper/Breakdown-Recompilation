@@ -24,6 +24,7 @@ enum {
     KEY_FULL,
     KEY_FPS60,
     KEY_PIPE,
+    KEY_VSYNC,
     KEY_COUNT
 };
 
@@ -35,6 +36,7 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_PRESENT_FULLSCREEN",
     "RECOMP_FPS60",
     "RECOMP_PB_PIPELINE",
+    "RECOMP_PRESENT_VSYNC",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -166,6 +168,7 @@ static void store_settings(const struct video_settings *s)
              video_settings_fullscreen_token(c.borderless));
     snprintf(s_val[KEY_FPS60], sizeof s_val[KEY_FPS60], "%d", c.fps60 ? 1 : 0);
     snprintf(s_val[KEY_PIPE], sizeof s_val[KEY_PIPE], "%d", c.pipeline ? 1 : 0);
+    snprintf(s_val[KEY_VSYNC], sizeof s_val[KEY_VSYNC], "%d", c.vsync ? 1 : 0);
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -173,6 +176,7 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_FULL] = 1;
     s_have[KEY_FPS60] = 1;
     s_have[KEY_PIPE] = 1;
+    s_have[KEY_VSYNC] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -202,19 +206,21 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# Hor+ is not a setting on this toolkit pin.\n"
                 "# RECOMP_FPS60: 1 = gameplay at 60 FPS. RECOMP_PB_PIPELINE: 1 = the game\n"
                 "# does not wait for the renderer (takes effect on the next launch).\n"
+                "# RECOMP_PRESENT_VSYNC: 1 = wait for the display (no tearing).\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
                 "RECOMP_PRESENT_FILTER=%s\n"
                 "RECOMP_PRESENT_FULLSCREEN=%s\n"
                 "RECOMP_FPS60=%d\n"
-                "RECOMP_PB_PIPELINE=%d\n",
+                "RECOMP_PB_PIPELINE=%d\n"
+                "RECOMP_PRESENT_VSYNC=%d\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
                 video_settings_filter_name(s.filter),
                 video_settings_fullscreen_token(s.borderless),
-                s.fps60 ? 1 : 0, s.pipeline ? 1 : 0) < 0) {
+                s.fps60 ? 1 : 0, s.pipeline ? 1 : 0, s.vsync ? 1 : 0) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -268,6 +274,7 @@ void video_settings_stock(struct video_settings *s)
     s->borderless = 0;
     s->fps60 = 0;
     s->pipeline = 0;
+    s->vsync = 0;
 }
 
 void video_settings_clamp(struct video_settings *s)
@@ -296,6 +303,7 @@ void video_settings_clamp(struct video_settings *s)
         s->borderless = DISPLAY_EXCLUSIVE;
     s->fps60 = s->fps60 ? 1 : 0;
     s->pipeline = s->pipeline ? 1 : 0;
+    s->vsync = s->vsync ? 1 : 0;
 }
 
 int video_settings_aspect_index(const char *name)
@@ -360,6 +368,7 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->borderless = c->fullscreen;
     s->fps60 = c->fps60;
     s->pipeline = c->pipeline;
+    s->vsync = c->vsync;
     video_settings_clamp(s);
 }
 
@@ -373,6 +382,7 @@ const char *video_row_title(int row)
         "Window mode",
         "60 FPS gameplay",
         "Don't wait for renderer",
+        "VSync",
         "Apply",
         "OK",
         "Cancel",
@@ -435,6 +445,9 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
     case VIDEO_ROW_PIPELINE:
         s->pipeline = !s->pipeline;
         return 1;
+    case VIDEO_ROW_VSYNC:
+        s->vsync = !s->vsync;
+        return 1;
     default:
         return 0;
     }
@@ -470,6 +483,9 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_PIPELINE:
         snprintf(buf, n, "%s", s->pipeline ? "On" : "Off");
         break;
+    case VIDEO_ROW_VSYNC:
+        snprintf(buf, n, "%s", s->vsync ? "On" : "Off");
+        break;
     default:
         break;
     }
@@ -498,6 +514,9 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_PIPELINE:
         return "Faster in busy rooms: the game stops waiting for the renderer. "
                "Takes effect the next time you start the game.";
+    case VIDEO_ROW_VSYNC:
+        return "Wait for the display before each frame: no tearing, may add a little delay. "
+               "Changes at once.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:

@@ -26,6 +26,7 @@ struct video_settings {
     int borderless;        /* 0 windowed, 1 borderless, 2 exclusive */
     int fps60;             /* 0/1, RECOMP_FPS60: gameplay at 60 FPS (applies at once) */
     int pipeline;          /* 0/1, RECOMP_PB_PIPELINE: game doesn't wait for the renderer (next launch) */
+    int vsync;             /* 0/1, RECOMP_PRESENT_VSYNC: wait for the display, no tearing (applies at once) */
 };
 
 enum {
@@ -36,6 +37,7 @@ enum {
     VIDEO_ROW_MODE,
     VIDEO_ROW_FPS60,
     VIDEO_ROW_PIPELINE,
+    VIDEO_ROW_VSYNC,
     VIDEO_ROW_APPLY,
     VIDEO_ROW_OK,
     VIDEO_ROW_CANCEL,

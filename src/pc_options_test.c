@@ -306,7 +306,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("ten rows", PC_ROW_COUNT == 10);
+    expect("eleven rows", PC_ROW_COUNT == 11);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -349,6 +349,46 @@ static void test_window_mode_row_has_exclusive(void)
         pulse(PC_PAD_DPAD_DOWN);
     r = pc_options_on_port(0, PC_PAD_A);
     expect("reset leaves exclusive", pc_options_draft()->borderless == 0);
+    pc_options_on_esc();
+}
+
+static void test_vsync_row(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    char buf[64];
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(0);
+    pc_options_on_f10();
+    expect("vsync row is named", strcmp(pc_options_row_title(PC_ROW_VSYNC), "VSync") == 0);
+    while (pc_options_row() != PC_ROW_VSYNC)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_VSYNC, buf, sizeof buf);
+    expect("vsync starts off", strcmp(buf, "Off") == 0 && pc_options_draft()->vsync == 0);
+    r = pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_VSYNC, buf, sizeof buf);
+    expect("right turns vsync on", r.action == PC_ACT_PREVIEW && pc_options_draft()->vsync == 1 && strcmp(buf, "On") == 0);
+    pulse(0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("apply follows vsync", pc_options_row() == PC_ROW_APPLY);
+    while (pc_options_row() != PC_ROW_RESET)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_on_port(0, PC_PAD_A);
+    expect("reset turns vsync off", pc_options_draft()->vsync == 0);
+    pc_options_on_esc();
+
+    pc_options_reset();
+    s.vsync = 1;
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(PC_LOCK_VSYNC);
+    pc_options_on_f10();
+    while (pc_options_row() != PC_ROW_VSYNC)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_VSYNC, buf, sizeof buf);
+    expect("locked vsync says launch script", strstr(buf, "launch script") != NULL);
+    pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    expect("locked vsync does not change", pc_options_draft()->vsync == 1);
     pc_options_on_esc();
 }
 
@@ -403,6 +443,7 @@ int main(void)
 {
     test_start_alone();
     test_speed_rows();
+    test_vsync_row();
     test_window_mode_row_has_exclusive();
     test_chord();
     test_same_poll_chord();
