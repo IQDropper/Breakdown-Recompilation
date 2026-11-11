@@ -306,7 +306,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("eight rows", PC_ROW_COUNT == 8);
+    expect("ten rows", PC_ROW_COUNT == 10);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -352,9 +352,57 @@ static void test_window_mode_row_has_exclusive(void)
     pc_options_on_esc();
 }
 
+static void test_speed_rows(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    char buf[64];
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(0);
+    pc_options_on_f10();
+    expect("speed rows are named",
+           strcmp(pc_options_row_title(PC_ROW_FPS60), "60 FPS gameplay") == 0
+           && strcmp(pc_options_row_title(PC_ROW_PIPELINE), "Don't wait for renderer") == 0);
+    while (pc_options_row() != PC_ROW_FPS60)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_FPS60, buf, sizeof buf);
+    expect("60 FPS starts off", strcmp(buf, "Off") == 0 && pc_options_draft()->fps60 == 0);
+    r = pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_FPS60, buf, sizeof buf);
+    expect("right turns 60 FPS on",
+           r.action == PC_ACT_PREVIEW && pc_options_draft()->fps60 == 1 && strcmp(buf, "On") == 0);
+    pulse(0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("next row is the renderer setting", pc_options_row() == PC_ROW_PIPELINE);
+    r = pc_options_on_port(0, PC_PAD_DPAD_LEFT);
+    expect("left toggles it too", r.action == PC_ACT_PREVIEW && pc_options_draft()->pipeline == 1);
+    pulse(0);
+    while (pc_options_row() != PC_ROW_RESET)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_on_port(0, PC_PAD_A);
+    expect("reset turns both off", pc_options_draft()->fps60 == 0 && pc_options_draft()->pipeline == 0);
+    pc_options_on_esc();
+
+    /* A launch-script value locks the row. */
+    pc_options_reset();
+    s.fps60 = 1;
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(PC_LOCK_FPS60);
+    pc_options_on_f10();
+    while (pc_options_row() != PC_ROW_FPS60)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_FPS60, buf, sizeof buf);
+    expect("locked 60 FPS says launch script", strstr(buf, "launch script") != NULL);
+    r = pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    expect("locked 60 FPS does not change", pc_options_draft()->fps60 == 1);
+    pc_options_on_esc();
+}
+
 int main(void)
 {
     test_start_alone();
+    test_speed_rows();
     test_window_mode_row_has_exclusive();
     test_chord();
     test_same_poll_chord();

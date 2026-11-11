@@ -169,6 +169,10 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     }
 
     o->fullscreen = choose_fullscreen(env_get(get, "RECOMP_PRESENT_FULLSCREEN"));
+    s = env_get(get, "RECOMP_FPS60");
+    o->fps60 = s && s[0] == '1';
+    s = env_get(get, "RECOMP_PB_PIPELINE");
+    o->pipeline = s && s[0] == '1';
 }
 
 #if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
@@ -234,6 +238,20 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
         *h = ch;
 }
 
+static const char *const s_speed_keys[] = { "RECOMP_FPS60", "RECOMP_PB_PIPELINE" };
+static int s_speed_from_launch[2];
+
+int display_host_launch_set(const char *key)
+{
+    size_t k;
+    const char *e;
+    for (k = 0; k < sizeof s_speed_keys / sizeof s_speed_keys[0]; k++)
+        if (key && strcmp(key, s_speed_keys[k]) == 0)
+            return s_speed_from_launch[k];
+    e = key ? getenv(key) : NULL;
+    return e && e[0];
+}
+
 void display_host_init(void)
 {
     struct display_choice c;
@@ -251,6 +269,18 @@ void display_host_init(void)
     /* Real environment first. video_config_getenv is the file, and it
      * returns char * so it matches display_getenv_fn on mingw. */
     display_host_set_sources(getenv, video_config_getenv);
+    /* The two speed settings are read with getenv by the 60 FPS override (src/recomp_manual.c)
+     * and by the toolkit (patch_pb_pipeline.py), which starts after this. A value saved in the
+     * file reaches them here, unless a real environment variable is already set. */
+    {
+        size_t k;
+        for (k = 0; k < sizeof s_speed_keys / sizeof s_speed_keys[0]; k++) {
+            const char *e = getenv(s_speed_keys[k]), *f = video_config_getenv(s_speed_keys[k]);
+            s_speed_from_launch[k] = e && e[0];
+            if (!s_speed_from_launch[k] && f && f[0])
+                _putenv_s(s_speed_keys[k], f);
+        }
+    }
 
     /* Address is NULL when the patched backend is not in this link. */
     if (&breakdown_display_window_size_hook)

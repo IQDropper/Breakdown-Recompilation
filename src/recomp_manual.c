@@ -355,9 +355,10 @@ void sub_00021C50(void)
 {
     int32_t want = (int32_t)MEM32(g_esp + 4);
     uint32_t v = want <= 0 ? 1u : want >= 4 ? 4u : (uint32_t)want;   /* the original clamp */
+    /* Recorded even when off, so the PC options page can switch 60 FPS on mid-game. */
+    s_fps60_game_iv = v;
+    s_fps60_last_read = GetTickCount();   /* start quiet-timing from here: the load follows this call */
     if (fps60_on()) {
-        s_fps60_game_iv = v;
-        s_fps60_last_read = GetTickCount();   /* start quiet-timing from here: the load follows this call */
         fprintf(stderr, "[FPS60] SetFrameInterval(%d) from 0x%08X; kept until reads go quiet\n", (int)want, MEM32(g_esp));
         fflush(stderr);
     }
@@ -369,8 +370,25 @@ void sub_00021C50(void)
 /* BOOL ReadFile(...) @ 0x1AAF3E (XAPI): note the time, then the original. */
 void sub_001AAF3E(void)
 {
-    if (s_fps60 == 1) { s_fps60_last_read = GetTickCount(); s_fps60_reads++; }
+    s_fps60_last_read = GetTickCount();
+    s_fps60_reads++;
     sub_001AAF3E_gen();
+}
+
+/* The PC options page (src/pc_options_host.c): 60 FPS gameplay on or off now. Off puts the game's own
+ * interval back at once; on lets the vblank callback below drop it to 1 once file reads are quiet. */
+void breakdown_fps60_set(int on)
+{
+    int was;
+    (void)fps60_on();   /* settle the startup value first */
+    was = s_fps60;
+    s_fps60 = on ? 1 : 0;
+    if (was == s_fps60)
+        return;
+    if (!s_fps60 && s_fps60_game_iv > 1u && MEM32(0x434F60) != s_fps60_game_iv)
+        MEM32(0x434F60) = s_fps60_game_iv;
+    fprintf(stderr, "[FPS60] %s from the PC options page\n", s_fps60 ? "on" : "off");
+    fflush(stderr);
 }
 
 /* The vblank callback @ 0x18C880 (++0x434F90): the original, then pick this frame interval. */

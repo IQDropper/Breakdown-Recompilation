@@ -31,10 +31,11 @@ static unsigned merged(void)
 
 static int lock_for_row(int row)
 {
-    static const unsigned bits[5] = {
-        PC_LOCK_SCALE, PC_LOCK_WINDOW, PC_LOCK_ASPECT, PC_LOCK_FILTER, PC_LOCK_MODE
+    static const unsigned bits[7] = {
+        PC_LOCK_SCALE, PC_LOCK_WINDOW, PC_LOCK_ASPECT, PC_LOCK_FILTER, PC_LOCK_MODE,
+        PC_LOCK_FPS60, PC_LOCK_PIPE
     };
-    if (row < 0 || row > PC_ROW_MODE)
+    if (row < 0 || row > PC_ROW_PIPELINE)
         return 0;
     return (s_locks & bits[row]) != 0;
 }
@@ -84,7 +85,7 @@ static void move_row(int dir)
 static int nudge(int dir, struct pc_pad_result *r)
 {
     int video_row;
-    if (s_row > PC_ROW_MODE || !dir)
+    if (s_row > PC_ROW_PIPELINE || !dir)
         return 0;
     if (lock_for_row(s_row)) {
         set_status("Launch script owns this row. It overrides the file.");
@@ -126,6 +127,10 @@ static void activate(struct pc_pad_result *r)
         s_draft.filter = stock.filter;
     if (!lock_for_row(PC_ROW_MODE))
         s_draft.borderless = stock.borderless;
+    if (!lock_for_row(PC_ROW_FPS60))
+        s_draft.fps60 = stock.fps60;
+    if (!lock_for_row(PC_ROW_PIPELINE))
+        s_draft.pipeline = stock.pipeline;
     video_settings_clamp(&s_draft);
     set_status("Stock preview. Apply writes it. Revert restores the last applied settings.");
     r->action = PC_ACT_PREVIEW;
@@ -335,6 +340,8 @@ const char *pc_options_row_title(int row)
         "Aspect",
         "Present filter",
         "Window mode",
+        "60 FPS gameplay",
+        "Don't wait for renderer",
         "Apply",
         "Reset",
         "Revert",
@@ -350,7 +357,7 @@ void pc_options_row_value(int row, char *buf, size_t n)
     if (!buf || n == 0)
         return;
     buf[0] = 0;
-    if (row < 0 || row > PC_ROW_MODE)
+    if (row < 0 || row > PC_ROW_PIPELINE)
         return;
     video_settings_value(&s_draft, row, raw, sizeof raw);
     if (lock_for_row(row))

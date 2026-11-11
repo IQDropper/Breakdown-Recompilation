@@ -32,6 +32,8 @@ struct display_choice {
     int      filter_promoted;  /* nearest would not letterbox at scale 1 */
     char     aspect[8];        /* "4:3", "16:9", "16:10", "21:9" */
     char     filter_name[12];
+    int      fps60;            /* RECOMP_FPS60=1: gameplay at 60 FPS */
+    int      pipeline;         /* RECOMP_PB_PIPELINE=1: game doesn't wait for the renderer */
 };
 
 /* Same type as getenv (char *getenv(const char *)). A const-returning
@@ -50,6 +52,10 @@ char *display_getenv_layered(const char *name);
 /* After recomp_env_init, before the guest. Sets nv2a_host_opts, and the
  * optional D3D11 window hook when the toolkit patch defined it. */
 void display_host_init(void);
+/* 1 when the launch environment (not breakdown_video.cfg) set this key before display_host_init.
+ * display_host_init copies the file's RECOMP_FPS60 / RECOMP_PB_PIPELINE into the environment so
+ * getenv readers see them; the PC options page uses this to lock only real launch-script values. */
+int display_host_launch_set(const char *key);
 
 /* Defined by patch_d3d11_exclusive.py. Weak on mingw-clang: an unpatched
  * toolkit leaves the address NULL and exclusive falls back to borderless.

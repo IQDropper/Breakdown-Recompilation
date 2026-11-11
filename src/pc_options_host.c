@@ -44,6 +44,7 @@ static char b_window[8];
 static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
+static char b_fps60[2], b_pipe[2];
 
 struct pc_apply {
     int action;
@@ -79,6 +80,9 @@ static void unlock(void)
     LeaveCriticalSection(&s_lock);
 }
 
+/* src/recomp_manual.c: switch 60 FPS gameplay on or off now. */
+extern void breakdown_fps60_set(int on);
+
 static unsigned env_locks(void)
 {
     unsigned mask = 0;
@@ -93,6 +97,9 @@ static unsigned env_locks(void)
     if (v && v[0]) mask |= PC_LOCK_FILTER;
     v = getenv("RECOMP_PRESENT_FULLSCREEN");
     if (v && v[0]) mask |= PC_LOCK_MODE;
+    /* These two are copied from the file into the environment at startup; lock only launch values. */
+    if (display_host_launch_set("RECOMP_FPS60")) mask |= PC_LOCK_FPS60;
+    if (display_host_launch_set("RECOMP_PB_PIPELINE")) mask |= PC_LOCK_PIPE;
     return mask;
 }
 
@@ -148,6 +155,8 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_DISPLAY_ASPECT") == 0) return b_aspect;
     if (strcmp(name, "RECOMP_PRESENT_FILTER") == 0) return b_filter;
     if (strcmp(name, "RECOMP_PRESENT_FULLSCREEN") == 0) return b_full;
+    if (strcmp(name, "RECOMP_FPS60") == 0) return b_fps60;
+    if (strcmp(name, "RECOMP_PB_PIPELINE") == 0) return b_pipe;
     return NULL;
 }
 
@@ -160,6 +169,8 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_aspect, sizeof b_aspect, "%s", video_settings_aspect_name(c.aspect));
     snprintf(b_filter, sizeof b_filter, "%s", video_settings_filter_name(c.filter));
     snprintf(b_full, sizeof b_full, "%s", video_settings_fullscreen_token(c.borderless));
+    snprintf(b_fps60, sizeof b_fps60, "%d", c.fps60 ? 1 : 0);
+    snprintf(b_pipe, sizeof b_pipe, "%d", c.pipeline ? 1 : 0);
 }
 
 static int style_is_borderless(HWND hwnd)
@@ -296,6 +307,7 @@ static int apply_live(const struct video_settings *s, int restyle)
     bind_settings(s);
     display_host_choose(bound_get, &c);
     request_opts(&c);
+    breakdown_fps60_set(s->fps60);   /* 60 FPS switches at once; the renderer setting waits for a restart */
     if (restyle && have)
         resize_game(&c);
     else if (!have)
@@ -440,11 +452,22 @@ static unsigned bit_for_vk(WPARAM vk, int open)
     return 0;
 }
 
+/* What the page last drew. The game polls the pad every frame, so a "nothing happened" poll used to
+ * redraw the whole page ~60 times a second, straight to the screen: the overlay flashed. Now such a poll
+ * redraws only when the row or the status line moved; value changes come through PC_ACT_PREVIEW. */
+static int s_painted_row = -1;
+static char s_painted_status[160];
+
 static void note_result(const struct pc_pad_result *r, int restyle)
 {
     const struct video_settings *src;
     if (!r || r->action == PC_ACT_NONE) {
-        if (s_page)
+        int changed;
+        lock();
+        changed = pc_options_row() != s_painted_row
+                  || strncmp(pc_options_status(), s_painted_status, sizeof s_painted_status - 1) != 0;
+        unlock();
+        if (changed && s_page)
             InvalidateRect(s_page, NULL, FALSE);
         return;
     }
@@ -531,7 +554,7 @@ static void paint_page(HDC hdc, const RECT *rc)
     char values[PC_ROW_COUNT][48];
     char status[160];
     char detail[240];
-    int row, open, i, y;
+    int row, open, i, y, row_step;
     RECT line;
     HBRUSH bg, hi;
 
@@ -539,11 +562,13 @@ static void paint_page(HDC hdc, const RECT *rc)
     open = pc_options_is_open();
     row = pc_options_row();
     snprintf(status, sizeof status, "%s", pc_options_status());
+    s_painted_row = row;
+    snprintf(s_painted_status, sizeof s_painted_status, "%s", status);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         snprintf(titles[i], sizeof titles[i], "%s", pc_options_row_title(i));
         pc_options_row_value(i, values[i], sizeof values[i]);
     }
-    if (row <= PC_ROW_MODE)
+    if (row <= PC_ROW_PIPELINE)
         snprintf(detail, sizeof detail, "%s", video_row_detail(pc_options_draft(), row));
     else if (row == PC_ROW_APPLY)
         snprintf(detail, sizeof detail, "%s", "Write breakdown_video.cfg beside the exe. This page stays open.");
@@ -573,13 +598,20 @@ static void paint_page(HDC hdc, const RECT *rc)
     DrawTextA(hdc, "Host overlay on the 4:3 picture. Not drawn into the frame.",
               -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     hi = CreateSolidBrush(COL_ROW);
+    /* 28 px a row when it fits above the detail and status lines; tighter in a small window. */
+    row_step = 28;
+    if (64 + PC_ROW_COUNT * row_step > rc->bottom - 62) {
+        row_step = (rc->bottom - 62 - 64) / PC_ROW_COUNT;
+        if (row_step < 18)
+            row_step = 18;
+    }
     for (i = 0; i < PC_ROW_COUNT; i++) {
         RECT rowrc;
-        y = 64 + i * 28;
+        y = 64 + i * row_step;
         rowrc.left = 10;
         rowrc.top = y;
         rowrc.right = rc->right - 10;
-        rowrc.bottom = y + 26;
+        rowrc.bottom = y + row_step - 2;
         if (i == row)
             FillRect(hdc, &rowrc, hi);
         SetTextColor(hdc, i == row ? COL_TEXT : COL_DIM);
@@ -613,8 +645,24 @@ static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
         RECT rc;
+        HDC mem;
+        HBITMAP bmp, old;
         GetClientRect(hwnd, &rc);
-        paint_page(hdc, &rc);
+        /* Off-screen first, then one copy: no half-drawn page between the clear and the text. */
+        mem = CreateCompatibleDC(hdc);
+        bmp = mem ? CreateCompatibleBitmap(hdc, rc.right - rc.left, rc.bottom - rc.top) : NULL;
+        if (mem && bmp) {
+            old = (HBITMAP)SelectObject(mem, bmp);
+            paint_page(mem, &rc);
+            BitBlt(hdc, 0, 0, rc.right - rc.left, rc.bottom - rc.top, mem, 0, 0, SRCCOPY);
+            SelectObject(mem, old);
+        } else {
+            paint_page(hdc, &rc);
+        }
+        if (bmp)
+            DeleteObject(bmp);
+        if (mem)
+            DeleteDC(mem);
         EndPaint(hwnd, &ps);
         return 0;
     }
