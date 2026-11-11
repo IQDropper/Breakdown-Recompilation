@@ -13,6 +13,7 @@
 
 #include "pc_options_host.h"
 #include "video_config.h"
+#include "a11y_input.h"
 #include "display_host.h"
 #include "kernel/nv2a_backend_common.h"
 
@@ -45,6 +46,7 @@ static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
 static char b_fps60[2], b_pipe[2], b_vsync[2];
+static char b_repeat[8], b_toggle[8];   /* a11y_input.h tokens: "abxy", "both", ... */
 
 struct pc_apply {
     int action;
@@ -85,6 +87,8 @@ extern void breakdown_fps60_set(int on);
 /* patch_d3d11_vsync.py: Present's sync interval, live. Weak: an unpatched toolkit leaves it NULL and VSync then
  * changes on the next launch (RECOMP_PRESENT_VSYNC is read at startup). */
 extern void nv2a_d3d11_set_vsync(int on) __attribute__((weak));
+/* src/recomp_manual.c: hold to repeat / hold toggle (A11Y-2/3), A11Y_REPEAT_* / A11Y_TOGGLE_*, live. */
+extern void breakdown_a11y_set(int repeat_choice, int toggle_choice);
 
 static unsigned env_locks(void)
 {
@@ -104,6 +108,8 @@ static unsigned env_locks(void)
     if (display_host_launch_set("RECOMP_FPS60")) mask |= PC_LOCK_FPS60;
     if (display_host_launch_set("RECOMP_PB_PIPELINE")) mask |= PC_LOCK_PIPE;
     if (display_host_launch_set("RECOMP_PRESENT_VSYNC")) mask |= PC_LOCK_VSYNC;
+    if (display_host_launch_set("RECOMP_A11Y_REPEAT")) mask |= PC_LOCK_REPEAT;
+    if (display_host_launch_set("RECOMP_A11Y_TOGGLE")) mask |= PC_LOCK_TOGGLE;
     return mask;
 }
 
@@ -162,6 +168,8 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_FPS60") == 0) return b_fps60;
     if (strcmp(name, "RECOMP_PB_PIPELINE") == 0) return b_pipe;
     if (strcmp(name, "RECOMP_PRESENT_VSYNC") == 0) return b_vsync;
+    if (strcmp(name, "RECOMP_A11Y_REPEAT") == 0) return b_repeat;
+    if (strcmp(name, "RECOMP_A11Y_TOGGLE") == 0) return b_toggle;
     return NULL;
 }
 
@@ -177,6 +185,8 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_fps60, sizeof b_fps60, "%d", c.fps60 ? 1 : 0);
     snprintf(b_pipe, sizeof b_pipe, "%d", c.pipeline ? 1 : 0);
     snprintf(b_vsync, sizeof b_vsync, "%d", c.vsync ? 1 : 0);
+    snprintf(b_repeat, sizeof b_repeat, "%s", a11y_repeat_token(c.a11y_repeat));
+    snprintf(b_toggle, sizeof b_toggle, "%s", a11y_toggle_token(c.a11y_toggle));
 }
 
 static int style_is_borderless(HWND hwnd)
@@ -314,6 +324,7 @@ static int apply_live(const struct video_settings *s, int restyle)
     display_host_choose(bound_get, &c);
     request_opts(&c);
     breakdown_fps60_set(s->fps60);   /* 60 FPS switches at once; the renderer setting waits for a restart */
+    breakdown_a11y_set(s->a11y_repeat, s->a11y_toggle);
     if (nv2a_d3d11_set_vsync) {
         static int s_vs = -1;
         nv2a_d3d11_set_vsync(s->vsync);
@@ -583,7 +594,7 @@ static void paint_page(HDC hdc, const RECT *rc)
         snprintf(titles[i], sizeof titles[i], "%s", pc_options_row_title(i));
         pc_options_row_value(i, values[i], sizeof values[i]);
     }
-    if (row <= PC_ROW_VSYNC)
+    if (row <= PC_ROW_LAST_SETTING)
         snprintf(detail, sizeof detail, "%s", video_row_detail(pc_options_draft(), row));
     else if (row == PC_ROW_APPLY)
         snprintf(detail, sizeof detail, "%s", "Write breakdown_video.cfg beside the exe. This page stays open.");

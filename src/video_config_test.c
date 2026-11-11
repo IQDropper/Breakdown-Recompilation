@@ -6,6 +6,7 @@
  */
 #include "display_host.h"
 #include "video_config.h"
+#include "a11y_input.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,6 +77,8 @@ static void test_roundtrip(void)
     s.fps60 = 1;
     s.pipeline = 1;
     s.vsync = 1;
+    s.a11y_repeat = A11Y_REPEAT_FACE;
+    s.a11y_toggle = A11Y_TOGGLE_LT;
     expect("save", video_config_save(path, &s) == 0);
     video_config_reset();
     expect("saved cleared", video_config_getenv("RECOMP_RENDER_SCALE") == NULL);
@@ -97,10 +100,18 @@ static void test_roundtrip(void)
     expect("loaded vsync",
            video_config_getenv("RECOMP_PRESENT_VSYNC")
            && strcmp(video_config_getenv("RECOMP_PRESENT_VSYNC"), "1") == 0);
+    expect("loaded hold to repeat",
+           video_config_getenv("RECOMP_A11Y_REPEAT")
+           && strcmp(video_config_getenv("RECOMP_A11Y_REPEAT"), "abxy") == 0);
+    expect("loaded hold toggle",
+           video_config_getenv("RECOMP_A11Y_TOGGLE")
+           && strcmp(video_config_getenv("RECOMP_A11Y_TOGGLE"), "lt") == 0);
     display_host_set_sources(env_empty, video_config_getenv);
     display_host_choose(display_getenv_layered, &c);
     video_settings_from_choice(&c, &loaded);
     expect("roundtrip vsync", loaded.vsync == 1 && c.vsync == 1);
+    expect("roundtrip hold to repeat", loaded.a11y_repeat == A11Y_REPEAT_FACE && c.a11y_repeat == A11Y_REPEAT_FACE);
+    expect("roundtrip hold toggle", loaded.a11y_toggle == A11Y_TOGGLE_LT && c.a11y_toggle == A11Y_TOGGLE_LT);
     expect("roundtrip scale", loaded.render_scale == 2 && loaded.window_scale == 3);
     expect("roundtrip aspect", loaded.aspect == s.aspect && loaded.filter == 2);
     expect("roundtrip borderless", loaded.borderless == 1);
@@ -153,6 +164,36 @@ static void test_parse(void)
     expect("clamped bad window", c.window_clamped && c.window_w == 768 && c.window_h == 480);
     expect("parsed aspect", strcmp(c.aspect, "16:10") == 0 && c.render_scale == 2);
     expect("parsed filter", c.present_filter == 1 && c.fullscreen == 0);
+    remove(path);
+}
+
+/* A11Y-2/3: off unless the file says otherwise; bad values are off. */
+static void test_a11y_defaults(void)
+{
+    struct display_choice c;
+    struct video_settings s;
+    const char *path = "video_config_a11y.cfg";
+    video_settings_stock(&s);
+    expect("stock: hold to repeat off", s.a11y_repeat == A11Y_REPEAT_OFF);
+    expect("stock: hold toggle off", s.a11y_toggle == A11Y_TOGGLE_OFF);
+    s.a11y_repeat = 42;
+    s.a11y_toggle = -3;
+    video_settings_clamp(&s);
+    expect("clamp: bad hold values are off", s.a11y_repeat == A11Y_REPEAT_OFF && s.a11y_toggle == A11Y_TOGGLE_OFF);
+    expect("nudge: repeat cycles", video_settings_nudge(&s, VIDEO_ROW_REPEAT, 1) && s.a11y_repeat == A11Y_REPEAT_A);
+    expect("nudge: toggle wraps back", video_settings_nudge(&s, VIDEO_ROW_TOGGLE, -1) && s.a11y_toggle == A11Y_TOGGLE_BOTH);
+
+    expect("write old file", write_text(path, "RECOMP_RENDER_SCALE=2\n") == 0);
+    expect("load old file", video_config_load(path) == 1);
+    display_host_set_sources(env_empty, video_config_getenv);
+    display_host_choose(display_getenv_layered, &c);
+    expect("old file: holds off", c.a11y_repeat == A11Y_REPEAT_OFF && c.a11y_toggle == A11Y_TOGGLE_OFF);
+
+    expect("write odd file", write_text(path, "RECOMP_A11Y_REPEAT=turbo\nRECOMP_A11Y_TOGGLE= RT \n") == 0);
+    expect("load odd file", video_config_load(path) == 1);
+    display_host_choose(display_getenv_layered, &c);
+    expect("unknown repeat is off", c.a11y_repeat == A11Y_REPEAT_OFF);
+    expect("trimmed upper-case RT is right trigger", c.a11y_toggle == A11Y_TOGGLE_RT);
     remove(path);
 }
 
@@ -352,6 +393,7 @@ int main(void)
     test_precedence();
     test_promote_from_partial_file();
     test_menu_model();
+    test_a11y_defaults();
     if (g_fail) {
         fprintf(stderr, "%d failed\n", g_fail);
         return 1;

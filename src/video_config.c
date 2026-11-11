@@ -5,6 +5,7 @@
  * This file only stores the strings and the labels the menu shows.
  */
 #include "video_config.h"
+#include "a11y_input.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +26,8 @@ enum {
     KEY_FPS60,
     KEY_PIPE,
     KEY_VSYNC,
+    KEY_REPEAT,
+    KEY_TOGGLE,
     KEY_COUNT
 };
 
@@ -37,6 +40,8 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_FPS60",
     "RECOMP_PB_PIPELINE",
     "RECOMP_PRESENT_VSYNC",
+    "RECOMP_A11Y_REPEAT",
+    "RECOMP_A11Y_TOGGLE",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -169,6 +174,8 @@ static void store_settings(const struct video_settings *s)
     snprintf(s_val[KEY_FPS60], sizeof s_val[KEY_FPS60], "%d", c.fps60 ? 1 : 0);
     snprintf(s_val[KEY_PIPE], sizeof s_val[KEY_PIPE], "%d", c.pipeline ? 1 : 0);
     snprintf(s_val[KEY_VSYNC], sizeof s_val[KEY_VSYNC], "%d", c.vsync ? 1 : 0);
+    snprintf(s_val[KEY_REPEAT], sizeof s_val[KEY_REPEAT], "%s", a11y_repeat_token(c.a11y_repeat));
+    snprintf(s_val[KEY_TOGGLE], sizeof s_val[KEY_TOGGLE], "%s", a11y_toggle_token(c.a11y_toggle));
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -177,6 +184,8 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_FPS60] = 1;
     s_have[KEY_PIPE] = 1;
     s_have[KEY_VSYNC] = 1;
+    s_have[KEY_REPEAT] = 1;
+    s_have[KEY_TOGGLE] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -207,6 +216,9 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# RECOMP_FPS60: 1 = gameplay at 60 FPS. RECOMP_PB_PIPELINE: 1 = the game\n"
                 "# does not wait for the renderer (takes effect on the next launch).\n"
                 "# RECOMP_PRESENT_VSYNC: 1 = wait for the display (no tearing).\n"
+                "# RECOMP_A11Y_REPEAT: off, a, b, x, y or abxy = holding that button presses\n"
+                "# it 10 times a second. RECOMP_A11Y_TOGGLE: off, rt, lt or both = one press\n"
+                "# of that trigger holds it, the next press lets go.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
@@ -214,13 +226,16 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "RECOMP_PRESENT_FULLSCREEN=%s\n"
                 "RECOMP_FPS60=%d\n"
                 "RECOMP_PB_PIPELINE=%d\n"
-                "RECOMP_PRESENT_VSYNC=%d\n",
+                "RECOMP_PRESENT_VSYNC=%d\n"
+                "RECOMP_A11Y_REPEAT=%s\n"
+                "RECOMP_A11Y_TOGGLE=%s\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
                 video_settings_filter_name(s.filter),
                 video_settings_fullscreen_token(s.borderless),
-                s.fps60 ? 1 : 0, s.pipeline ? 1 : 0, s.vsync ? 1 : 0) < 0) {
+                s.fps60 ? 1 : 0, s.pipeline ? 1 : 0, s.vsync ? 1 : 0,
+                a11y_repeat_token(s.a11y_repeat), a11y_toggle_token(s.a11y_toggle)) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -275,6 +290,8 @@ void video_settings_stock(struct video_settings *s)
     s->fps60 = 0;
     s->pipeline = 0;
     s->vsync = 0;
+    s->a11y_repeat = A11Y_REPEAT_OFF;
+    s->a11y_toggle = A11Y_TOGGLE_OFF;
 }
 
 void video_settings_clamp(struct video_settings *s)
@@ -304,6 +321,10 @@ void video_settings_clamp(struct video_settings *s)
     s->fps60 = s->fps60 ? 1 : 0;
     s->pipeline = s->pipeline ? 1 : 0;
     s->vsync = s->vsync ? 1 : 0;
+    if (s->a11y_repeat < 0 || s->a11y_repeat >= A11Y_REPEAT_COUNT)
+        s->a11y_repeat = A11Y_REPEAT_OFF;
+    if (s->a11y_toggle < 0 || s->a11y_toggle >= A11Y_TOGGLE_COUNT)
+        s->a11y_toggle = A11Y_TOGGLE_OFF;
 }
 
 int video_settings_aspect_index(const char *name)
@@ -369,6 +390,8 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->fps60 = c->fps60;
     s->pipeline = c->pipeline;
     s->vsync = c->vsync;
+    s->a11y_repeat = c->a11y_repeat;
+    s->a11y_toggle = c->a11y_toggle;
     video_settings_clamp(s);
 }
 
@@ -383,6 +406,8 @@ const char *video_row_title(int row)
         "60 FPS gameplay",
         "Don't wait for renderer",
         "VSync",
+        "Hold to repeat",
+        "Hold toggle",
         "Apply",
         "OK",
         "Cancel",
@@ -448,6 +473,14 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
     case VIDEO_ROW_VSYNC:
         s->vsync = !s->vsync;
         return 1;
+    case VIDEO_ROW_REPEAT:
+        before = s->a11y_repeat;
+        s->a11y_repeat = wrap_index(s->a11y_repeat, A11Y_REPEAT_COUNT, dir);
+        return s->a11y_repeat != before;
+    case VIDEO_ROW_TOGGLE:
+        before = s->a11y_toggle;
+        s->a11y_toggle = wrap_index(s->a11y_toggle, A11Y_TOGGLE_COUNT, dir);
+        return s->a11y_toggle != before;
     default:
         return 0;
     }
@@ -486,6 +519,12 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_VSYNC:
         snprintf(buf, n, "%s", s->vsync ? "On" : "Off");
         break;
+    case VIDEO_ROW_REPEAT:
+        snprintf(buf, n, "%s", a11y_repeat_label(s->a11y_repeat));
+        break;
+    case VIDEO_ROW_TOGGLE:
+        snprintf(buf, n, "%s", a11y_toggle_label(s->a11y_toggle));
+        break;
     default:
         break;
     }
@@ -517,6 +556,12 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_VSYNC:
         return "Wait for the display before each frame: no tearing, may add a little delay. "
                "Changes at once.";
+    case VIDEO_ROW_REPEAT:
+        return "Hold a button instead of tapping it fast: the game sees 10 presses a second "
+               "while you hold it. Keys mapped to it work too. Changes at once.";
+    case VIDEO_ROW_TOGGLE:
+        return "Press a trigger once and it stays held; press it again to let go. "
+               "No long holds needed. Changes at once.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:
