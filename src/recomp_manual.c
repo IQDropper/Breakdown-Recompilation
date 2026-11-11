@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Manual function overrides and ICALL diagnostics
  *
  * This file provides:
@@ -25,7 +25,7 @@
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
 
-/* ── ICALL trace ring buffer ───────────────────────────────── */
+/* â”€â”€ ICALL trace ring buffer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /*
  * These globals are written by the RECOMP_ICALL macro (defined in
@@ -47,12 +47,12 @@ extern volatile uint64_t g_icall_count;
 
 typedef void (*recomp_func_t)(void);
 
-/* ── Register state (defined in xbox_memory_layout.c) ──────── */
+/* â”€â”€ Register state (defined in xbox_memory_layout.c) â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* g_eax: declared thread-local by recomp_types.h (a plain extern here would name the wrong copy) */
 extern ptrdiff_t g_xbox_mem_offset;
 
-/* ── Manual function overrides ─────────────────────────────── */
+/* â”€â”€ Manual function overrides â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /*
  * Return a function pointer to override the given Xbox VA, or NULL
@@ -102,7 +102,7 @@ recomp_func_t recomp_lookup_manual(uint32_t xbox_va)
     return (recomp_func_t)0;
 }
 
-/* ── ICALL failure logging ─────────────────────────────────── */
+/* â”€â”€ ICALL failure logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /*
  * Called when RECOMP_ICALL cannot resolve a target address.
@@ -176,7 +176,7 @@ void recomp_icall_not_code_log(uint32_t va)
     fflush(stderr);
 }
 
-/* ── Untranslated instructions ───────────────────────────────────────────
+/* â”€â”€ Untranslated instructions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
  *
  * The lifter emits RECOMP_UNIMPL(text, va) at every instruction it has no
  * translation for, in place of the bare comment it used to leave. The
@@ -963,40 +963,40 @@ void sub_000258D0(void)
     sub_000258D0_gen();
 }
 
-/* EVENT_DEBUG draw @ 0x25AD0. Start toggles its debug pause, but the game's normal pause handler sees the
- * same Start and ends it in the same frame (seen: USER PAUSE / USER PAUSE END together). F7 toggles that pause
- * directly instead (0x21C00 = paused?, 0x21B90 = pause, 0x21BB0 = resume); while paused the page draws. */
-extern void sub_00025AD0_gen(void);
-extern void sub_00021C00(void);
-extern void sub_00021B90(void);
-extern void sub_00021BB0(void);
-static void call0(void (*fn)(void))
+/* In-game Debug Mode Select = the EVENT_DEBUG task's draw (0x25AD0); it shows while the game is paused. Its own
+ * Start toggles that pause, but the game task's pause handler sees the same Start and ends it in the same frame
+ * (seen: USER PAUSE / USER PAUSE END together), so it never shows. F7 is a Start press that only the game task
+ * (0x1C130) sees: it reads Start from the pad block at 0x29BEB0 (+4 = pressed), the page from 0x2988F0. The game
+ * task then pauses and unpauses through its own path (calling 0x21B90/0x21BB0 directly worked, but skipped
+ * 0x11770 and left the pause menu's help line on screen in play, following the keys). */
+extern void sub_0001C130_gen(void);
+void sub_0001C130(void)
 {
-    uint32_t save = g_esp;
-    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
-    fn();
-    g_esp = save;
-}
-void sub_00025AD0(void)
-{
-    static int s_was7;
+    static int s_was7, s_f7_close;
     int d7 = (GetAsyncKeyState(0x76) & 0x8000) != 0;   /* VK_F7 */
-    if (debug_menu_on() && d7 && !s_was7) {
+    if (debug_menu_on() && d7 && !s_was7 && MEM32(0x2A8DDC)) {
         unsigned long pid = 0;
         GetWindowThreadProcessId(GetForegroundWindow(), &pid);
         if (pid == GetCurrentProcessId()) {
-            uint32_t eax = g_eax, ecx = g_ecx, edx = g_edx;
-            call0(sub_00021C00);
-            if (g_eax == 0 && MEM32(0x2A8DDC))
+            if (MEM32(0x29F6E0) == 0) {
                 MEM32(MEM32(0x2A8DDC) + 0xA8) = 0;   /* open on the switch list (White; Black = value list) */
-            call0(g_eax == 0 ? sub_00021B90 : sub_00021BB0);
-            g_eax = eax; g_ecx = ecx; g_edx = edx;
+                MEM32(0x29BEB4) |= 0x10;             /* Start: pause */
+            } else
+                s_f7_close = 3;   /* paused: the pause menu task (0x1275F0) owns the exit; press B for it */
         }
     }
+    if (s_f7_close > 0) {
+        if (MEM32(0x29F6E0) == 1) {
+            MEM32(0x2988F0) |= 0x200;   /* the pause menu reads 0x2988F0: held, pressed, repeat */
+            MEM32(0x2988F4) |= 0x200;
+            MEM32(0x2988F8) |= 0x200;
+            s_f7_close--;
+        } else
+            s_f7_close = 0;
+    }
     s_was7 = d7;
-    sub_00025AD0_gen();
+    sub_0001C130_gen();
 }
-
 /* Debug Mode Select switches whose code the retail game dropped: "Player NoDamage" (bit 16) and "Player FastMove"
  * (bit 21) of [EVENT_DEBUG task + 0x48]. Nothing in retail reads those bits (only the getters 0x25930..0x25A90
  * exist, for other bits), so they are rebuilt here around the hero's update, 0x3E710 (the TSS_EHP_MAN task;
