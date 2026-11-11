@@ -17,9 +17,10 @@ import io
 P = r'external\xboxrecomp\src\kernel\xbox_memory_layout.c'
 MARK = '[pb-pipeline]'
 MARK2 = '[pb-pipeline-tick]'
+MARK3 = '[pb-pipeline-sema]'
 s = io.open(P, encoding='utf-8', newline='').read()
 nl = '\r\n' if '\r\n' in s else '\n'
-if MARK in s and MARK2 in s:
+if MARK in s and MARK2 in s and MARK3 in s:
     print('already patched'); raise SystemExit
 
 
@@ -66,6 +67,26 @@ if MARK2 not in s:
         '        if (g_kick_pipeline)   /* ' + MARK2 + ' keep 0x400B10 in step while the title waits */',
         '            pgraph_fence_tick((volatile uint32_t *)param);',
         a7]), 'kick thread nap')
+
+# Stage 3 ([pb-pipeline-sema]): with no fence mirror registered (Breakdown registers none), fence_completed() has
+# nothing to read and 0x400B10 never moved. Serially that never mattered: BlockOnTime found the GPU done and returned
+# before D3D's wait-for-idle (0x1C07E0) spun on the register. Pipelined, the walker lags, the wait runs, and it hung.
+# With RECOMP_PB_PIPELINE=1 the register follows the last semaphore release the walker executed, which is the fence
+# word that wait compares against. Without the variable nothing changes.
+if MARK3 not in s:
+    a8 = '    if (!fence_completed(&v))' + nl + '        return;'
+    sub(a8, nl.join([
+        '    if (!fence_completed(&v)) {',
+        '        /* ' + MARK3 + ' no fence mirror: under RECOMP_PB_PIPELINE=1 follow the last semaphore release */',
+        '        extern uint32_t nv2a_pb_exec_semaphore_releases(void);',
+        '        extern uint32_t nv2a_pb_exec_semaphore_last_value(void);',
+        '        if (!g_kick_pipeline || !nv2a_pb_exec_semaphore_releases())',
+        '            return;',
+        '        v = nv2a_pb_exec_semaphore_last_value();',
+        '    }']), 'pgraph_fence_tick fence read')
+    a9 = 'static void pgraph_fence_tick(volatile uint32_t *regs)'
+    sub(a9, 'static int g_kick_pipeline;   /* ' + MARK3 + ' defined below with the KickOff state */' + nl + a9,
+        'pgraph_fence_tick definition')
 
 io.open(P, 'w', encoding='utf-8', newline='').write(s)
 print('patched')
