@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-/* From the hero script bhb_mo_hero (state names SudeTachiAttack1Attack1 ... SudeTachiAttack1andAttack2), in the
+/* From the hero script bhb_mo_hero. Standing chains (SudeTachiAttack1Attack1 ... SudeTachiAttack1andAttack2), in the
  * order a player learns them: two-hit chains, three, four, then the timing variants and both-at-once. */
 static const char *const k_combos[] = {
     "{A1} , {A1}",
@@ -18,6 +18,34 @@ static const char *const k_combos[] = {
     "{A1} , {A1} , {A2}  (fast)",
     "{A2} , {A2} , {A1}  (slow)",
     "{A1} + {A2}",
+    /* Moving (left stick held) and turning: SudeTachi{F,B,L,R}Move1Attack1/2, SudeTachi{L,R}Rotate1Attack1/2,
+     * and the stepping-right chain SudeTachiRMove1Attack2 x2..x6. */
+    "Forward + {A1}",
+    "Forward + {A2}",
+    "Back + {A1}",
+    "Back + {A2}",
+    "Left + {A1}",
+    "Left + {A2}",
+    "Right + {A1}",
+    "Right + {A2}",
+    "Right + {A2} x6",
+    "Turn left + {A1}",
+    "Turn left + {A2}",
+    "Turn right + {A1}",
+    "Turn right + {A2}",
+    /* Crouching (guide12 = Crouch): SudeSyagamiAttack1 x1..x3, SudeSyagamiAttack2, and the Move / Rotate versions
+     * of both (every direction). */
+    "{g12} , {A1}",
+    "{g12} , {A1} , {A1}",
+    "{g12} , {A1} , {A1} , {A1}",
+    "{g12} , {A2}",
+    "{g12} , Move + {A1}",
+    "{g12} , Move + {A2}",
+    "{g12} , Turn + {A1}",
+    "{g12} , Turn + {A2}",
+    /* In the air (guide11 = Jump): KucyuuAttack1 / KucyuuAttack2. */
+    "{g11} , {A1}",
+    "{g11} , {A2}",
 };
 
 int skill_combo_count(void)
