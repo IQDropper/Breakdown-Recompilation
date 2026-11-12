@@ -1125,3 +1125,159 @@ void sub_00048DA0(void)
     }
     sub_00048DA0_gen();
 }
+
+/* ---- Skills list: combo rows (S10.11). RECOMP_SKILL_COMBOS=1 turns it on; =test also adds a row with every
+ * button picture the game has (11..15) so a screenshot shows which is which.
+ * The panel (pause menu > Inventory & Skills > Skills) keeps: +0xC4 scroll, +0xC8 last scroll, +0xCC rows,
+ * +0xCD visible rows (max 5), +0xCE scroll range, +0x44 its layout, +0xB0[5] one text object per visible row.
+ * 0x123C90 sets the rows from story progress (up to 7, text ids 0x107..0x10D); 0x11ECF0 gives row r the text
+ * id 0x107 + scroll + r; 0x11E950 sets the row's gauge; 0x11E7F0 draws the row's picture (7 entries).
+ * Combo rows come after the learned ones and use text ids SKC_ID0.., which 0x1372F0 (text by id) and 0x137630
+ * (its style) answer from our own copy in guest memory. ---- */
+#include "skill_combos.h"
+extern void sub_00123C90_gen(void);
+extern void sub_0011ECF0_gen(void);
+extern void sub_0011E950_gen(void);
+extern void sub_0011E7F0_gen(void);
+extern void sub_001372F0_gen(void);
+extern void sub_00137630_gen(void);
+extern uint32_t xbox_HeapAlloc(uint32_t size, uint32_t alignment);
+#define SKC_ID0     0x7000u
+#define SKC_WORDS   96u
+static int s_skc_mode = -1;   /* 0 off, 1 on, 2 on + test row */
+static int s_skc_learned = 7;  /* the game's own rows in the open panel */
+static int s_skc_rows;         /* our rows */
+static uint32_t s_skc_text;    /* guest copy: s_skc_rows strings of SKC_WORDS words */
+static int skc_mode(void)
+{
+    if (s_skc_mode < 0) {
+        const char *e = getenv("RECOMP_SKILL_COMBOS");
+        s_skc_mode = !e || !*e || *e == '0' ? 0 : (strcmp(e, "test") == 0 ? 2 : 1);
+    }
+    return s_skc_mode;
+}
+static void skc_build(void)
+{
+    /* Seen on screen with the test row (layout 0): guide13 = right trigger = Attack 1, guide14 = left trigger =
+     * Attack 2. The picture follows the player's button layout, as the game's own lines do. */
+    struct skill_combo_pics pics = { 13, 14 };
+    uint16_t buf[SKC_WORDS];
+    int i, n = skill_combo_count() + (skc_mode() == 2);
+    if (s_skc_text)
+        return;
+    s_skc_text = xbox_HeapAlloc((uint32_t)n * SKC_WORDS * 2u, 16);
+    if (!s_skc_text)
+        return;
+    for (i = 0; i < n; i++) {
+        const char *spec = i < skill_combo_count() ? skill_combo_spec(i) : skill_combo_test_spec();
+        size_t w, k = skill_combo_encode(spec, &pics, buf, SKC_WORDS);
+        if (!k) { buf[0] = SC_END; k = 1; }
+        for (w = 0; w < k; w++)
+            MEM16(s_skc_text + (uint32_t)(i * SKC_WORDS + w) * 2u) = buf[w];
+    }
+    s_skc_rows = n;
+    fprintf(stderr, "[SKILLS] %d combo rows ready at 0x%08X\n", n, s_skc_text);
+}
+static int skc_id(uint32_t id)
+{
+    return s_skc_rows && id >= SKC_ID0 && id < SKC_ID0 + (uint32_t)s_skc_rows ? (int)(id - SKC_ID0) : -1;
+}
+static void skc_call(void (*fn)(void), uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, int nargs)
+{
+    uint32_t save = g_esp;
+    if (nargs > 3) { g_esp -= 4; MEM32(g_esp) = a4; }
+    if (nargs > 2) { g_esp -= 4; MEM32(g_esp) = a3; }
+    if (nargs > 1) { g_esp -= 4; MEM32(g_esp) = a2; }
+    if (nargs > 0) { g_esp -= 4; MEM32(g_esp) = a1; }
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused: returns to C) */
+    fn();
+    g_esp = save;
+}
+/* Skills tab opened: the game counts its learned rows; add ours after them. */
+void sub_00123C90(void)
+{
+    uint32_t panel = MEM32(g_esp + 4), ret, ebx = g_ebx, esi = g_esi, edi = g_edi;
+    int learned, total, cd_old, cd, i;
+    sub_00123C90_gen();
+    if (!skc_mode())
+        return;
+    skc_build();
+    if (!s_skc_rows)
+        return;
+    ret = g_eax;
+    learned = (int8_t)MEM8(panel + 0xCC);
+    s_skc_learned = learned < 0 ? 0 : learned;
+    total = s_skc_learned + s_skc_rows;
+    if (total > 120) total = 120;
+    cd_old = (int8_t)MEM8(panel + 0xCD);
+    cd = total < 5 ? total : 5;
+    MEM8(panel + 0xCC) = (uint8_t)total;
+    MEM8(panel + 0xCD) = (uint8_t)cd;
+    MEM8(panel + 0xCE) = (uint8_t)(total - cd);
+    for (i = cd_old < 0 ? 0 : cd_old; i < cd; i++) {   /* show the row slots the game left hidden, as it does */
+        uint32_t slot = 0x1Au + (uint32_t)i;
+        skc_call(sub_0001FE80, 0, 0, 0, 0, 0);
+        if (g_eax != 1)
+            slot = (uint32_t)(int32_t)SMEM16(0x218B30 + slot * 2u);
+        skc_call(sub_00137FF0, MEM32(panel + 0x44), slot, 1, 0, 4);
+        g_eax = (uint32_t)i; g_ecx = panel;
+        skc_call(sub_0011E950, 0, 0, 0, 0, 0);
+    }
+    MEM32(panel + 0xD0) = 1;   /* refresh the row texts */
+    g_eax = ret; g_ebx = ebx; g_esi = esi; g_edi = edi;
+    fprintf(stderr, "[SKILLS] list: %d learned + %d combo rows\n", s_skc_learned, s_skc_rows);
+}
+/* Row text (esi = panel, edi = row): a combo row asks for our id instead of 0x107 + its index. */
+void sub_0011ECF0(void)
+{
+    uint32_t panel = g_esi, scroll;
+    int idx;
+    if (!skc_mode() || !s_skc_rows) { sub_0011ECF0_gen(); return; }
+    scroll = MEM32(panel + 0xC4);
+    idx = (int)scroll + (int)g_edi;
+    if (idx < s_skc_learned) { sub_0011ECF0_gen(); return; }
+    MEM32(panel + 0xC4) = SKC_ID0 + (uint32_t)(idx - s_skc_learned) - 0x107u - g_edi;
+    sub_0011ECF0_gen();
+    MEM32(panel + 0xC4) = scroll;
+}
+/* Row gauge (eax = row, ecx = panel): its table has 7 entries; a combo row uses the first skill's. */
+void sub_0011E950(void)
+{
+    uint32_t panel = g_ecx, scroll;
+    int row = (int)g_eax;
+    if (!skc_mode() || !s_skc_rows) { sub_0011E950_gen(); return; }
+    scroll = MEM32(panel + 0xC4);
+    if ((int)scroll + row < s_skc_learned) { sub_0011E950_gen(); return; }
+    MEM32(panel + 0xC4) = (uint32_t)(-row);
+    sub_0011E950_gen();
+    MEM32(panel + 0xC4) = scroll;
+}
+/* Row picture (arg = row, esi = panel): 7 pictures; a combo row has none. Keep the original's last step. */
+void sub_0011E7F0(void)
+{
+    uint32_t panel = g_esi;
+    int row = (int)MEM32(g_esp + 4);
+    if (skc_mode() && s_skc_rows && (int)MEM32(panel + 0xC8) + row >= s_skc_learned) {
+        MEM32(panel + 0xC8) = MEM32(panel + 0xC4);
+        g_esp += 4;
+        return;
+    }
+    sub_0011E7F0_gen();
+}
+/* Text by id (bank, id) -> pointer to its first code. */
+void sub_001372F0(void)
+{
+    int k = skc_id(MEM32(g_esp + 8));
+    if (k < 0) { sub_001372F0_gen(); return; }
+    g_eax = s_skc_text + (uint32_t)k * SKC_WORDS * 2u;
+    g_esp += 4;
+}
+/* Text style by id (bank, id): ours use the style of the first skill line. */
+void sub_00137630(void)
+{
+    uint32_t id = MEM32(g_esp + 8);
+    if (skc_id(id) < 0) { sub_00137630_gen(); return; }
+    MEM32(g_esp + 8) = 0x107;
+    sub_00137630_gen();   /* pops its return address; the argument slot is the caller's to clean */
+    MEM32(g_esp + 4) = id;
+}
