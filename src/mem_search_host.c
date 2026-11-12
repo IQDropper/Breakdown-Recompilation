@@ -12,6 +12,8 @@
  *   list [N]            print up to N candidates (default 40) with their values
  *   dump ADDR [N]       print N dwords (default 64) from ADDR as hex, int and float
  *   poke ADDR i|f VAL   write one value (to test a guess)
+ *   save ADDR BYTES FILE raw guest memory into FILE (no spaces in the path)
+ *   findstr TEXT        where TEXT sits in RAM (8-bit or UTF-16), with the bytes around it
  *   note TEXT           echo TEXT into the log (marks a step)
  * Addresses are guest (Xbox) addresses in hex; *ADDR[+OFS] follows the pointer stored at
  * ADDR; A>B>C follows a chain (2A92D0>48>10 = [[2A92D0]+48]+10). Reads race the game thread; that is fine for searching.
@@ -217,16 +219,78 @@ static uint32_t addr_of(const char *t)
     return v;
 }
 
+/* findstr TEXT: every place in guest RAM holding TEXT as 8-bit text or UTF-16LE (case-sensitive), up to 40 hits,
+ * each with 16 bytes before it, so the encoding and the record around it can be read. */
+static int s_shifted;   /* findenc: match the letter spacing at any offset (the game's own character codes) */
+static void findstr(const char *text)
+{
+    size_t n = strlen(text), k;
+    uint32_t va = LO_VA;
+    int hits = 0;
+    if (!n || n > 64)
+        return;
+    while (va < HI_VA && hits < 40) {
+        MEMORY_BASIC_INFORMATION mi;
+        uintptr_t host = (uintptr_t)va + g_xbox_mem_offset, end;
+        if (!VirtualQuery((void *)host, &mi, sizeof mi))
+            break;
+        end = (uintptr_t)mi.BaseAddress + mi.RegionSize;
+        if (mi.State == MEM_COMMIT && !(mi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
+            const unsigned char *p = (const unsigned char *)host, *e = (const unsigned char *)end;
+            for (; p + 2 * n <= e && hits < 40; p++) {
+                int wide = 0;
+                if (s_shifted) {
+                    const uint16_t *q = (const uint16_t *)p;
+                    for (k = 1; k < n && (unsigned char)(p[k] - p[0]) == (unsigned char)(text[k] - text[0]); k++) {}
+                    if (k < n || p[0] == (unsigned char)text[0]) {   /* plain text is findstr's job */
+                        if (((uintptr_t)p & 1) != 0)
+                            continue;
+                        for (k = 1; k < n && (uint16_t)(q[k] - q[0]) == (uint16_t)((unsigned char)text[k] - (unsigned char)text[0]); k++) {}
+                        if (k < n || q[0] == (unsigned char)text[0])
+                            continue;
+                        wide = 1;
+                    }
+                } else {
+                if (p[0] != (unsigned char)text[0])
+                    continue;
+                for (k = 1; k < n && p[k] == (unsigned char)text[k]; k++) {}
+                if (k < n) {
+                    for (k = 0; k < n && p[2 * k] == (unsigned char)text[k] && p[2 * k + 1] == 0; k++) {}
+                    if (k < n)
+                        continue;
+                    wide = 1;
+                }
+                }
+                {
+                    uint32_t at = (uint32_t)((uintptr_t)p - g_xbox_mem_offset);
+                    char hex[3 * 48 + 1];
+                    int j;
+                    for (j = 0; j < 48; j++)
+                        snprintf(hex + 3 * j, 4, "%02X ", p[j - 16]);
+                    if (s_shifted)
+                        out("  %08X %s first=%04X (letter '%c' -> code %+d): %s", at, wide ? "16-bit" : "8-bit",
+                            wide ? *(const uint16_t *)p : p[0], text[0], (wide ? *(const uint16_t *)p : p[0]) - (unsigned char)text[0], hex);
+                    else
+                        out("  %08X %s: %s", at, wide ? "utf16" : "8-bit", hex);
+                    hits++;
+                }
+            }
+        }
+        va = (uint32_t)(end - g_xbox_mem_offset);
+    }
+    out("findstr \"%s\": %d hit(s)", text, hits);
+}
+
 static void run(char *line)
 {
-    char a[32] = "", b[32] = "", c[32] = "";
+    char a[32] = "", b[32] = "", c[260] = "";
     char *nl = strpbrk(line, "\r\n");
     if (nl)
         *nl = 0;
     if (!*line)
         return;
     out("> %s", line);
-    sscanf(line, "%*s %31s %31s %31s", a, b, c);
+    sscanf(line, "%*s %31s %31s %259s", a, b, c);
     if (!strncmp(line, "snap", 4))
         snap(a[0] != 'i');
     else if (!strcmp(line, "changed"))
@@ -241,6 +305,23 @@ static void run(char *line)
         filter(4, atof(a), atof(b));
     else if (!strncmp(line, "list", 4))
         list(a[0] ? atoi(a) : 40);
+    else if (!strncmp(line, "findstr ", 8)) {
+        s_shifted = 0;
+        findstr(line + 8);
+    } else if (!strncmp(line, "save ", 5)) {   /* save ADDR BYTES FILE: raw guest memory to a file */
+        uint32_t va = addr_of(a), len = (uint32_t)strtoul(b, NULL, 0);
+        FILE *f = va && len && len <= 0x4000000u && c[0] ? fopen(c, "wb") : NULL;
+        if (!f)
+            out("save: bad address, size or file");
+        else {
+            fwrite((const void *)((uintptr_t)va + g_xbox_mem_offset), 1, len, f);
+            fclose(f);
+            out("saved %u bytes from %08X to %s", len, va, c);
+        }
+    } else if (!strncmp(line, "findenc ", 8)) {
+        s_shifted = 1;
+        findstr(line + 8);
+    }
     else if (!strncmp(line, "dump", 4))
         dump(addr_of(a), b[0] ? atoi(b) : 64);
     else if (!strncmp(line, "poke", 4)) {
