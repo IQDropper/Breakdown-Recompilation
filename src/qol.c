@@ -227,7 +227,7 @@ void qol_shot_name(int year, int mon, int day, int hour, int min, int sec, int s
 enum qol_intro qol_intro_decide(const char *name, uint32_t flags34, uint32_t mode_cc, float played_s,
                                 uint32_t fading_e4)
 {
-    if (!name || strncmp(name, "opening_b", 9) != 0 || !(flags34 & 1))
+    if (!name || (strncmp(name, "opening_b", 9) != 0 && strcmp(name, "dolby") != 0) || !(flags34 & 1))
         return QOL_INTRO_NONE;
     if (fading_e4 || (mode_cc & 2))
         return QOL_INTRO_LEAVE;

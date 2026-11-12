@@ -238,7 +238,9 @@ static void test_intro(void)
 {
     expect("intro: no movie", qol_intro_decide(NULL, 1, 0, 3.0f, 0) == QOL_INTRO_NONE);
     expect("intro: logo is not the intro", qol_intro_decide("namcologo", 1, 2, 3.0f, 0) == QOL_INTRO_NONE);
-    expect("intro: dolby is not the intro", qol_intro_decide("dolby", 1, 0, 3.0f, 0) == QOL_INTRO_NONE);
+    expect("intro: the Dolby logo is skipped too", qol_intro_decide("dolby", 1, 0, 3.0f, 0) == QOL_INTRO_SKIP);
+    expect("intro: Dolby waits 0.5 s too", qol_intro_decide("dolby", 1, 0, 0.3f, 0) == QOL_INTRO_WAIT);
+    expect("intro: other names that start with dolby are not", qol_intro_decide("dolbyx", 1, 0, 3.0f, 0) == QOL_INTRO_NONE);
     expect("intro: credits are not the intro", qol_intro_decide("opening_credit", 1, 0, 3.0f, 0) == QOL_INTRO_NONE);
     expect("intro: not playing", qol_intro_decide("opening_b", 0, 0, 3.0f, 0) == QOL_INTRO_NONE);
     expect("intro: too early", qol_intro_decide("opening_b", 1, 0, 0.2f, 0) == QOL_INTRO_WAIT);
