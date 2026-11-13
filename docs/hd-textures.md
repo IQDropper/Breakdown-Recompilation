@@ -63,6 +63,10 @@ py -3 tools\upscale_tex.py <dump folder> <out folder> --max-side 512 --jobs 3 --
 - Quick way to change one texture without rebuilding everything: put only the fixed images in a small folder and run
   `make_tex_pack.py <small folder> final.pack --include big.pack`. Images in the folder replace the same textures
   from the included pack (6 seconds instead of minutes).
+- **Scripted repaints:** `toolsepaint.ps1 -Spec repaints.json -Src <AI folder> -Out <touched folder> -Orig <Lanczos folder>`
+  applies a list of fills, text (fitted, rotatable), clean-ups (remove old letters, keep the surface) and "orig"
+  boxes (the honest blur of the original where no wording can be justified) to each texture. The doorway room's
+  spec (11 textures, with known vs written wording) is in the GO kit: `reports/textures/repaints.json`.
 - Example done: the monitor label `07EA99B74034861A` (unreadable in the original) now reads **状況報告** ("status
   report"), painted in the original purple with Yu Gothic UI.
 - 3D models (shapes) can't be replaced yet: the game's model format isn't readable, and the port has no model-swap
