@@ -75,6 +75,14 @@ if errorlevel 1 (
 )
 
 echo [ok] Render scale 1 fills the window (no top-left quarter).
+echo --- patch_d3d11_horplus.py ---
+%PY% patch_d3d11_horplus.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_horplus.py failed
+  exit /b 1
+)
+
+echo [ok] Opt-in Hor+ widescreen (RECOMP_HORPLUS=16:9).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
 exit /b 0

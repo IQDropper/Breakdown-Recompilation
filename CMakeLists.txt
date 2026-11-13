@@ -64,8 +64,11 @@ set(GAME_SOURCES
     src/pc_options.c
     src/pc_options_host.c
     src/debug_text_host.c
+    src/a11y_input.c
     src/speedrun.c
     src/speedrun_host.c
+    src/qol.c
+    src/qol_host.c
     src/mem_search_host.c
     src/tuning.c
     src/tuning_host.c

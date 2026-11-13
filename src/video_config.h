@@ -27,6 +27,8 @@ struct video_settings {
     int fps60;             /* 0/1, RECOMP_FPS60: gameplay at 60 FPS (applies at once) */
     int pipeline;          /* 0/1, RECOMP_PB_PIPELINE: game doesn't wait for the renderer (next launch) */
     int vsync;             /* 0/1, RECOMP_PRESENT_VSYNC: wait for the display, no tearing (applies at once) */
+    int a11y_repeat;       /* A11Y_REPEAT_*, RECOMP_A11Y_REPEAT: hold a button = 10 presses/s (applies at once) */
+    int a11y_toggle;       /* A11Y_TOGGLE_*, RECOMP_A11Y_TOGGLE: a trigger latches on a press (applies at once) */
 };
 
 enum {
@@ -38,6 +40,8 @@ enum {
     VIDEO_ROW_FPS60,
     VIDEO_ROW_PIPELINE,
     VIDEO_ROW_VSYNC,
+    VIDEO_ROW_REPEAT,
+    VIDEO_ROW_TOGGLE,
     VIDEO_ROW_APPLY,
     VIDEO_ROW_OK,
     VIDEO_ROW_CANCEL,
