@@ -7,6 +7,7 @@
 #include "video_config.h"
 #include "a11y_input.h"
 #include "skins.h"
+#include "keymap.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,10 @@ enum {
     KEY_TOGGLE,
     KEY_OUTFIT,
     KEY_TEXT,
+    KEY_MOUSE,
+    KEY_INVERT,
+    KEY_DEADZONE,
+    KEY_KEYMAP,
     KEY_COUNT
 };
 
@@ -48,13 +53,17 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_A11Y_TOGGLE",
     "RECOMP_HERO_OUTFIT",
     "RECOMP_PC_TEXT_SIZE",
+    "RECOMP_MOUSE_SENS",
+    "RECOMP_MOUSE_INVERT",
+    "RECOMP_PAD_DEADZONE",
+    "RECOMP_KEYMAP",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
 static const char *const s_filters[] = { "nearest", "linear", "integer" };
 static const char *const s_filter_labels[] = { "Nearest", "Linear", "Integer" };
 
-static char s_val[KEY_COUNT][16];
+static char s_val[KEY_COUNT][512];   /* RECOMP_KEYMAP needs the room */
 static int s_have[KEY_COUNT];
 
 static void trim_inplace(char *s)
@@ -140,7 +149,7 @@ void video_config_reset(void)
 int video_config_load(const char *path)
 {
     FILE *f;
-    char line[256];
+    char line[640];
 
     video_config_reset();
     if (!path)
@@ -184,6 +193,10 @@ static void store_settings(const struct video_settings *s)
     snprintf(s_val[KEY_TOGGLE], sizeof s_val[KEY_TOGGLE], "%s", a11y_toggle_token(c.a11y_toggle));
     snprintf(s_val[KEY_OUTFIT], sizeof s_val[KEY_OUTFIT], "%s", skins_choice_token(c.outfit));
     snprintf(s_val[KEY_TEXT], sizeof s_val[KEY_TEXT], "%d", video_text_size_percent(c.text_size));
+    snprintf(s_val[KEY_MOUSE], sizeof s_val[KEY_MOUSE], "%d", video_mouse_units(c.mouse_speed));
+    snprintf(s_val[KEY_INVERT], sizeof s_val[KEY_INVERT], "%d", c.mouse_invert ? 1 : 0);
+    snprintf(s_val[KEY_DEADZONE], sizeof s_val[KEY_DEADZONE], "%d", video_deadzone_units(c.deadzone));
+    snprintf(s_val[KEY_KEYMAP], sizeof s_val[KEY_KEYMAP], "%s", c.keymap);
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -196,6 +209,10 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_TOGGLE] = 1;
     s_have[KEY_OUTFIT] = 1;
     s_have[KEY_TEXT] = 1;
+    s_have[KEY_MOUSE] = 1;
+    s_have[KEY_INVERT] = 1;
+    s_have[KEY_DEADZONE] = 1;
+    s_have[KEY_KEYMAP] = c.keymap[0] != 0;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -232,6 +249,9 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# RECOMP_HERO_OUTFIT: game, normal, t or researcher (story outfits still win;\n"
                 "# shows from the next time the hero appears).\n"
                 "# RECOMP_PC_TEXT_SIZE: 100, 150 or 200 = text size on this PC page.\n"
+                "# RECOMP_MOUSE_SENS: mouse look speed (1200 = 100%%). RECOMP_MOUSE_INVERT: 1 = up is down.\n"
+                "# RECOMP_PAD_DEADZONE: stick dead zone, 0..32767. RECOMP_KEYMAP: remapped keys,\n"
+                "# CONTROL=KEY|KEY2 separated by ; (e.g. LT=1|Q;RT=3|E). Empty = default keys.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
@@ -243,7 +263,11 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "RECOMP_A11Y_REPEAT=%s\n"
                 "RECOMP_A11Y_TOGGLE=%s\n"
                 "RECOMP_HERO_OUTFIT=%s\n"
-                "RECOMP_PC_TEXT_SIZE=%d\n",
+                "RECOMP_PC_TEXT_SIZE=%d\n"
+                "RECOMP_MOUSE_SENS=%d\n"
+                "RECOMP_MOUSE_INVERT=%d\n"
+                "RECOMP_PAD_DEADZONE=%d\n"
+                "RECOMP_KEYMAP=%s\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
@@ -251,7 +275,9 @@ int video_config_save(const char *path, const struct video_settings *in)
                 video_settings_fullscreen_token(s.borderless),
                 s.fps60 ? 1 : 0, s.pipeline ? 1 : 0, s.vsync ? 1 : 0,
                 a11y_repeat_token(s.a11y_repeat), a11y_toggle_token(s.a11y_toggle),
-                skins_choice_token(s.outfit), video_text_size_percent(s.text_size)) < 0) {
+                skins_choice_token(s.outfit), video_text_size_percent(s.text_size),
+                video_mouse_units(s.mouse_speed), s.mouse_invert ? 1 : 0, video_deadzone_units(s.deadzone),
+                s.keymap) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -310,6 +336,10 @@ void video_settings_stock(struct video_settings *s)
     s->a11y_toggle = A11Y_TOGGLE_OFF;
     s->outfit = 0;
     s->text_size = 0;
+    s->mouse_speed = VIDEO_MOUSE_DEFAULT;
+    s->mouse_invert = 0;
+    s->deadzone = 0;
+    s->keymap[0] = 0;
 }
 
 void video_settings_clamp(struct video_settings *s)
@@ -347,6 +377,68 @@ void video_settings_clamp(struct video_settings *s)
         s->outfit = 0;
     if (s->text_size < 0 || s->text_size >= VIDEO_TEXT_SIZES)
         s->text_size = 0;
+    if (s->mouse_speed < 0 || s->mouse_speed >= VIDEO_MOUSE_SPEEDS)
+        s->mouse_speed = VIDEO_MOUSE_DEFAULT;
+    s->mouse_invert = s->mouse_invert ? 1 : 0;
+    if (s->deadzone < 0 || s->deadzone >= VIDEO_DEADZONES)
+        s->deadzone = 0;
+    s->keymap[sizeof s->keymap - 1] = 0;
+}
+
+int video_mouse_percent(int index)
+{
+    static const int pct[VIDEO_MOUSE_SPEEDS] = { 50, 75, 100, 150, 200, 300 };
+    return pct[index >= 0 && index < VIDEO_MOUSE_SPEEDS ? index : VIDEO_MOUSE_DEFAULT];
+}
+
+int video_mouse_units(int index)
+{
+    return video_mouse_percent(index) * 12;
+}
+
+int video_mouse_index(int units)
+{
+    int i, best = VIDEO_MOUSE_DEFAULT, bd = 1 << 30;
+    if (units <= 0)
+        return VIDEO_MOUSE_DEFAULT;
+    for (i = 0; i < VIDEO_MOUSE_SPEEDS; i++) {
+        int d = video_mouse_units(i) - units;
+        if (d < 0)
+            d = -d;
+        if (d < bd) {
+            bd = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+int video_deadzone_percent(int index)
+{
+    static const int pct[VIDEO_DEADZONES] = { 0, 10, 20, 30 };
+    return pct[index > 0 && index < VIDEO_DEADZONES ? index : 0];
+}
+
+int video_deadzone_units(int index)
+{
+    return video_deadzone_percent(index) * 32767 / 100;
+}
+
+int video_deadzone_index(int units)
+{
+    int i, best = 0, bd = 1 << 30;
+    if (units <= 0)
+        return 0;
+    for (i = 0; i < VIDEO_DEADZONES; i++) {
+        int d = video_deadzone_units(i) - units;
+        if (d < 0)
+            d = -d;
+        if (d < bd) {
+            bd = d;
+            best = i;
+        }
+    }
+    return best;
 }
 
 int video_text_size_percent(int index)
@@ -436,6 +528,10 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->a11y_toggle = c->a11y_toggle;
     s->outfit = c->outfit;
     s->text_size = c->text_size;
+    s->mouse_speed = video_mouse_index(c->mouse_sens);
+    s->mouse_invert = c->mouse_invert;
+    s->deadzone = video_deadzone_index(c->deadzone);
+    snprintf(s->keymap, sizeof s->keymap, "%s", c->keymap);
     video_settings_clamp(s);
 }
 
@@ -454,6 +550,10 @@ const char *video_row_title(int row)
         "Hold toggle",
         "Outfit",
         "Text size",
+        "Mouse speed",
+        "Invert mouse",
+        "Stick dead zone",
+        "Keys",
         "Apply",
         "OK",
         "Cancel",
@@ -535,6 +635,17 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->text_size;
         s->text_size = wrap_index(s->text_size, VIDEO_TEXT_SIZES, dir);
         return s->text_size != before;
+    case VIDEO_ROW_MOUSE:
+        before = s->mouse_speed;
+        s->mouse_speed = wrap_index(s->mouse_speed, VIDEO_MOUSE_SPEEDS, dir);
+        return s->mouse_speed != before;
+    case VIDEO_ROW_INVERT:
+        s->mouse_invert = !s->mouse_invert;
+        return 1;
+    case VIDEO_ROW_DEADZONE:
+        before = s->deadzone;
+        s->deadzone = wrap_index(s->deadzone, VIDEO_DEADZONES, dir);
+        return s->deadzone != before;
     default:
         return 0;
     }
@@ -585,6 +696,27 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_TEXT:
         snprintf(buf, n, "%d%%", video_text_size_percent(s->text_size));
         break;
+    case VIDEO_ROW_MOUSE:
+        snprintf(buf, n, "%d%%", video_mouse_percent(s->mouse_speed));
+        break;
+    case VIDEO_ROW_INVERT:
+        snprintf(buf, n, "%s", s->mouse_invert ? "On" : "Off");
+        break;
+    case VIDEO_ROW_DEADZONE:
+        if (s->deadzone)
+            snprintf(buf, n, "%d%%", video_deadzone_percent(s->deadzone));
+        else
+            snprintf(buf, n, "Off");
+        break;
+    case VIDEO_ROW_KEYS: {
+        struct keymap_bind kb[KEYMAP_CONTROLS];
+        int used = keymap_parse(s->keymap, kb, NULL);
+        if (used)
+            snprintf(buf, n, "%d changed", used);
+        else
+            snprintf(buf, n, "Default");
+        break;
+    }
     default:
         break;
     }
@@ -627,6 +759,14 @@ const char *video_row_detail(const struct video_settings *s, int row)
                "Story outfits still win. An outfit only shows where the game has its model loaded.";
     case VIDEO_ROW_TEXT:
         return "Text size on this PC page: 100, 150 or 200 percent. It also grows with the window. Changes at once.";
+    case VIDEO_ROW_MOUSE:
+        return "How fast the mouse turns the view. Changes at once.";
+    case VIDEO_ROW_INVERT:
+        return "On: moving the mouse up looks down. Changes at once.";
+    case VIDEO_ROW_DEADZONE:
+        return "Ignore small stick movements (for a worn or drifting stick). Changes at once.";
+    case VIDEO_ROW_KEYS:
+        return "Press Enter to choose a key for each control. Saved with Apply.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:

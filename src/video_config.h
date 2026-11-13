@@ -31,6 +31,10 @@ struct video_settings {
     int a11y_toggle;       /* A11Y_TOGGLE_*, RECOMP_A11Y_TOGGLE: a trigger latches on a press (applies at once) */
     int outfit;            /* skins.h choice, RECOMP_HERO_OUTFIT: hero outfit (next spawn) */
     int text_size;         /* 0 100%, 1 150%, 2 200%, RECOMP_PC_TEXT_SIZE: PC page text (applies at once) */
+    int mouse_speed;       /* VIDEO_MOUSE_SPEEDS index (100% = 1200), RECOMP_MOUSE_SENS (applies at once) */
+    int mouse_invert;      /* 0/1, RECOMP_MOUSE_INVERT (applies at once) */
+    int deadzone;          /* VIDEO_DEADZONES index (0 = off), RECOMP_PAD_DEADZONE (applies at once) */
+    char keymap[512];      /* keymap.h text, RECOMP_KEYMAP: remapped keys (applies at once) */
 };
 
 enum {
@@ -46,6 +50,10 @@ enum {
     VIDEO_ROW_TOGGLE,
     VIDEO_ROW_OUTFIT,
     VIDEO_ROW_TEXT,
+    VIDEO_ROW_MOUSE,
+    VIDEO_ROW_INVERT,
+    VIDEO_ROW_DEADZONE,
+    VIDEO_ROW_KEYS,
     VIDEO_ROW_APPLY,
     VIDEO_ROW_OK,
     VIDEO_ROW_CANCEL,
@@ -86,6 +94,17 @@ const char *video_settings_filter_name(int index);
 #define VIDEO_TEXT_SIZES 3
 int video_text_size_percent(int index);
 int video_text_size_index(const char *s);
+/* A11Y-1 controls: mouse speed percent <-> RECOMP_MOUSE_SENS units (100% = 1200), stick dead zone percent <->
+ * RECOMP_PAD_DEADZONE units (of 32767). Index from units picks the nearest choice. */
+#define VIDEO_MOUSE_SPEEDS 6
+#define VIDEO_MOUSE_DEFAULT 2
+#define VIDEO_DEADZONES 4
+int video_mouse_percent(int index);
+int video_mouse_units(int index);
+int video_mouse_index(int units);
+int video_deadzone_percent(int index);
+int video_deadzone_units(int index);
+int video_deadzone_index(int units);
 /* "0", "1", or "exclusive". What breakdown_video.cfg stores. */
 const char *video_settings_fullscreen_token(int mode);
 

@@ -39,6 +39,10 @@ struct display_choice {
     int      a11y_toggle;      /* RECOMP_A11Y_TOGGLE: A11Y_TOGGLE_* (a11y_input.h), 0 = off */
     int      outfit;           /* RECOMP_HERO_OUTFIT: skins.h choice, 0 = the game's choice */
     int      text_size;        /* RECOMP_PC_TEXT_SIZE: 0 100%, 1 150%, 2 200% (PC page text) */
+    int      mouse_sens;       /* RECOMP_MOUSE_SENS units, 1200 default */
+    int      mouse_invert;     /* RECOMP_MOUSE_INVERT=1 */
+    int      deadzone;         /* RECOMP_PAD_DEADZONE units, 0 default */
+    char     keymap[512];      /* RECOMP_KEYMAP text (keymap.h), empty = default keys */
 };
 
 /* Same type as getenv (char *getenv(const char *)). A const-returning

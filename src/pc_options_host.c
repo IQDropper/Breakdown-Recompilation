@@ -15,6 +15,7 @@
 #include "video_config.h"
 #include "a11y_input.h"
 #include "skins.h"
+#include "keymap.h"
 #include "display_host.h"
 #include "kernel/nv2a_backend_common.h"
 
@@ -325,6 +326,31 @@ static void request_opts(const struct display_choice *c)
             c->render_scale, c->filter_name, c->fullscreen, c->window_w, c->window_h, c->aspect);
 }
 
+/* A11Y-1: toolkit input (patch_keyboard_remap.py; input_map.c). */
+extern int xbox_InputKeyBind(const char *guest, int vk0, int vk1);
+extern int xbox_InputKeyBound(const char *guest, int out[2]);
+extern void xbox_InputMouseSet(float sens, int invert);
+extern void xbox_InputSetDeadzone(int dz);
+static void apply_keymap_text(const char *text)
+{
+    struct keymap_bind kb[KEYMAP_CONTROLS];
+    int c, bad = 0, used = keymap_parse(text, kb, &bad);
+    for (c = 0; c < KEYMAP_CONTROLS; c++)
+        xbox_InputKeyBind(keymap_guest_name(c), kb[c].set ? kb[c].vk[0] : 0, kb[c].set ? kb[c].vk[1] : 0);
+    if (used || bad)
+        fprintf(stderr, "[PC] keys: %d remapped%s%s\n", used, bad ? ", ignored a bad entry in " : "", bad ? text : "");
+}
+static void apply_controls(const struct video_settings *s)
+{
+    static char last[sizeof s->keymap] = "\x01";
+    xbox_InputMouseSet((float)video_mouse_units(s->mouse_speed), s->mouse_invert);
+    xbox_InputSetDeadzone(video_deadzone_units(s->deadzone));
+    if (strcmp(last, s->keymap) != 0) {
+        snprintf(last, sizeof last, "%s", s->keymap);
+        apply_keymap_text(s->keymap);
+    }
+}
+
 static int apply_live(const struct video_settings *s, int restyle)
 {
     struct display_choice c;
@@ -335,6 +361,7 @@ static int apply_live(const struct video_settings *s, int restyle)
     breakdown_fps60_set(s->fps60);   /* 60 FPS switches at once; the renderer setting waits for a restart */
     breakdown_a11y_set(s->a11y_repeat, s->a11y_toggle);
     breakdown_hero_outfit_set(s->outfit);
+    apply_controls(s);
     if (nv2a_d3d11_set_vsync) {
         static int s_vs = -1;
         nv2a_d3d11_set_vsync(s->vsync);
@@ -532,12 +559,80 @@ static void flush_inline_save(void)
         save_snapshot(&s);
 }
 
+static int s_first_row;   /* first row shown when they do not all fit (text size 150/200%) */
+/* A11Y-1 key list: Enter on the Keys row opens it. Up/Down pick a control, Enter waits for a key, Delete puts the
+ * default back, Esc / Backspace returns to the page. Edits the draft (pc_options_set_keymap) and binds at once. */
+static int s_keys_mode;   /* 0 off, 1 list, 2 waiting for a key */
+static int s_keys_sel;
+static void keys_change(int c, int vk)
+{
+    struct keymap_bind kb[KEYMAP_CONTROLS];
+    char text[sizeof pc_options_draft()->keymap];
+    keymap_parse(pc_options_draft()->keymap, kb, NULL);
+    kb[c].set = vk > 0;
+    kb[c].vk[0] = (unsigned char)(vk > 0 ? vk : 0);
+    kb[c].vk[1] = 0;
+    if (keymap_format(kb, text, sizeof text) == 0 && pc_options_set_keymap(text))
+        apply_controls(pc_options_draft());
+}
+static int keys_on_key(WPARAM vk, int down)
+{
+    if (!s_keys_mode)
+        return 0;
+    if (!down)
+        return 1;
+    lock();
+    if (s_keys_mode == 2) {
+        if (vk != VK_ESCAPE) {
+            if (keymap_key_name((int)vk))
+                keys_change(s_keys_sel, (int)vk);
+            else {
+                unlock();
+                return 1;   /* not a key the map can name: keep waiting */
+            }
+        }
+        s_keys_mode = 1;
+    } else if (vk == VK_UP) {
+        s_keys_sel = (s_keys_sel + KEYMAP_CONTROLS - 1) % KEYMAP_CONTROLS;
+    } else if (vk == VK_DOWN) {
+        s_keys_sel = (s_keys_sel + 1) % KEYMAP_CONTROLS;
+    } else if (vk == VK_RETURN) {
+        s_keys_mode = 2;
+    } else if (vk == VK_DELETE) {
+        keys_change(s_keys_sel, 0);
+    } else if (vk == VK_ESCAPE || vk == VK_BACK || vk == VK_F10) {
+        s_keys_mode = 0;
+        s_first_row = 0;
+    }
+    unlock();
+    if (s_page)
+        InvalidateRect(s_page, NULL, FALSE);
+    return 1;
+}
+
 static void on_key(WPARAM vk, int down)
 {
     unsigned bit;
     struct pc_pad_result r;
     int restyle = 0;
     int open;
+    if (keys_on_key(vk, down))
+        return;
+    if (vk == VK_RETURN && down) {
+        int enter_keys;
+        lock();
+        enter_keys = pc_options_is_open() && pc_options_row() == PC_ROW_KEYS && !pc_options_row_locked(PC_ROW_KEYS);
+        if (enter_keys) {
+            s_keys_mode = 1;
+            s_first_row = 0;
+        }
+        unlock();
+        if (enter_keys) {
+            if (s_page)
+                InvalidateRect(s_page, NULL, FALSE);
+            return;
+        }
+    }
     if (vk == VK_F10 && down) {
         lock();
         refresh_baseline();
@@ -588,7 +683,6 @@ static void on_key(WPARAM vk, int down)
  * Fonts are re-made only when that size changes. */
 static HFONT s_font_sized, s_title_sized;
 static int s_font_px;
-static int s_first_row;   /* first row shown when they do not all fit (text size 150/200%) */
 static void page_fonts(int px)
 {
     HFONT f, t;
@@ -616,8 +710,10 @@ static void page_fonts(int px)
 
 static void paint_page(HDC hdc, const RECT *rc)
 {
-    char titles[PC_ROW_COUNT][48];
-    char values[PC_ROW_COUNT][48];
+    char titles[PC_ROW_COUNT + KEYMAP_CONTROLS][48];
+    char values[PC_ROW_COUNT + KEYMAP_CONTROLS][48];
+    int nrows = PC_ROW_COUNT, keys_mode;
+    const char *head = "PC options", *sub = "Host overlay on the 4:3 picture. Not drawn into the frame.";
     char status[160];
     char detail[240];
     char more[64];
@@ -638,7 +734,34 @@ static void paint_page(HDC hdc, const RECT *rc)
         snprintf(titles[i], sizeof titles[i], "%s", pc_options_row_title(i));
         pc_options_row_value(i, values[i], sizeof values[i]);
     }
-    if (row <= PC_ROW_LAST_SETTING)
+    keys_mode = s_keys_mode;
+    if (keys_mode) {
+        int c, k[2];
+        nrows = KEYMAP_CONTROLS;
+        row = s_keys_sel;
+        head = "Keys";
+        sub = "Enter: choose a key. Delete: default. Esc: back to PC options.";
+        for (c = 0; c < KEYMAP_CONTROLS; c++) {
+            const char *n0, *n1 = NULL;
+            char a[16];
+            snprintf(titles[c], sizeof titles[c], "%s", keymap_control_label(c));
+            if (keys_mode == 2 && c == row) {
+                snprintf(values[c], sizeof values[c], "Press a key (Esc cancels)");
+                continue;
+            }
+            if (!xbox_InputKeyBound(keymap_guest_name(c), k)) {
+                snprintf(values[c], sizeof values[c], "-");
+                continue;
+            }
+            n0 = keymap_key_name(k[0]);
+            snprintf(a, sizeof a, "%s", n0 ? n0 : "?");
+            if (k[1])
+                n1 = keymap_key_name(k[1]);
+            snprintf(values[c], sizeof values[c], "%s%s%s", a, k[1] ? " / " : "", k[1] ? (n1 ? n1 : "?") : "");
+        }
+        snprintf(detail, sizeof detail, "%s", keys_mode == 2 ? "Press the new key now. It replaces this control's keys."
+                 : "Mouse buttons and the controller keep their own buttons. Apply on the PC options page saves the keys.");
+    } else if (row <= PC_ROW_LAST_SETTING)
         snprintf(detail, sizeof detail, "%s", video_row_detail(pc_options_draft(), row));
     else if (row == PC_ROW_APPLY)
         snprintf(detail, sizeof detail, "%s", "Write breakdown_video.cfg beside the exe. This page stays open.");
@@ -671,7 +794,7 @@ static void paint_page(HDC hdc, const RECT *rc)
     line.top = (int)(10 * k);
     line.right = rc->right - (int)(16 * k);
     line.bottom = (int)(40 * k);
-    DrawTextA(hdc, "PC options", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    DrawTextA(hdc, head, -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(hdc, font);
     SetTextColor(hdc, COL_DIM);
     line.top = line.bottom;
@@ -688,34 +811,34 @@ static void paint_page(HDC hdc, const RECT *rc)
     shown = (rows_bottom - rows_top) / row_step;
     if (shown < 1)
         shown = 1;
-    if (shown >= PC_ROW_COUNT) {
-        shown = PC_ROW_COUNT;
+    if (shown >= nrows) {
+        shown = nrows;
         s_first_row = 0;
     } else {
         if (row < s_first_row)
             s_first_row = row;
         if (row >= s_first_row + shown)
             s_first_row = row - shown + 1;
-        if (s_first_row > PC_ROW_COUNT - shown)
-            s_first_row = PC_ROW_COUNT - shown;
+        if (s_first_row > nrows - shown)
+            s_first_row = nrows - shown;
         if (s_first_row < 0)
             s_first_row = 0;
     }
     first = s_first_row;
     more[0] = 0;
-    if (shown < PC_ROW_COUNT) {
+    if (shown < nrows) {
         /* Not every row fits: say so, on the subtitle line's right; the subtitle stops short of it. */
         SIZE ext;
         snprintf(more, sizeof more, "%s%s%s", first > 0 ? "more above" : "",
-                 first > 0 && first + shown < PC_ROW_COUNT ? " / " : "",
-                 first + shown < PC_ROW_COUNT ? "more below" : "");
+                 first > 0 && first + shown < nrows ? " / " : "",
+                 first + shown < nrows ? "more below" : "");
         SetTextColor(hdc, COL_VALUE);
         DrawTextA(hdc, more, -1, &line, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
         if (GetTextExtentPoint32A(hdc, more, (int)strlen(more), &ext))
             line.right -= ext.cx + (int)(24 * k);
     }
     SetTextColor(hdc, COL_DIM);
-    DrawTextA(hdc, "Host overlay on the 4:3 picture. Not drawn into the frame.",
+    DrawTextA(hdc, sub,
               -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     hi = CreateSolidBrush(COL_ROW);
     for (i = first; i < first + shown; i++) {
@@ -810,7 +933,9 @@ static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
 
 static int page_key(WPARAM vk)
 {
-    return vk == VK_F10 || vk == VK_ESCAPE || vk == VK_UP || vk == VK_DOWN
+    if (s_keys_mode)
+        return 1;   /* key list: every key belongs to the page (a key is being chosen) */
+    return vk == VK_DELETE || vk == VK_F10 || vk == VK_ESCAPE || vk == VK_UP || vk == VK_DOWN
         || vk == VK_LEFT || vk == VK_RIGHT || vk == VK_RETURN || vk == VK_BACK;
 }
 
@@ -898,13 +1023,66 @@ static void attach_game(HWND hwnd)
     fprintf(stderr, "[PC] Back+Start opens the host overlay over the 4:3 picture. F10 toggles it.\n");
 }
 
+/* A11Y-6 first launch: open this page once, with a welcome line that points at the accessibility rows, a few
+ * seconds after the game window appears. A marker file in %LOCALAPPDATA%\\xboxrecomp keeps it from showing again.
+ * RECOMP_FIRST_LAUNCH=0 never shows it; =1 shows it every launch. */
+#define FIRST_LAUNCH_NOTE "Welcome! Text size, Hold to repeat, Hold toggle and Keys are here. Subtitles: the game's Options (Caption)."
+void pc_options_host_open(void);
+static DWORD WINAPI first_launch(LPVOID unused)
+{
+    const char *e = getenv("RECOMP_FIRST_LAUNCH"), *la = getenv("LOCALAPPDATA");
+    char dir[MAX_PATH], path[MAX_PATH];
+    FILE *f;
+    (void)unused;
+    if ((e && e[0] == '0') || !la || !*la)
+        return 0;
+    snprintf(dir, sizeof dir, "%s\\xboxrecomp", la);
+    snprintf(path, sizeof path, "%s\\first_launch_done.txt", dir);
+    if (!(e && e[0] == '1')) {
+        f = fopen(path, "r");
+        if (f) {
+            fclose(f);
+            return 0;
+        }
+    }
+    Sleep(4000);   /* let the window settle */
+    pc_options_host_open();
+    lock();
+    pc_options_set_note(FIRST_LAUNCH_NOTE);
+    unlock();
+    if (s_page)
+        InvalidateRect(s_page, NULL, FALSE);
+    CreateDirectoryA(dir, NULL);
+    f = fopen(path, "w");
+    if (f) {
+        fprintf(f, "The PC options page was shown at first launch. Delete this file, or set RECOMP_FIRST_LAUNCH=1, to show it again.\n");
+        fclose(f);
+    }
+    fprintf(stderr, "[PC] first launch: PC options page opened once (%s)\n", path);
+    fflush(stderr);
+    return 0;
+}
+
 static DWORD WINAPI wait_for_game(LPVOID unused)
 {
     (void)unused;
     for (;;) {
         HWND hwnd = FindWindowA(GAME_CLASS, NULL);
-        if (hwnd && hwnd != s_game && IsWindow(hwnd))
+        if (hwnd && hwnd != s_game && IsWindow(hwnd)) {
+            static int keys_done;
+            if (!keys_done) {
+                const char *km = getenv("RECOMP_KEYMAP");
+                keys_done = 1;
+                if (km && *km)
+                    apply_keymap_text(km);
+                {
+                    HANDLE t = CreateThread(NULL, 0, first_launch, NULL, 0, NULL);
+                    if (t)
+                        CloseHandle(t);
+                }
+            }
             attach_game(hwnd);
+        }
         Sleep(200);
     }
     return 0;

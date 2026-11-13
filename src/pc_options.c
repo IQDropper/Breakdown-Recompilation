@@ -141,6 +141,14 @@ static void activate(struct pc_pad_result *r)
         s_draft.outfit = stock.outfit;
     if (!lock_for_row(PC_ROW_TEXT))
         s_draft.text_size = stock.text_size;
+    if (!lock_for_row(PC_ROW_MOUSE))
+        s_draft.mouse_speed = stock.mouse_speed;
+    if (!lock_for_row(PC_ROW_INVERT))
+        s_draft.mouse_invert = stock.mouse_invert;
+    if (!lock_for_row(PC_ROW_DEADZONE))
+        s_draft.deadzone = stock.deadzone;
+    if (!lock_for_row(PC_ROW_KEYS))
+        memcpy(s_draft.keymap, stock.keymap, sizeof s_draft.keymap);
     video_settings_clamp(&s_draft);
     set_status("Stock preview. Apply writes it. Revert restores the last applied settings.");
     r->action = PC_ACT_PREVIEW;
@@ -322,6 +330,21 @@ struct pc_pad_result pc_options_on_esc(void)
     return r;
 }
 
+void pc_options_set_note(const char *text)
+{
+    if (s_open && text)
+        set_status(text);
+}
+
+int pc_options_set_keymap(const char *text)
+{
+    if (!s_open || lock_for_row(PC_ROW_KEYS))
+        return 0;
+    snprintf(s_draft.keymap, sizeof s_draft.keymap, "%s", text ? text : "");
+    set_status("Keys changed. Apply saves them. Revert restores the applied keys.");
+    return 1;
+}
+
 void pc_options_save_result(int ok)
 {
     if (!s_save_pending)
@@ -357,6 +380,10 @@ const char *pc_options_row_title(int row)
         "Hold toggle",
         "Outfit",
         "Text size",
+        "Mouse speed",
+        "Invert mouse",
+        "Stick dead zone",
+        "Keys",
         "Apply",
         "Reset",
         "Revert",

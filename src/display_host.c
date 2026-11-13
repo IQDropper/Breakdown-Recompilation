@@ -182,6 +182,14 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     o->outfit = skins_choice_from_token(env_get(get, "RECOMP_HERO_OUTFIT"));
     s = env_get(get, "RECOMP_PC_TEXT_SIZE");   /* 100 / 150 / 200 -> 0 / 1 / 2 (video_text_size_index) */
     o->text_size = !s ? 0 : atoi(s) == 150 ? 1 : atoi(s) == 200 ? 2 : 0;
+    s = env_get(get, "RECOMP_MOUSE_SENS");
+    o->mouse_sens = s && atoi(s) > 0 ? atoi(s) : 1200;
+    s = env_get(get, "RECOMP_MOUSE_INVERT");
+    o->mouse_invert = s && s[0] == '1';
+    s = env_get(get, "RECOMP_PAD_DEADZONE");
+    o->deadzone = s && atoi(s) > 0 ? atoi(s) : 0;
+    s = env_get(get, "RECOMP_KEYMAP");
+    snprintf(o->keymap, sizeof o->keymap, "%s", s ? s : "");
 }
 
 #if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
@@ -294,7 +302,8 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
 
 static const char *const s_speed_keys[] = {
     "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC", "RECOMP_A11Y_REPEAT", "RECOMP_A11Y_TOGGLE",
-    "RECOMP_HERO_OUTFIT", "RECOMP_PC_TEXT_SIZE"
+    "RECOMP_HERO_OUTFIT", "RECOMP_PC_TEXT_SIZE", "RECOMP_MOUSE_SENS", "RECOMP_MOUSE_INVERT",
+    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP"
 };
 static int s_speed_from_launch[sizeof s_speed_keys / sizeof s_speed_keys[0]];
 
