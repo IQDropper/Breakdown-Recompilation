@@ -137,6 +137,8 @@ static void activate(struct pc_pad_result *r)
         s_draft.a11y_repeat = stock.a11y_repeat;
     if (!lock_for_row(PC_ROW_TOGGLE))
         s_draft.a11y_toggle = stock.a11y_toggle;
+    if (!lock_for_row(PC_ROW_OUTFIT))
+        s_draft.outfit = stock.outfit;
     video_settings_clamp(&s_draft);
     set_status("Stock preview. Apply writes it. Revert restores the last applied settings.");
     r->action = PC_ACT_PREVIEW;
@@ -351,6 +353,7 @@ const char *pc_options_row_title(int row)
         "VSync",
         "Hold to repeat",
         "Hold toggle",
+        "Outfit",
         "Apply",
         "Reset",
         "Revert",

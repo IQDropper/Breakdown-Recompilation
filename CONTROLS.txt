@@ -47,6 +47,11 @@ EXTRAS (host keys, only while the game window is in front)
   F5 ........................ show/hide the FPS box (needs RECOMP_FPS_OVERLAY=1):
                               average FPS and frame time over the last second, slowest frame
   RECOMP_SKIP_INTRO=1 ....... skip the 2 minute opening movie at boot (the logos still play)
+  Outfit (PC options page) .. Derrick's outfit: Game's choice, Normal, T shirt or Researcher
+                              (RECOMP_HERO_OUTFIT=normal|t|researcher). Shows from the next time he
+                              appears (load a save). Story outfits still win, and an outfit is only
+                              used where the game has its models loaded (T shirt: the opening area;
+                              Researcher: the lab). In first person only the hands show (hold Shift).
 
 KEYBOARD (same in both layouts)
   W A S D ................... move (left stick)

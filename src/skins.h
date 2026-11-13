@@ -15,4 +15,11 @@ int skins_parse(const char *s);
 int skins_choose(int game_tag, int want, int loaded);
 const char *skins_label(int tag);
 
+/* The PC options row: choice 0 game, 1 normal, 2 T shirt, 3 researcher. Saved as RECOMP_HERO_OUTFIT=<token>. */
+#define SKINS_CHOICES 4
+int skins_choice_tag(int choice);              /* choice -> tag (SKINS_GAME for 0 or out of range) */
+int skins_choice_from_token(const char *s);    /* any skins_parse text -> choice (0 if unknown) */
+const char *skins_choice_token(int choice);    /* "game", "normal", "t", "researcher" */
+const char *skins_choice_label(int choice);    /* "Game's choice", "Normal", "T shirt", "Researcher" */
+
 #endif

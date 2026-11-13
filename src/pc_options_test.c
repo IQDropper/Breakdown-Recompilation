@@ -307,7 +307,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("thirteen rows", PC_ROW_COUNT == 13);
+    expect("fourteen rows", PC_ROW_COUNT == 14);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -407,6 +407,10 @@ static void test_a11y_rows(void)
     expect("video rows match page rows", PC_ROW_REPEAT == VIDEO_ROW_REPEAT && PC_ROW_TOGGLE == VIDEO_ROW_TOGGLE);
     expect("repeat row has help text", strstr(video_row_detail(pc_options_draft(), PC_ROW_REPEAT), "10 presses") != NULL);
     expect("toggle row has help text", strstr(video_row_detail(pc_options_draft(), PC_ROW_TOGGLE), "again") != NULL);
+    expect("outfit row is named", strcmp(pc_options_row_title(PC_ROW_OUTFIT), "Outfit") == 0
+                                   && PC_ROW_OUTFIT == VIDEO_ROW_OUTFIT);
+    pc_options_row_value(PC_ROW_OUTFIT, buf, sizeof buf);
+    expect("outfit starts at the game's choice", strcmp(buf, "Game's choice") == 0);
     while (pc_options_row() != PC_ROW_REPEAT)
         pulse(PC_PAD_DPAD_DOWN);
     pc_options_row_value(PC_ROW_REPEAT, buf, sizeof buf);
@@ -428,7 +432,13 @@ static void test_a11y_rows(void)
     pc_options_row_value(PC_ROW_TOGGLE, buf, sizeof buf);
     expect("right picks right trigger", pc_options_draft()->a11y_toggle == A11Y_TOGGLE_RT && strcmp(buf, "Right trigger") == 0);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("apply follows toggle", pc_options_row() == PC_ROW_APPLY);
+    expect("outfit follows toggle", pc_options_row() == PC_ROW_OUTFIT);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_OUTFIT, buf, sizeof buf);
+    expect("right picks normal", pc_options_draft()->outfit == 1 && strcmp(buf, "Normal") == 0);
+    pulse(PC_PAD_DPAD_LEFT);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("apply follows outfit", pc_options_row() == PC_ROW_APPLY);
     while (pc_options_row() != PC_ROW_RESET)
         pulse(PC_PAD_DPAD_DOWN);
     pc_options_on_port(0, PC_PAD_A);

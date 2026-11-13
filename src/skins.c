@@ -43,3 +43,31 @@ const char *skins_label(int tag)
     default: return "other";
     }
 }
+
+static const int s_tags[SKINS_CHOICES] = { SKINS_GAME, 0, 4, 3 };
+static const char *const s_tokens[SKINS_CHOICES] = { "game", "normal", "t", "researcher" };
+static const char *const s_labels[SKINS_CHOICES] = { "Game's choice", "Normal", "T shirt", "Researcher" };
+
+int skins_choice_tag(int choice)
+{
+    return choice > 0 && choice < SKINS_CHOICES ? s_tags[choice] : SKINS_GAME;
+}
+
+int skins_choice_from_token(const char *s)
+{
+    int tag = skins_parse(s), i;
+    for (i = 1; i < SKINS_CHOICES; i++)
+        if (s_tags[i] == tag)
+            return i;
+    return 0;
+}
+
+const char *skins_choice_token(int choice)
+{
+    return s_tokens[choice > 0 && choice < SKINS_CHOICES ? choice : 0];
+}
+
+const char *skins_choice_label(int choice)
+{
+    return s_labels[choice > 0 && choice < SKINS_CHOICES ? choice : 0];
+}

@@ -79,6 +79,7 @@ static void test_roundtrip(void)
     s.vsync = 1;
     s.a11y_repeat = A11Y_REPEAT_FACE;
     s.a11y_toggle = A11Y_TOGGLE_LT;
+    s.outfit = 2;
     expect("save", video_config_save(path, &s) == 0);
     video_config_reset();
     expect("saved cleared", video_config_getenv("RECOMP_RENDER_SCALE") == NULL);
@@ -112,6 +113,9 @@ static void test_roundtrip(void)
     expect("roundtrip vsync", loaded.vsync == 1 && c.vsync == 1);
     expect("roundtrip hold to repeat", loaded.a11y_repeat == A11Y_REPEAT_FACE && c.a11y_repeat == A11Y_REPEAT_FACE);
     expect("roundtrip hold toggle", loaded.a11y_toggle == A11Y_TOGGLE_LT && c.a11y_toggle == A11Y_TOGGLE_LT);
+    expect("loaded outfit", video_config_getenv("RECOMP_HERO_OUTFIT")
+           && strcmp(video_config_getenv("RECOMP_HERO_OUTFIT"), "t") == 0);
+    expect("roundtrip outfit", loaded.outfit == 2 && c.outfit == 2);
     expect("roundtrip scale", loaded.render_scale == 2 && loaded.window_scale == 3);
     expect("roundtrip aspect", loaded.aspect == s.aspect && loaded.filter == 2);
     expect("roundtrip borderless", loaded.borderless == 1);

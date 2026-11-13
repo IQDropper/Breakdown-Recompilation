@@ -37,6 +37,7 @@ struct display_choice {
     int      vsync;            /* RECOMP_PRESENT_VSYNC=1: Present waits for the display */
     int      a11y_repeat;      /* RECOMP_A11Y_REPEAT: A11Y_REPEAT_* (a11y_input.h), 0 = off */
     int      a11y_toggle;      /* RECOMP_A11Y_TOGGLE: A11Y_TOGGLE_* (a11y_input.h), 0 = off */
+    int      outfit;           /* RECOMP_HERO_OUTFIT: skins.h choice, 0 = the game's choice */
 };
 
 /* Same type as getenv (char *getenv(const char *)). A const-returning

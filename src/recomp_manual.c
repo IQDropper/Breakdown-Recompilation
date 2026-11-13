@@ -1389,25 +1389,73 @@ void sub_00137630(void)
 #include "skins.h"
 extern void sub_0004CBB0_gen(void);
 extern void sub_0004CC30_gen(void);
+static int s_outfit_want = -2;   /* a skins.h tag; -2 = not read yet */
 static int hero_outfit_want(void)
 {
-    static int want = -2;
-    if (want == -2) {
+    if (s_outfit_want == -2) {
         const char *e = getenv("RECOMP_HERO_OUTFIT");
-        want = skins_parse(e);
+        s_outfit_want = skins_parse(e);
         if (e && *e)
-            fprintf(stderr, "[SKINS] hero outfit: %s (RECOMP_HERO_OUTFIT=%s)\n", skins_label(want), e);
+            fprintf(stderr, "[SKINS] hero outfit: %s (RECOMP_HERO_OUTFIT=%s)\n", skins_label(s_outfit_want), e);
     }
-    return want;
+    return s_outfit_want;
 }
+/* PC options "Outfit" row (src/pc_options_host.c): a skins.h choice. Used from the hero's next spawn. */
+void breakdown_hero_outfit_set(int choice)
+{
+    int tag = skins_choice_tag(choice);
+    if (tag == hero_outfit_want())
+        return;
+    s_outfit_want = tag;
+    fprintf(stderr, "[SKINS] hero outfit: %s (PC options page; shows from the next spawn)\n", skins_label(tag));
+    fflush(stderr);
+}
+/* 0x1A2D0(type, id): the loaded resource entry for a pak id, or 0. The draw path (0x72990 -> 0x32B80 -> 0x1A570)
+ * asks it for every part's model (type 1) and skips the part when it returns 0: seen running, the researcher
+ * outfit in hon_under drew no hands at all. */
+extern void sub_0001A2D0(void);
+static int model_loaded(uint32_t id)
+{
+    uint32_t save = g_esp, eax = g_eax, ecx = g_ecx, edx = g_edx, r;
+    g_esp -= 4; MEM32(g_esp) = id;
+    g_esp -= 4; MEM32(g_esp) = 1;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    sub_0001A2D0();
+    r = g_eax;
+    g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
+    return r != 0;
+}
+/* Every model of every variant of outfit idx is loaded. Outfit set: +2 s16 variant count, then 0x1C-byte records
+ * from +4; record +8/+0xC/+0x10/+0x14 = body, extra, left hand, right hand part lists. Part list: +8 count, model
+ * ids from +0xC (as 0x72990 reads them). */
 static int hero_outfit_loaded(uint32_t ent, int idx)
 {
-    (void)ent; (void)idx;
-    return 1;   /* TODO(S7.2): check the set's models are in memory */
+    uint32_t set = MEM32(ent + 0x14 + (uint32_t)idx * 4), rec, list, n;
+    int v, nv, p, i;
+    if (!set)
+        return 0;
+    nv = (int16_t)MEM16(set + 2);
+    if (nv < 1 || nv > 8)
+        return 0;
+    for (v = 0; v < nv; v++) {
+        rec = set + 4 + (uint32_t)v * 0x1C;
+        for (p = 0; p < 4; p++) {
+            list = MEM32(rec + 8 + (uint32_t)p * 4);
+            if (!list)
+                continue;
+            n = MEM32(list + 8);
+            if (n > 32)
+                return 0;
+            for (i = 0; i < (int)n; i++)
+                if (!model_loaded(MEM32(list + 0xC + (uint32_t)i * 4)))
+                    return 0;
+        }
+    }
+    return 1;
 }
 static void hero_outfit_apply(uint32_t obj, const char *why)
 {
-    int want = hero_outfit_want(), id, n, cur, idx = -1, i, game_tag, tag;
+    int want = hero_outfit_want(), id, n, cur, idx = -1, i, game_tag, tag, loaded;
     uint32_t ent;
     if (want == SKINS_GAME || !obj || !(ent = MEM32(obj + 0x6018)))
         return;
@@ -1424,7 +1472,11 @@ static void hero_outfit_apply(uint32_t obj, const char *why)
     for (i = 0; i < n; i++)
         if ((int16_t)MEM16(MEM32(ent + 0x14 + i * 4)) == want)
             idx = i;
-    tag = skins_choose(game_tag, want, idx >= 0 && hero_outfit_loaded(ent, idx));
+    loaded = idx >= 0 && game_tag == 0 && hero_outfit_loaded(ent, idx);
+    tag = skins_choose(game_tag, want, loaded);
+    if (idx >= 0 && game_tag == 0 && !loaded && idx != cur)
+        fprintf(stderr, "[SKINS] %s: character %d stays normal: the %s models are not loaded here\n", why, id,
+                skins_label(want));
     if (tag == game_tag || idx < 0 || idx == cur)
         return;
     MEM16(obj + 0x601E) = (uint16_t)idx;

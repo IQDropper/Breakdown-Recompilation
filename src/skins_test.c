@@ -30,6 +30,13 @@ int main(void)
     CHECK(strcmp(skins_label(4), "T shirt") == 0);
     CHECK(strcmp(skins_label(SKINS_GAME), "game's choice") == 0);
 
+    CHECK(skins_choice_tag(0) == SKINS_GAME && skins_choice_tag(2) == 4 && skins_choice_tag(3) == 3);
+    CHECK(skins_choice_tag(9) == SKINS_GAME && skins_choice_tag(-1) == SKINS_GAME);
+    CHECK(skins_choice_from_token("researcher") == 3 && skins_choice_from_token("T") == 2);
+    CHECK(skins_choice_from_token("normal") == 1 && skins_choice_from_token("bogus") == 0);
+    CHECK(strcmp(skins_choice_token(2), "t") == 0 && strcmp(skins_choice_token(7), "game") == 0);
+    CHECK(strcmp(skins_choice_label(3), "Researcher") == 0);
+
     if (fails) {
         printf("skins_test: %d failed\n", fails);
         return 1;
