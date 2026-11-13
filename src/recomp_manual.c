@@ -1131,6 +1131,37 @@ static uint32_t hero_status(uint32_t hero)
     g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
     return st;
 }
+/* RECOMP_POS_LOG=1: the hero's position once a second (and on a jump of more than 50 units: a warp or a new
+ * area), as "[POS] t=<ms since start> x y z", so loading lines and doors can be matched with the [FILE] lines
+ * the kernel prints when the game opens an area block. Routing / mapping aid; off by default. */
+static void pos_log(uint32_t hero, uint32_t st)
+{
+    static int on = -1;
+    static unsigned long last, t0;
+    static float px, py, pz;
+    unsigned long now;
+    float x, y, z, dx, dz;
+    if (on < 0) {
+        const char *e = getenv("RECOMP_POS_LOG");
+        on = e && e[0] == '1';
+        t0 = GetTickCount();
+    }
+    if (!on)
+        return;
+    if (!st)
+        st = hero_status(hero);
+    if (!st)
+        return;
+    now = GetTickCount();
+    x = MEMF(st + 0x00); y = MEMF(st + 0x04); z = MEMF(st + 0x08);
+    dx = x - px; dz = z - pz;
+    if (now - last >= 1000 || dx * dx + dz * dz > 50.0f * 50.0f) {
+        fprintf(stderr, "[POS] t=%lu %.1f %.1f %.1f\n", (unsigned long)(now - t0), x, y, z);
+        fflush(stderr);
+        last = now; px = x; py = y; pz = z;
+    }
+    (void)py;
+}
 static uint32_t s_hero_life_block;   /* status + 0x5AAC of the hero, refreshed by every hero update */
 static void hero_fill_life(uint32_t st)
 {
@@ -1169,6 +1200,7 @@ void sub_0003E710(void)
         }
         if (st)
             mem_search_name("herostatus", st);
+        pos_log(hero, st);
         if (st && (move_k > 1e-3f || move_k < -1e-3f)) {
             /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
              * update; remember the stretched position so the next step is measured from it. */
