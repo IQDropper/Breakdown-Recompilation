@@ -33,7 +33,7 @@ foreach ($e in $entries.textures) {
       $fmt = New-Object System.Drawing.StringFormat
       $fmt.Alignment = switch ($op.align) { 'left' { 'Near' } 'right' { 'Far' } default { 'Center' } }
       $fmt.LineAlignment = if ($op.valign -eq 'top') { 'Near' } else { 'Center' }
-      $fmt.FormatFlags = 'NoClip'
+      $fmt.FormatFlags = 'NoClip, NoWrap'; $fmt.Trimming = 'None'
       $rect = New-Object System.Drawing.RectangleF ([float]$b[0]), ([float]$b[1]), ([float]$b[2]), ([float]$b[3])
       # shrink to fit the box width
       $sz = [float]$op.size
