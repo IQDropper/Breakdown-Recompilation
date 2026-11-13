@@ -1023,6 +1023,46 @@ static void attach_game(HWND hwnd)
     fprintf(stderr, "[PC] Back+Start opens the host overlay over the 4:3 picture. F10 toggles it.\n");
 }
 
+/* A11Y-6 first launch: open this page once, with a welcome line that points at the accessibility rows, a few
+ * seconds after the game window appears. A marker file in %LOCALAPPDATA%\\xboxrecomp keeps it from showing again.
+ * RECOMP_FIRST_LAUNCH=0 never shows it; =1 shows it every launch. */
+#define FIRST_LAUNCH_NOTE "Welcome! Text size, Hold to repeat, Hold toggle and Keys are here. Subtitles: the game's Options (Caption)."
+void pc_options_host_open(void);
+static DWORD WINAPI first_launch(LPVOID unused)
+{
+    const char *e = getenv("RECOMP_FIRST_LAUNCH"), *la = getenv("LOCALAPPDATA");
+    char dir[MAX_PATH], path[MAX_PATH];
+    FILE *f;
+    (void)unused;
+    if ((e && e[0] == '0') || !la || !*la)
+        return 0;
+    snprintf(dir, sizeof dir, "%s\\xboxrecomp", la);
+    snprintf(path, sizeof path, "%s\\first_launch_done.txt", dir);
+    if (!(e && e[0] == '1')) {
+        f = fopen(path, "r");
+        if (f) {
+            fclose(f);
+            return 0;
+        }
+    }
+    Sleep(4000);   /* let the window settle */
+    pc_options_host_open();
+    lock();
+    pc_options_set_note(FIRST_LAUNCH_NOTE);
+    unlock();
+    if (s_page)
+        InvalidateRect(s_page, NULL, FALSE);
+    CreateDirectoryA(dir, NULL);
+    f = fopen(path, "w");
+    if (f) {
+        fprintf(f, "The PC options page was shown at first launch. Delete this file, or set RECOMP_FIRST_LAUNCH=1, to show it again.\n");
+        fclose(f);
+    }
+    fprintf(stderr, "[PC] first launch: PC options page opened once (%s)\n", path);
+    fflush(stderr);
+    return 0;
+}
+
 static DWORD WINAPI wait_for_game(LPVOID unused)
 {
     (void)unused;
@@ -1035,6 +1075,11 @@ static DWORD WINAPI wait_for_game(LPVOID unused)
                 keys_done = 1;
                 if (km && *km)
                     apply_keymap_text(km);
+                {
+                    HANDLE t = CreateThread(NULL, 0, first_launch, NULL, 0, NULL);
+                    if (t)
+                        CloseHandle(t);
+                }
             }
             attach_game(hwnd);
         }

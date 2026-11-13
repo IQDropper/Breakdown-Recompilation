@@ -110,6 +110,8 @@ void pc_options_save_result(int ok);
 /* A11Y-1 key list: replace the draft's RECOMP_KEYMAP text (keymap.h). 0 if the Keys row is locked by the launch
  * script or the page is closed. Apply saves it like any other row; Revert puts the applied keys back. */
 int pc_options_set_keymap(const char *text);
+/* Replace the status line while the page is open (the first-launch welcome, A11Y-6). */
+void pc_options_set_note(const char *text);
 
 int pc_options_is_open(void);
 int pc_options_row(void);

@@ -330,6 +330,12 @@ struct pc_pad_result pc_options_on_esc(void)
     return r;
 }
 
+void pc_options_set_note(const char *text)
+{
+    if (s_open && text)
+        set_status(text);
+}
+
 int pc_options_set_keymap(const char *text)
 {
     if (!s_open || lock_for_row(PC_ROW_KEYS))
