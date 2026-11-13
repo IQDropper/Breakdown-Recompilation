@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "recomp_env.h"
 #include "pc_options_host.h"
+#include "tuning_host.h"     /* tuning_host_pad: the tuning window's controller */
 #include "a11y_input.h"
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
@@ -295,6 +296,7 @@ void sub_00205439(void)
     /* PC options is a host page. Start alone still reaches the guest. */
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;
+    tuning_host_pad((int)port, &st.wButtons, st.bAnalog, pr.suppress_motion);   /* LS + RS: tuning window */
     a11y_settle();
     if (pr.suppress_motion) {
         /* Page open: the filter sees nothing held (repeat stops, a latch stays), the game sees nothing. */

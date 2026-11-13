@@ -8,4 +8,7 @@ void tuning_host_start(void);          /* display_host_init: load files; start t
 int tuning_host_active(void);          /* the window is on, or a finalized value exists */
 float tuning_host_move_speed(void);    /* "Move speed x" (1 = the game's own speed) */
 void tuning_host_hero(uint32_t status);/* game thread, every hero update: status block or 0 */
+/* Game thread, every pad poll: the window's controller (LS + RS click opens it). Clears what the game must not see.
+ * blocked = another page (PC options) has the pad this poll. */
+void tuning_host_pad(int port, uint16_t *wbuttons, uint8_t analog[8], int blocked);
 #endif
