@@ -258,6 +258,8 @@ def main(argv):
     ap.add_argument("--edge", choices=("clamp", "wrap"), default="clamp")
     ap.add_argument("--only", nargs="*", default=None, help="hashes (16 hex digits) to do; default all")
     ap.add_argument("--skip", nargs="*", default=None, help="hashes to leave at their original size (e.g. HUD sheets)")
+    ap.add_argument("--skip-file", default=None,
+                    help="file with hashes to leave original, one per line (first word; # starts a comment)")
     ap.add_argument("--external", default=None, help='your own upscaler: "command {in} {out}"')
     ap.add_argument("--external-batch", default=None,
                     help='your own upscaler, once for a whole folder: "command {in_dir} {out_dir}" (same file names)')
@@ -272,6 +274,12 @@ def main(argv):
         return 2
     os.makedirs(a.out, exist_ok=True)
     only = {h.upper() for h in a.only} if a.only else None
+    if a.skip_file:
+        a.skip = list(a.skip or [])
+        for line in open(a.skip_file, encoding="utf-8"):
+            w = line.split("#", 1)[0].split()
+            if w:
+                a.skip.append(w[0])
     files = []
     for n in sorted(os.listdir(a.src)):
         m = mtp.HASH_RE.match(n)

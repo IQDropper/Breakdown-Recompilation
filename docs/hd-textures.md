@@ -48,6 +48,10 @@ py -3 tools\upscale_tex.py <dump folder> <out folder> --max-side 512 --jobs 3 --
 - Transparency is kept (same share of see-through pixels before and after).
 - **Watch for:** AI invents detail. Tiny text and logos turn into made-up letters (seen on a monitor label). Fix
   those by hand (below).
+- **Review every pack for made-up text:** `py -3 tools	ex_review_sheets.py <dump folder> <AI folder> <out folder>`
+  makes contact sheets (original next to AI, 20 pairs each). Flag what had small text, then keep those original with
+  `--skip-file flags.txt` (one hash per line, # = comment) or repaint them. The doorway room's list (15 High/Medium,
+  9 Low) is in the GO kit: `reports/textures/text_flags_doorway.md`.
 - Result (doorway room, 4x render): sharper bolts, panels, edges and equipment; HUD unchanged; 140 textures plus the
   hand-fixed label = a 487 MB pack. Screens in the GO kit: `reports/showcase/hdai_compare.png`.
 

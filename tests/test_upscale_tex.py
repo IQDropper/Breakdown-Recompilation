@@ -105,6 +105,17 @@ class UpscaleTest(unittest.TestCase):
             self.assertEqual(up.main([str(src), str(out), "--jobs", "1"]), 1)   # nothing left to do
             self.assertEqual(list(out.iterdir()), [])
 
+    def test_skip_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            src, out = Path(td, "dump"), Path(td, "up")
+            src.mkdir()
+            write_tga(src / (HASH + "_4x4_0C.tga"), 4, 4, bytes((9, 9, 9, 255)) * 16)
+            write_tga(src / ("FEDCBA9876543210" + "_4x4_0C.tga"), 4, 4, bytes((1, 2, 3, 255)) * 16)
+            sf = Path(td, "flags.txt")
+            sf.write_text("# made-up text\n" + HASH.lower() + "  High  sign\n\n", encoding="utf-8")
+            self.assertEqual(up.main([str(src), str(out), "--scale", "2", "--jobs", "1", "--skip-file", str(sf)]), 0)
+            self.assertEqual([p.name for p in out.iterdir()], ["FEDCBA9876543210_8x8_up.png"])
+
     def test_external_needs_placeholders(self):
         with tempfile.TemporaryDirectory() as td:
             self.assertEqual(up.main([td, td, "--external", "esrgan.exe"]), 2)
