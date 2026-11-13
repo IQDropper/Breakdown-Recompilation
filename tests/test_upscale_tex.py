@@ -77,9 +77,38 @@ class UpscaleTest(unittest.TestCase):
             self.assertEqual(up.main([str(src), str(out), "--external", cmd, "--jobs", "1"]), 0)
             self.assertEqual([p.name for p in out.iterdir()], [HASH + "_8x8_up.png"])
 
+    def test_external_batch_and_max_side(self):
+        with tempfile.TemporaryDirectory() as td:
+            src, out = Path(td, "dump"), Path(td, "up")
+            src.mkdir()
+            write_tga(src / (HASH + "_4x4_A8R8G8B8.tga"), 4, 4, bytes((9, 9, 9, 255)) * 16)
+            write_tga(src / ("FEDCBA9876543210" + "_8x8_A8R8G8B8.tga"), 8, 8, bytes((1, 2, 3, 255)) * 64)
+            batch = Path(td, "batch2x.py")
+            batch.write_text(
+                "import os, sys\nsys.path.insert(0, %r)\nimport upscale_tex as u, make_tex_pack as m\n"
+                "for n in os.listdir(sys.argv[1]):\n"
+                "    w, h, d = m.read_png(os.path.join(sys.argv[1], n))\n"
+                "    W, H, b = u.upscale_rgba(w, h, d, 2)\n"
+                "    u.write_png(os.path.join(sys.argv[2], n), W, H, b)\n" % str(ROOT / "tools"))
+            cmd = '"%s" "%s" {in_dir} {out_dir}' % (sys.executable, batch)
+            self.assertEqual(up.main([str(src), str(out), "--external-batch", cmd, "--max-side", "4"]), 0)
+            self.assertEqual([p.name for p in out.iterdir()], [HASH + "_8x8_up.png"])   # the 8x8 one was skipped
+
+    def test_linear_textures_are_skipped(self):
+        self.assertTrue(up.is_linear("726fc122dda6e3f3_128x64_13.tga"))
+        self.assertTrue(up.is_linear("02336a2704a1eaa2_640x480_24.tga"))
+        self.assertFalse(up.is_linear("783e685be9afaa32_256x256_0C.tga"))
+        with tempfile.TemporaryDirectory() as td:
+            src, out = Path(td, "dump"), Path(td, "up")
+            src.mkdir()
+            write_tga(src / (HASH + "_4x4_13.tga"), 4, 4, bytes((9, 9, 9, 255)) * 16)
+            self.assertEqual(up.main([str(src), str(out), "--jobs", "1"]), 1)   # nothing left to do
+            self.assertEqual(list(out.iterdir()), [])
+
     def test_external_needs_placeholders(self):
         with tempfile.TemporaryDirectory() as td:
             self.assertEqual(up.main([td, td, "--external", "esrgan.exe"]), 2)
+            self.assertEqual(up.main([td, td, "--external-batch", "esrgan.exe -i x"]), 2)
 
 
 if __name__ == "__main__":

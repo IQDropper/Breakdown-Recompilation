@@ -9,12 +9,19 @@ Each image keeps its hash (the first 16 hex digits of its name) and gets the new
 Default filter: Lanczos-3 on premultiplied alpha (no dark fringes at cut-out edges). Standard library only; if
 Pillow happens to be installed it is used for the same filter (much faster). It uses every CPU core.
 --edge wrap treats the texture as tiling (walls, floors); clamp (default) suits cut-outs, UI and atlases.
+--external-batch "cmd {in_dir} {out_dir}" runs it once on a folder (faster: the model loads once). Every external
+output is checked against its original (shrunk back and compared) and dropped if it doesn't match: Real-ESRGAN
+ncnn-vulkan 20220424's folder mode was seen giving textures each other's pictures, so prefer --external with --jobs 3.
+--max-side N skips images larger than N (e.g. 512 leaves out 640x480 full-screen images).
 --external runs your own upscaler per image instead (for example an ESRGAN build you installed yourself):
 {in} is a PNG of the original, {out} the PNG it must write. Nothing is downloaded by this script.
+Linear-format textures (format code 10-41 hex at the end of the dump name, e.g. _13) are skipped: the game
+addresses them in pixels, so a bigger copy shows the wrong part.
 The images and packs come from your own game files: never commit them."""
 import argparse
 import math
 import os
+import re
 import shlex
 import struct
 import subprocess
@@ -27,6 +34,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_tex_pack as mtp  # noqa: E402  (read_tga / read_png / HASH_RE)
 
 READERS = {".tga": mtp.read_tga, ".png": mtp.read_png}   # dumps are TGA; DDS is a replacement format only
+
+
+# Xbox "linear" texture formats (D3DFMT_LIN_*, YUY2/UYVY; external/xboxrecomp/src/d3d/d3d8_swizzle.h). The game
+# addresses these in texels, not 0..1, so a bigger replacement shows the wrong part of the image (seen: the life bar,
+# LIN_L8 0x13, went white with 4x packs). They are kept at their own size: never upscaled.
+LINEAR_FORMATS = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20,
+                  0x24, 0x25, 0x2E, 0x2F, 0x30, 0x31, 0x35, 0x36, 0x37, 0x3D, 0x3E, 0x3F, 0x40, 0x41}
+FMT_RE = re.compile(r"_([0-9A-Fa-f]{2})\.[A-Za-z]+$")
+
+
+def is_linear(name):
+    m = FMT_RE.search(name)
+    return bool(m) and int(m.group(1), 16) in LINEAR_FORMATS
 
 
 def write_png(path, w, h, rgba):
@@ -134,6 +154,30 @@ def out_name(name, W, H):
     return "%s_%dx%d_up.png" % (m.group(1).upper(), W, H)
 
 
+def matches(w, h, rgba, W, H, big, limit=24.0):
+    """An external upscaler's output must still be this picture: shrink it back to w x h (box average) and compare
+    with the original. Mean absolute difference per channel over all pixels, 0..255. Catches swapped or empty outputs
+    (seen: Real-ESRGAN's folder mode gave some textures another texture's picture). Returns (ok, difference)."""
+    if W % w or H % h:
+        return False, 255.0
+    fx, fy = W // w, H // h
+    n = fx * fy
+    diff = 0
+    for y in range(h):
+        for x in range(w):
+            acc = [0, 0, 0, 0]
+            for yy in range(y * fy, (y + 1) * fy):
+                row = yy * W * 4
+                for xx in range(x * fx, (x + 1) * fx):
+                    o = row + xx * 4
+                    acc[0] += big[o]; acc[1] += big[o + 1]; acc[2] += big[o + 2]; acc[3] += big[o + 3]
+            i = (y * w + x) * 4
+            for c in range(4):
+                diff += abs(acc[c] / n - rgba[i + c])
+    d = diff / (w * h * 4)
+    return d <= limit, d
+
+
 def work(job):
     path, out_dir, scale, wrap, external, use_pil = job
     name = os.path.basename(path)
@@ -151,6 +195,9 @@ def work(job):
                 if r.returncode != 0 or not os.path.exists(dst):
                     raise RuntimeError("external upscaler failed (%d): %s" % (r.returncode, (r.stderr or "").strip()[:200]))
                 W, H, big = mtp.read_png(dst)
+                ok, d = matches(w, h, rgba, W, H, big)
+                if not ok:
+                    raise RuntimeError("upscaler output does not match the original (difference %.0f of 255): not written" % d)
         elif use_pil:
             W, H, big = upscale_pillow(w, h, rgba, scale, wrap)
         else:
@@ -162,6 +209,47 @@ def work(job):
         return name, None, str(e)
 
 
+def run_batch(files, out_dir, cmd_tpl):
+    """--external-batch: write every image as PNG into one folder, run the upscaler once on the whole folder
+    ({in_dir} -> {out_dir}, same file names), read the results back. One model load instead of one per image."""
+    results = []
+    with tempfile.TemporaryDirectory() as td:
+        src, dst = os.path.join(td, "in"), os.path.join(td, "out")
+        os.makedirs(src)
+        os.makedirs(dst)
+        sizes = {}
+        for f in files:
+            name = os.path.basename(f)
+            try:
+                w, h, rgba = READERS[os.path.splitext(name)[1].lower()](f)
+                write_png(os.path.join(src, name + ".png"), w, h, rgba)
+                sizes[name] = (w, h)
+            except Exception as e:
+                results.append((name, None, str(e)))
+        cmd = cmd_tpl.replace("{in_dir}", '"%s"' % src).replace("{out_dir}", '"%s"' % dst)
+        r = subprocess.run(cmd if os.name == "nt" else shlex.split(cmd), shell=(os.name == "nt"),
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print("external batch upscaler exit %d: %s" % (r.returncode, (r.stderr or "").strip()[-300:]), file=sys.stderr)
+        for name, (w, h) in sizes.items():
+            got = os.path.join(dst, name + ".png")
+            if not os.path.exists(got):
+                results.append((name, None, "no output from the upscaler"))
+                continue
+            try:
+                W, H, big = mtp.read_png(got)
+                w0, h0, rgba0 = READERS[os.path.splitext(name)[1].lower()](os.path.join(os.path.dirname(files[0]), name))
+                ok, d = matches(w0, h0, rgba0, W, H, big)
+                if not ok:
+                    results.append((name, None, "upscaler output does not match the original (difference %.0f of 255): not written" % d))
+                    continue
+                write_png(os.path.join(out_dir, out_name(name, W, H)), W, H, big)
+                results.append((name, "%dx%d -> %dx%d" % (w, h, W, H), None))
+            except Exception as e:
+                results.append((name, None, str(e)))
+    return results
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Upscale dumped textures (Lanczos-3), keeping their hash names.")
     ap.add_argument("src")
@@ -169,11 +257,18 @@ def main(argv):
     ap.add_argument("--scale", type=int, default=4, choices=(2, 3, 4))
     ap.add_argument("--edge", choices=("clamp", "wrap"), default="clamp")
     ap.add_argument("--only", nargs="*", default=None, help="hashes (16 hex digits) to do; default all")
+    ap.add_argument("--skip", nargs="*", default=None, help="hashes to leave at their original size (e.g. HUD sheets)")
     ap.add_argument("--external", default=None, help='your own upscaler: "command {in} {out}"')
+    ap.add_argument("--external-batch", default=None,
+                    help='your own upscaler, once for a whole folder: "command {in_dir} {out_dir}" (same file names)')
+    ap.add_argument("--max-side", type=int, default=0, help="skip images wider or taller than this (0 = no limit)")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
     a = ap.parse_args(argv)
     if a.external and ("{in}" not in a.external or "{out}" not in a.external):
         print("--external needs {in} and {out} in the command", file=sys.stderr)
+        return 2
+    if a.external_batch and ("{in_dir}" not in a.external_batch or "{out_dir}" not in a.external_batch):
+        print("--external-batch needs {in_dir} and {out_dir} in the command", file=sys.stderr)
         return 2
     os.makedirs(a.out, exist_ok=True)
     only = {h.upper() for h in a.only} if a.only else None
@@ -184,16 +279,28 @@ def main(argv):
             continue
         if only and m.group(1).upper() not in only:
             continue
+        if a.skip and m.group(1).upper() in {h.upper() for h in a.skip}:
+            continue
+        if is_linear(n):
+            print("  skip %s: linear texture (addressed in pixels), kept at its own size" % n)
+            continue
+        if a.max_side:
+            sz = re.search(r"_(\d+)x(\d+)_", n)
+            if sz and max(int(sz.group(1)), int(sz.group(2))) > a.max_side:
+                continue
         files.append(os.path.join(a.src, n))
     if not files:
         print("no images named <16 hex digits>... in %s" % a.src, file=sys.stderr)
         return 1
-    use_pil = not a.external and have_pillow()
-    how = "external: " + a.external if a.external else ("Pillow Lanczos" if use_pil else "Lanczos-3 (standard library)")
+    use_pil = not a.external and not a.external_batch and have_pillow()
+    how = ("external batch: " + a.external_batch if a.external_batch else "external: " + a.external if a.external
+           else ("Pillow Lanczos" if use_pil else "Lanczos-3 (standard library)"))
     print("%d images, x%d, edge %s, %s, %d jobs" % (len(files), a.scale, a.edge, how, a.jobs))
     jobs = [(f, a.out, a.scale, a.edge == "wrap", a.external, use_pil) for f in files]
     bad = 0
-    if a.jobs > 1 and len(jobs) > 1:
+    if a.external_batch:
+        results = run_batch(files, a.out, a.external_batch)
+    elif a.jobs > 1 and len(jobs) > 1:
         with ProcessPoolExecutor(max_workers=a.jobs) as ex:
             results = list(ex.map(work, jobs))
     else:
