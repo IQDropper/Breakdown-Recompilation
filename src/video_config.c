@@ -9,6 +9,7 @@
 #include "skins.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -30,6 +31,7 @@ enum {
     KEY_REPEAT,
     KEY_TOGGLE,
     KEY_OUTFIT,
+    KEY_TEXT,
     KEY_COUNT
 };
 
@@ -45,6 +47,7 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_A11Y_REPEAT",
     "RECOMP_A11Y_TOGGLE",
     "RECOMP_HERO_OUTFIT",
+    "RECOMP_PC_TEXT_SIZE",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -180,6 +183,7 @@ static void store_settings(const struct video_settings *s)
     snprintf(s_val[KEY_REPEAT], sizeof s_val[KEY_REPEAT], "%s", a11y_repeat_token(c.a11y_repeat));
     snprintf(s_val[KEY_TOGGLE], sizeof s_val[KEY_TOGGLE], "%s", a11y_toggle_token(c.a11y_toggle));
     snprintf(s_val[KEY_OUTFIT], sizeof s_val[KEY_OUTFIT], "%s", skins_choice_token(c.outfit));
+    snprintf(s_val[KEY_TEXT], sizeof s_val[KEY_TEXT], "%d", video_text_size_percent(c.text_size));
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -191,6 +195,7 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_REPEAT] = 1;
     s_have[KEY_TOGGLE] = 1;
     s_have[KEY_OUTFIT] = 1;
+    s_have[KEY_TEXT] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -226,6 +231,7 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# of that trigger holds it, the next press lets go.\n"
                 "# RECOMP_HERO_OUTFIT: game, normal, t or researcher (story outfits still win;\n"
                 "# shows from the next time the hero appears).\n"
+                "# RECOMP_PC_TEXT_SIZE: 100, 150 or 200 = text size on this PC page.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
@@ -236,7 +242,8 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "RECOMP_PRESENT_VSYNC=%d\n"
                 "RECOMP_A11Y_REPEAT=%s\n"
                 "RECOMP_A11Y_TOGGLE=%s\n"
-                "RECOMP_HERO_OUTFIT=%s\n",
+                "RECOMP_HERO_OUTFIT=%s\n"
+                "RECOMP_PC_TEXT_SIZE=%d\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
@@ -244,7 +251,7 @@ int video_config_save(const char *path, const struct video_settings *in)
                 video_settings_fullscreen_token(s.borderless),
                 s.fps60 ? 1 : 0, s.pipeline ? 1 : 0, s.vsync ? 1 : 0,
                 a11y_repeat_token(s.a11y_repeat), a11y_toggle_token(s.a11y_toggle),
-                skins_choice_token(s.outfit)) < 0) {
+                skins_choice_token(s.outfit), video_text_size_percent(s.text_size)) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -302,6 +309,7 @@ void video_settings_stock(struct video_settings *s)
     s->a11y_repeat = A11Y_REPEAT_OFF;
     s->a11y_toggle = A11Y_TOGGLE_OFF;
     s->outfit = 0;
+    s->text_size = 0;
 }
 
 void video_settings_clamp(struct video_settings *s)
@@ -337,6 +345,28 @@ void video_settings_clamp(struct video_settings *s)
         s->a11y_toggle = A11Y_TOGGLE_OFF;
     if (s->outfit < 0 || s->outfit >= SKINS_CHOICES)
         s->outfit = 0;
+    if (s->text_size < 0 || s->text_size >= VIDEO_TEXT_SIZES)
+        s->text_size = 0;
+}
+
+int video_text_size_percent(int index)
+{
+    static const int pct[VIDEO_TEXT_SIZES] = { 100, 150, 200 };
+    return pct[index > 0 && index < VIDEO_TEXT_SIZES ? index : 0];
+}
+
+int video_text_size_index(const char *s)
+{
+    int i, v;
+    if (!s)
+        return 0;
+    while (*s == ' ' || *s == '\t')
+        s++;
+    v = atoi(s);
+    for (i = 0; i < VIDEO_TEXT_SIZES; i++)
+        if (video_text_size_percent(i) == v)
+            return i;
+    return 0;
 }
 
 int video_settings_aspect_index(const char *name)
@@ -405,6 +435,7 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->a11y_repeat = c->a11y_repeat;
     s->a11y_toggle = c->a11y_toggle;
     s->outfit = c->outfit;
+    s->text_size = c->text_size;
     video_settings_clamp(s);
 }
 
@@ -422,6 +453,7 @@ const char *video_row_title(int row)
         "Hold to repeat",
         "Hold toggle",
         "Outfit",
+        "Text size",
         "Apply",
         "OK",
         "Cancel",
@@ -499,6 +531,10 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->outfit;
         s->outfit = wrap_index(s->outfit, SKINS_CHOICES, dir);
         return s->outfit != before;
+    case VIDEO_ROW_TEXT:
+        before = s->text_size;
+        s->text_size = wrap_index(s->text_size, VIDEO_TEXT_SIZES, dir);
+        return s->text_size != before;
     default:
         return 0;
     }
@@ -546,6 +582,9 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_OUTFIT:
         snprintf(buf, n, "%s", skins_choice_label(s->outfit));
         break;
+    case VIDEO_ROW_TEXT:
+        snprintf(buf, n, "%d%%", video_text_size_percent(s->text_size));
+        break;
     default:
         break;
     }
@@ -586,6 +625,8 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_OUTFIT:
         return "Derrick's outfit, from the ones the game has. Shows the next time he appears (load a save). "
                "Story outfits still win. An outfit only shows where the game has its model loaded.";
+    case VIDEO_ROW_TEXT:
+        return "Text size on this PC page: 100, 150 or 200 percent. It also grows with the window. Changes at once.";
     case VIDEO_ROW_APPLY:
         return "Save breakdown_video.cfg beside the exe. This menu stays open.";
     case VIDEO_ROW_OK:

@@ -80,6 +80,7 @@ static void test_roundtrip(void)
     s.a11y_repeat = A11Y_REPEAT_FACE;
     s.a11y_toggle = A11Y_TOGGLE_LT;
     s.outfit = 2;
+    s.text_size = 2;
     expect("save", video_config_save(path, &s) == 0);
     video_config_reset();
     expect("saved cleared", video_config_getenv("RECOMP_RENDER_SCALE") == NULL);
@@ -116,6 +117,11 @@ static void test_roundtrip(void)
     expect("loaded outfit", video_config_getenv("RECOMP_HERO_OUTFIT")
            && strcmp(video_config_getenv("RECOMP_HERO_OUTFIT"), "t") == 0);
     expect("roundtrip outfit", loaded.outfit == 2 && c.outfit == 2);
+    expect("loaded text size", video_config_getenv("RECOMP_PC_TEXT_SIZE")
+           && strcmp(video_config_getenv("RECOMP_PC_TEXT_SIZE"), "200") == 0);
+    expect("roundtrip text size", loaded.text_size == 2 && c.text_size == 2);
+    expect("text size parse", video_text_size_index("150") == 1 && video_text_size_index(" 200") == 2
+           && video_text_size_index("90") == 0 && video_text_size_index(NULL) == 0);
     expect("roundtrip scale", loaded.render_scale == 2 && loaded.window_scale == 3);
     expect("roundtrip aspect", loaded.aspect == s.aspect && loaded.filter == 2);
     expect("roundtrip borderless", loaded.borderless == 1);

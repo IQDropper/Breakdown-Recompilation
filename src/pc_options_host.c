@@ -47,7 +47,7 @@ static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
 static char b_fps60[2], b_pipe[2], b_vsync[2];
-static char b_repeat[8], b_toggle[8], b_outfit[12];   /* a11y_input.h tokens: "abxy", "both", ... */
+static char b_repeat[8], b_toggle[8], b_outfit[12], b_text[8];   /* a11y_input.h tokens: "abxy", "both", ... */
 
 struct pc_apply {
     int action;
@@ -114,6 +114,7 @@ static unsigned env_locks(void)
     if (display_host_launch_set("RECOMP_A11Y_REPEAT")) mask |= PC_LOCK_REPEAT;
     if (display_host_launch_set("RECOMP_A11Y_TOGGLE")) mask |= PC_LOCK_TOGGLE;
     if (display_host_launch_set("RECOMP_HERO_OUTFIT")) mask |= PC_LOCK_OUTFIT;
+    if (display_host_launch_set("RECOMP_PC_TEXT_SIZE")) mask |= PC_LOCK_TEXT;
     return mask;
 }
 
@@ -175,6 +176,7 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_A11Y_REPEAT") == 0) return b_repeat;
     if (strcmp(name, "RECOMP_A11Y_TOGGLE") == 0) return b_toggle;
     if (strcmp(name, "RECOMP_HERO_OUTFIT") == 0) return b_outfit;
+    if (strcmp(name, "RECOMP_PC_TEXT_SIZE") == 0) return b_text;
     return NULL;
 }
 
@@ -193,6 +195,7 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_repeat, sizeof b_repeat, "%s", a11y_repeat_token(c.a11y_repeat));
     snprintf(b_toggle, sizeof b_toggle, "%s", a11y_toggle_token(c.a11y_toggle));
     snprintf(b_outfit, sizeof b_outfit, "%s", skins_choice_token(c.outfit));
+    snprintf(b_text, sizeof b_text, "%d", video_text_size_percent(c.text_size));
 }
 
 static int style_is_borderless(HWND hwnd)
@@ -581,19 +584,53 @@ static void on_key(WPARAM vk, int down)
     flush_inline_save();
 }
 
+/* A11Y-4: page text grows with the page height (16 px at 800 px tall) times the Text size row (100/150/200%).
+ * Fonts are re-made only when that size changes. */
+static HFONT s_font_sized, s_title_sized;
+static int s_font_px;
+static int s_first_row;   /* first row shown when they do not all fit (text size 150/200%) */
+static void page_fonts(int px)
+{
+    HFONT f, t;
+    if (px == s_font_px && s_font_sized)
+        return;
+    f = CreateFontA(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                    CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    t = CreateFontA(-(px * 22 / 16), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                    CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI");
+    if (!f || !t) {
+        if (f)
+            DeleteObject(f);
+        if (t)
+            DeleteObject(t);
+        return;   /* keep the last good pair (or the 16/22 px fonts) */
+    }
+    if (s_font_sized)
+        DeleteObject(s_font_sized);
+    if (s_title_sized)
+        DeleteObject(s_title_sized);
+    s_font_sized = f;
+    s_title_sized = t;
+    s_font_px = px;
+}
+
 static void paint_page(HDC hdc, const RECT *rc)
 {
     char titles[PC_ROW_COUNT][48];
     char values[PC_ROW_COUNT][48];
     char status[160];
     char detail[240];
-    int row, open, i, y, row_step;
+    char more[64];
+    int row, open, i, y, row_step, text_pct, rows_top, rows_bottom, shown, first, footer, line_h;
+    float k, hk;
     RECT line;
     HBRUSH bg, hi;
+    HFONT font, title_font;
 
     lock();
     open = pc_options_is_open();
     row = pc_options_row();
+    text_pct = video_text_size_percent(pc_options_draft()->text_size);   /* the draft: it previews as it changes */
     snprintf(status, sizeof status, "%s", pc_options_status());
     s_painted_row = row;
     snprintf(s_painted_status, sizeof s_painted_status, "%s", status);
@@ -613,63 +650,107 @@ static void paint_page(HDC hdc, const RECT *rc)
     if (!open)
         return;
 
+    hk = (float)rc->bottom / 800.0f;
+    if (hk < 0.75f)
+        hk = 0.75f;
+    if (hk > 2.0f)
+        hk = 2.0f;
+    k = hk * (float)text_pct / 100.0f;
+    page_fonts((int)(16.0f * k + 0.5f));
+    font = s_font_sized ? s_font_sized : s_font;
+    title_font = s_title_sized ? s_title_sized : (s_title_font ? s_title_font : s_font);
+    line_h = (int)(22.0f * k + 0.5f);
+
     bg = CreateSolidBrush(COL_BG);
     FillRect(hdc, rc, bg);
     DeleteObject(bg);
     SetBkMode(hdc, TRANSPARENT);
-    SelectObject(hdc, s_title_font ? s_title_font : s_font);
+    SelectObject(hdc, title_font);
     SetTextColor(hdc, COL_TEXT);
-    line.left = 16;
-    line.top = 10;
-    line.right = rc->right - 16;
-    line.bottom = 36;
+    line.left = (int)(16 * k);
+    line.top = (int)(10 * k);
+    line.right = rc->right - (int)(16 * k);
+    line.bottom = (int)(40 * k);
     DrawTextA(hdc, "PC options", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    SelectObject(hdc, s_font);
+    SelectObject(hdc, font);
     SetTextColor(hdc, COL_DIM);
-    line.top = 36;
-    line.bottom = 56;
+    line.top = line.bottom;
+    line.bottom = line.top + line_h;
+    /* (the subtitle is drawn below, once we know whether a "more above/below" note shares its line) */
+
+    /* Footer: the help text (up to two lines) and the status line. */
+    footer = (int)(10 * k) + line_h + 4 + 2 * line_h + 4;
+    rows_top = line.bottom + (int)(8 * k);
+    rows_bottom = rc->bottom - footer;
+    row_step = (int)(28.0f * k + 0.5f);
+    if (row_step < line_h + 2)
+        row_step = line_h + 2;
+    shown = (rows_bottom - rows_top) / row_step;
+    if (shown < 1)
+        shown = 1;
+    if (shown >= PC_ROW_COUNT) {
+        shown = PC_ROW_COUNT;
+        s_first_row = 0;
+    } else {
+        if (row < s_first_row)
+            s_first_row = row;
+        if (row >= s_first_row + shown)
+            s_first_row = row - shown + 1;
+        if (s_first_row > PC_ROW_COUNT - shown)
+            s_first_row = PC_ROW_COUNT - shown;
+        if (s_first_row < 0)
+            s_first_row = 0;
+    }
+    first = s_first_row;
+    more[0] = 0;
+    if (shown < PC_ROW_COUNT) {
+        /* Not every row fits: say so, on the subtitle line's right; the subtitle stops short of it. */
+        SIZE ext;
+        snprintf(more, sizeof more, "%s%s%s", first > 0 ? "more above" : "",
+                 first > 0 && first + shown < PC_ROW_COUNT ? " / " : "",
+                 first + shown < PC_ROW_COUNT ? "more below" : "");
+        SetTextColor(hdc, COL_VALUE);
+        DrawTextA(hdc, more, -1, &line, DT_RIGHT | DT_SINGLELINE | DT_VCENTER);
+        if (GetTextExtentPoint32A(hdc, more, (int)strlen(more), &ext))
+            line.right -= ext.cx + (int)(24 * k);
+    }
+    SetTextColor(hdc, COL_DIM);
     DrawTextA(hdc, "Host overlay on the 4:3 picture. Not drawn into the frame.",
               -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     hi = CreateSolidBrush(COL_ROW);
-    /* 28 px a row when it fits above the detail and status lines; tighter in a small window. */
-    row_step = 28;
-    if (64 + PC_ROW_COUNT * row_step > rc->bottom - 62) {
-        row_step = (rc->bottom - 62 - 64) / PC_ROW_COUNT;
-        if (row_step < 18)
-            row_step = 18;
-    }
-    for (i = 0; i < PC_ROW_COUNT; i++) {
+    for (i = first; i < first + shown; i++) {
         RECT rowrc;
-        y = 64 + i * row_step;
-        rowrc.left = 10;
+        int valw = (int)(170 * k);
+        y = rows_top + (i - first) * row_step;
+        rowrc.left = (int)(10 * k);
         rowrc.top = y;
-        rowrc.right = rc->right - 10;
+        rowrc.right = rc->right - (int)(10 * k);
         rowrc.bottom = y + row_step - 2;
         if (i == row)
             FillRect(hdc, &rowrc, hi);
         SetTextColor(hdc, i == row ? COL_TEXT : COL_DIM);
         line = rowrc;
-        line.left = 18;
-        line.right = rc->right - 180;
-        DrawTextA(hdc, titles[i], -1, &line, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        line.left = (int)(18 * k);
+        line.right = rc->right - valw - (int)(10 * k);
+        DrawTextA(hdc, titles[i], -1, &line, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         if (values[i][0]) {
             SetTextColor(hdc, COL_VALUE);
-            line.left = rc->right - 170;
-            line.right = rc->right - 16;
+            line.left = rc->right - valw;
+            line.right = rc->right - (int)(16 * k);
             DrawTextA(hdc, values[i], -1, &line, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         }
     }
     DeleteObject(hi);
-    SetTextColor(hdc, COL_DIM);
-    line.left = 16;
-    line.right = rc->right - 16;
-    line.top = rc->bottom - 58;
-    line.bottom = rc->bottom - 36;
-    DrawTextA(hdc, detail, -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     SetTextColor(hdc, COL_TEXT);
-    line.top = rc->bottom - 34;
-    line.bottom = rc->bottom - 10;
+    line.left = (int)(16 * k);
+    line.right = rc->right - (int)(16 * k);
+    line.bottom = rc->bottom - (int)(10 * k);
+    line.top = line.bottom - line_h;
     DrawTextA(hdc, status, -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    SetTextColor(hdc, COL_DIM);
+    line.bottom = line.top - 4;
+    line.top = line.bottom - 2 * line_h;
+    DrawTextA(hdc, detail, -1, &line, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
 }
 
 static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)

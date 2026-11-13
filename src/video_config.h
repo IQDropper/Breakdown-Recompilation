@@ -30,6 +30,7 @@ struct video_settings {
     int a11y_repeat;       /* A11Y_REPEAT_*, RECOMP_A11Y_REPEAT: hold a button = 10 presses/s (applies at once) */
     int a11y_toggle;       /* A11Y_TOGGLE_*, RECOMP_A11Y_TOGGLE: a trigger latches on a press (applies at once) */
     int outfit;            /* skins.h choice, RECOMP_HERO_OUTFIT: hero outfit (next spawn) */
+    int text_size;         /* 0 100%, 1 150%, 2 200%, RECOMP_PC_TEXT_SIZE: PC page text (applies at once) */
 };
 
 enum {
@@ -44,6 +45,7 @@ enum {
     VIDEO_ROW_REPEAT,
     VIDEO_ROW_TOGGLE,
     VIDEO_ROW_OUTFIT,
+    VIDEO_ROW_TEXT,
     VIDEO_ROW_APPLY,
     VIDEO_ROW_OK,
     VIDEO_ROW_CANCEL,
@@ -80,6 +82,10 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
 int video_settings_aspect_index(const char *name);
 const char *video_settings_aspect_name(int index);
 const char *video_settings_filter_name(int index);
+/* Text size choice -> percent (100, 150, 200) and back (unknown text -> 0, i.e. 100%). */
+#define VIDEO_TEXT_SIZES 3
+int video_text_size_percent(int index);
+int video_text_size_index(const char *s);
 /* "0", "1", or "exclusive". What breakdown_video.cfg stores. */
 const char *video_settings_fullscreen_token(int mode);
 

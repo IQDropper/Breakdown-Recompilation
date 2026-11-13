@@ -139,6 +139,8 @@ static void activate(struct pc_pad_result *r)
         s_draft.a11y_toggle = stock.a11y_toggle;
     if (!lock_for_row(PC_ROW_OUTFIT))
         s_draft.outfit = stock.outfit;
+    if (!lock_for_row(PC_ROW_TEXT))
+        s_draft.text_size = stock.text_size;
     video_settings_clamp(&s_draft);
     set_status("Stock preview. Apply writes it. Revert restores the last applied settings.");
     r->action = PC_ACT_PREVIEW;
@@ -354,6 +356,7 @@ const char *pc_options_row_title(int row)
         "Hold to repeat",
         "Hold toggle",
         "Outfit",
+        "Text size",
         "Apply",
         "Reset",
         "Revert",
