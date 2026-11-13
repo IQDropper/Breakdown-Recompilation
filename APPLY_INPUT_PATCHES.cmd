@@ -27,6 +27,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo --- patch_keyboard_remap.py ---
+%PY% patch_keyboard_remap.py
+if errorlevel 1 (
+  echo [error] patch_keyboard_remap.py failed
+  exit /b 1
+)
+
 echo [ok] Mouse/keyboard toolkit patches applied.
 echo      Rebuild after this if the exe was already built: breakdown all
 echo      Play with run_native.cmd  (see CONTROLS.txt)

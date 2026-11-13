@@ -38,6 +38,10 @@ extern "C" {
 #define PC_LOCK_TOGGLE 0x200u
 #define PC_LOCK_OUTFIT 0x400u
 #define PC_LOCK_TEXT   0x800u
+#define PC_LOCK_MOUSE  0x1000u
+#define PC_LOCK_INVERT 0x2000u
+#define PC_LOCK_DEADZONE 0x4000u
+#define PC_LOCK_KEYS   0x8000u
 
 enum {
     PC_ROW_SCALE = 0,
@@ -52,11 +56,15 @@ enum {
     PC_ROW_TOGGLE,   /* A11Y-3 hold toggle */
     PC_ROW_OUTFIT,   /* S7.2 hero outfit */
     PC_ROW_TEXT,     /* A11Y-4 text size of this page */
+    PC_ROW_MOUSE,    /* A11Y-1 controls */
+    PC_ROW_INVERT,
+    PC_ROW_DEADZONE,
+    PC_ROW_KEYS,     /* Enter opens the key list (pc_options_host.c) */
     PC_ROW_APPLY,
     PC_ROW_RESET,
     PC_ROW_REVERT,
     PC_ROW_COUNT,
-    PC_ROW_LAST_SETTING = PC_ROW_TEXT   /* rows 0..this are video_settings rows (same index as VIDEO_ROW_*) */
+    PC_ROW_LAST_SETTING = PC_ROW_KEYS   /* rows 0..this are video_settings rows (same index as VIDEO_ROW_*) */
 };
 
 enum {
@@ -99,6 +107,9 @@ struct pc_pad_result pc_options_on_esc(void);
 
 /* After PC_ACT_SAVE. ok=0 leaves the committed settings and the file alone. */
 void pc_options_save_result(int ok);
+/* A11Y-1 key list: replace the draft's RECOMP_KEYMAP text (keymap.h). 0 if the Keys row is locked by the launch
+ * script or the page is closed. Apply saves it like any other row; Revert puts the applied keys back. */
+int pc_options_set_keymap(const char *text);
 
 int pc_options_is_open(void);
 int pc_options_row(void);

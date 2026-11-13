@@ -81,6 +81,10 @@ static void test_roundtrip(void)
     s.a11y_toggle = A11Y_TOGGLE_LT;
     s.outfit = 2;
     s.text_size = 2;
+    s.mouse_speed = 4;
+    s.mouse_invert = 1;
+    s.deadzone = 2;
+    snprintf(s.keymap, sizeof s.keymap, "%s", "LT=1|Q;RT=3|E");
     expect("save", video_config_save(path, &s) == 0);
     video_config_reset();
     expect("saved cleared", video_config_getenv("RECOMP_RENDER_SCALE") == NULL);
@@ -120,6 +124,15 @@ static void test_roundtrip(void)
     expect("loaded text size", video_config_getenv("RECOMP_PC_TEXT_SIZE")
            && strcmp(video_config_getenv("RECOMP_PC_TEXT_SIZE"), "200") == 0);
     expect("roundtrip text size", loaded.text_size == 2 && c.text_size == 2);
+    expect("loaded mouse units", video_config_getenv("RECOMP_MOUSE_SENS")
+           && strcmp(video_config_getenv("RECOMP_MOUSE_SENS"), "2400") == 0);
+    expect("roundtrip mouse", loaded.mouse_speed == 4 && loaded.mouse_invert == 1);
+    expect("roundtrip dead zone", loaded.deadzone == 2 && c.deadzone == video_deadzone_units(2));
+    expect("roundtrip keymap", strcmp(loaded.keymap, "LT=1|Q;RT=3|E") == 0);
+    expect("mouse index nearest", video_mouse_index(1200) == 2 && video_mouse_index(1300) == 2
+           && video_mouse_index(5000) == 5 && video_mouse_index(0) == 2);
+    expect("dead zone index", video_deadzone_index(0) == 0 && video_deadzone_index(3277) == 1
+           && video_deadzone_index(9830) == 3);
     expect("text size parse", video_text_size_index("150") == 1 && video_text_size_index(" 200") == 2
            && video_text_size_index("90") == 0 && video_text_size_index(NULL) == 0);
     expect("roundtrip scale", loaded.render_scale == 2 && loaded.window_scale == 3);

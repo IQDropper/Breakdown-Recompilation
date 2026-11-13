@@ -52,6 +52,12 @@ EXTRAS (host keys, only while the game window is in front)
                               appears (load a save). Story outfits still win, and an outfit is only
                               used where the game has its models loaded (T shirt: the opening area;
                               Researcher: the lab). In first person only the hands show (hold Shift).
+  Mouse speed (PC options) .. 50% to 300% look speed (RECOMP_MOUSE_SENS, 1200 = 100%). Changes at once.
+  Invert mouse .............. On: moving the mouse up looks down (RECOMP_MOUSE_INVERT).
+  Stick dead zone ........... Off, 10%, 20%, 30%: ignore small stick movement (RECOMP_PAD_DEADZONE).
+  Keys (PC options) ......... Enter opens the key list: every control with its key(s). Enter on a control,
+                              then press the new key. Delete puts its default back, Esc returns to the
+                              page, Apply saves (RECOMP_KEYMAP, e.g. LT=1|Q;RT=3|E).
   Text size (PC options) .... 100%, 150% or 200% text on the PC options page (RECOMP_PC_TEXT_SIZE).
                               It also grows with the window. When the rows do not all fit, the list
                               scrolls with the selection and says "more above / more below".

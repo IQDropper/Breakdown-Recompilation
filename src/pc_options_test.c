@@ -307,7 +307,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("fifteen rows", PC_ROW_COUNT == 15);
+    expect("nineteen rows", PC_ROW_COUNT == 19);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -448,7 +448,34 @@ static void test_a11y_rows(void)
                                      && PC_ROW_TEXT == VIDEO_ROW_TEXT);
     pulse(PC_PAD_DPAD_LEFT);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("apply follows text size", pc_options_row() == PC_ROW_APPLY);
+    expect("mouse speed follows text size", pc_options_row() == PC_ROW_MOUSE);
+    pc_options_row_value(PC_ROW_MOUSE, buf, sizeof buf);
+    expect("mouse speed starts at 100%", strcmp(buf, "100%") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_MOUSE, buf, sizeof buf);
+    expect("right picks 150%", strcmp(buf, "150%") == 0);
+    pulse(PC_PAD_DPAD_LEFT);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("invert follows", pc_options_row() == PC_ROW_INVERT);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("invert turns on", pc_options_draft()->mouse_invert == 1);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("dead zone follows", pc_options_row() == PC_ROW_DEADZONE);
+    pc_options_row_value(PC_ROW_DEADZONE, buf, sizeof buf);
+    expect("dead zone starts off", strcmp(buf, "Off") == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("keys follows", pc_options_row() == PC_ROW_KEYS);
+    pc_options_row_value(PC_ROW_KEYS, buf, sizeof buf);
+    expect("keys start default", strcmp(buf, "Default") == 0);
+    expect("keys can be set", pc_options_set_keymap("LT=1|Q;RT=3|E"));
+    pc_options_row_value(PC_ROW_KEYS, buf, sizeof buf);
+    expect("keys count changes", strcmp(buf, "2 changed") == 0);
+    expect("keys row has help", strstr(video_row_detail(pc_options_draft(), PC_ROW_KEYS), "Enter") != NULL);
+    expect("keys row is last setting", PC_ROW_LAST_SETTING == PC_ROW_KEYS && PC_ROW_KEYS == VIDEO_ROW_KEYS);
+    expect("keys back to default", pc_options_set_keymap(""));
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("apply follows keys", pc_options_row() == PC_ROW_APPLY);
     while (pc_options_row() != PC_ROW_RESET)
         pulse(PC_PAD_DPAD_DOWN);
     pc_options_on_port(0, PC_PAD_A);
