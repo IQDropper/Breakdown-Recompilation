@@ -67,6 +67,14 @@ if errorlevel 1 (
 )
 
 echo [ok] VSync can be switched while running (PC settings page).
+echo --- patch_d3d11_stock_size.py ---
+%PY% patch_d3d11_stock_size.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_stock_size.py failed
+  exit /b 1
+)
+
+echo [ok] Render scale 1 fills the window (no top-left quarter).
 echo --- patch_d3d11_horplus.py ---
 %PY% patch_d3d11_horplus.py
 if errorlevel 1 (
