@@ -40,6 +40,14 @@ PC OPTIONS (owned borderless host overlay over the 4:3 picture, not drawn into t
        Hor+ is not on this page. Exclusive needs the D3D11 patch; Alt+Tab leaves it.
        Details: docs/video-options.md
 
+EXTRAS (host keys, only while the game window is in front)
+  F12 ....................... screenshot (PNG of the 4:3 picture) to
+                              %LOCALAPPDATA%\xboxrecomp\screenshots\breakdown_<date>_<time>.png
+                              (set RECOMP_SCREENSHOT=0 to turn F12 off)
+  F5 ........................ show/hide the FPS box (needs RECOMP_FPS_OVERLAY=1):
+                              average FPS and frame time over the last second, slowest frame
+  RECOMP_SKIP_INTRO=1 ....... skip the 2 minute opening movie at boot (the logos still play)
+
 KEYBOARD (same in both layouts)
   W A S D ................... move (left stick)
   I J K L ................... look (right stick), if you prefer keys
