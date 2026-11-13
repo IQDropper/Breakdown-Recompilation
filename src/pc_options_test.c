@@ -307,7 +307,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("fourteen rows", PC_ROW_COUNT == 14);
+    expect("fifteen rows", PC_ROW_COUNT == 15);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -438,7 +438,17 @@ static void test_a11y_rows(void)
     expect("right picks normal", pc_options_draft()->outfit == 1 && strcmp(buf, "Normal") == 0);
     pulse(PC_PAD_DPAD_LEFT);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("apply follows outfit", pc_options_row() == PC_ROW_APPLY);
+    expect("text size follows outfit", pc_options_row() == PC_ROW_TEXT);
+    pc_options_row_value(PC_ROW_TEXT, buf, sizeof buf);
+    expect("text size starts at 100%", strcmp(buf, "100%") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_TEXT, buf, sizeof buf);
+    expect("right picks 150%", pc_options_draft()->text_size == 1 && strcmp(buf, "150%") == 0);
+    expect("text size row is named", strcmp(pc_options_row_title(PC_ROW_TEXT), "Text size") == 0
+                                     && PC_ROW_TEXT == VIDEO_ROW_TEXT);
+    pulse(PC_PAD_DPAD_LEFT);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("apply follows text size", pc_options_row() == PC_ROW_APPLY);
     while (pc_options_row() != PC_ROW_RESET)
         pulse(PC_PAD_DPAD_DOWN);
     pc_options_on_port(0, PC_PAD_A);

@@ -52,6 +52,9 @@ EXTRAS (host keys, only while the game window is in front)
                               appears (load a save). Story outfits still win, and an outfit is only
                               used where the game has its models loaded (T shirt: the opening area;
                               Researcher: the lab). In first person only the hands show (hold Shift).
+  Text size (PC options) .... 100%, 150% or 200% text on the PC options page (RECOMP_PC_TEXT_SIZE).
+                              It also grows with the window. When the rows do not all fit, the list
+                              scrolls with the selection and says "more above / more below".
 
 KEYBOARD (same in both layouts)
   W A S D ................... move (left stick)

@@ -38,6 +38,7 @@ struct display_choice {
     int      a11y_repeat;      /* RECOMP_A11Y_REPEAT: A11Y_REPEAT_* (a11y_input.h), 0 = off */
     int      a11y_toggle;      /* RECOMP_A11Y_TOGGLE: A11Y_TOGGLE_* (a11y_input.h), 0 = off */
     int      outfit;           /* RECOMP_HERO_OUTFIT: skins.h choice, 0 = the game's choice */
+    int      text_size;        /* RECOMP_PC_TEXT_SIZE: 0 100%, 1 150%, 2 200% (PC page text) */
 };
 
 /* Same type as getenv (char *getenv(const char *)). A const-returning
