@@ -1381,3 +1381,65 @@ void sub_00137630(void)
     sub_00137630_gen();   /* pops its return address; the argument slot is the caller's to clean */
     MEM32(g_esp + 4) = id;
 }
+
+/* ---- Hero outfit (S7.2). RECOMP_HERO_OUTFIT=normal|t|researcher (default: the game's choice).
+ * 0x4CBB0(obj) picks the outfit when a character spawns; 0x4CC30(obj, tag) is the story scripts' "set outfit".
+ * After either, if obj is the hero (character ids 10 first person, 9 third person, 85 stage 5) and the game left
+ * it in the normal outfit, show the chosen one instead. GO kit reports/research/skins-notes.md. */
+#include "skins.h"
+extern void sub_0004CBB0_gen(void);
+extern void sub_0004CC30_gen(void);
+static int hero_outfit_want(void)
+{
+    static int want = -2;
+    if (want == -2) {
+        const char *e = getenv("RECOMP_HERO_OUTFIT");
+        want = skins_parse(e);
+        if (e && *e)
+            fprintf(stderr, "[SKINS] hero outfit: %s (RECOMP_HERO_OUTFIT=%s)\n", skins_label(want), e);
+    }
+    return want;
+}
+static int hero_outfit_loaded(uint32_t ent, int idx)
+{
+    (void)ent; (void)idx;
+    return 1;   /* TODO(S7.2): check the set's models are in memory */
+}
+static void hero_outfit_apply(uint32_t obj, const char *why)
+{
+    int want = hero_outfit_want(), id, n, cur, idx = -1, i, game_tag, tag;
+    uint32_t ent;
+    if (want == SKINS_GAME || !obj || !(ent = MEM32(obj + 0x6018)))
+        return;
+    id = (int16_t)MEM16(ent);
+    if (id != 10 && id != 9 && id != 85)
+        return;
+    n = (int16_t)MEM16(ent + 0x10);
+    if (n < 1 || n > 3)
+        return;
+    cur = (int16_t)MEM16(obj + 0x601E);
+    if (cur < 0 || cur >= n)
+        cur = 0;
+    game_tag = (int16_t)MEM16(MEM32(ent + 0x14 + cur * 4));
+    for (i = 0; i < n; i++)
+        if ((int16_t)MEM16(MEM32(ent + 0x14 + i * 4)) == want)
+            idx = i;
+    tag = skins_choose(game_tag, want, idx >= 0 && hero_outfit_loaded(ent, idx));
+    if (tag == game_tag || idx < 0 || idx == cur)
+        return;
+    MEM16(obj + 0x601E) = (uint16_t)idx;
+    fprintf(stderr, "[SKINS] %s: character %d outfit %s -> %s (index %d)\n", why, id, skins_label(game_tag),
+            skins_label(tag), idx);
+}
+void sub_0004CBB0(void)
+{
+    uint32_t obj = MEM32(g_esp + 4);
+    sub_0004CBB0_gen();
+    hero_outfit_apply(obj, "spawn");
+}
+void sub_0004CC30(void)
+{
+    uint32_t obj = MEM32(g_esp + 4);
+    sub_0004CC30_gen();
+    hero_outfit_apply(obj, "script");
+}
