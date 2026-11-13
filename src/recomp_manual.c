@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "recomp_env.h"
 #include "pc_options_host.h"
+#include "a11y_input.h"
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
@@ -245,6 +246,36 @@ void sub_00205261(void)
     for (i = 0; i < 0x16; i++) MEM8(caps + i) = 0;
     MEM8(caps) = 1; g_eax = 0; g_esp += 12;
 }
+/* Hold to repeat / hold toggle (A11Y-2/3, src/a11y_input.c). The choice comes from RECOMP_A11Y_REPEAT /
+ * RECOMP_A11Y_TOGGLE (display_host_init copies breakdown_video.cfg values into the environment) and from
+ * the PC options page (breakdown_a11y_set, window thread; plain ints, read once per poll). */
+extern unsigned long __stdcall GetTickCount(void);   /* no windows.h in this file (see [fps60]) */
+static volatile int s_a11y_repeat = -1, s_a11y_toggle = -1;
+static struct a11y_pad s_a11y_pad[4];
+static void a11y_settle(void)
+{
+    if (s_a11y_repeat >= 0)
+        return;
+    s_a11y_repeat = a11y_repeat_from_token(getenv("RECOMP_A11Y_REPEAT"));
+    s_a11y_toggle = a11y_toggle_from_token(getenv("RECOMP_A11Y_TOGGLE"));
+    if (s_a11y_repeat || s_a11y_toggle) {
+        fprintf(stderr, "[A11Y] hold to repeat: %s, hold toggle: %s\n",
+                a11y_repeat_label(s_a11y_repeat), a11y_toggle_label(s_a11y_toggle));
+        fflush(stderr);
+    }
+}
+void breakdown_a11y_set(int repeat_choice, int toggle_choice)
+{
+    a11y_settle();
+    if (repeat_choice == s_a11y_repeat && toggle_choice == s_a11y_toggle)
+        return;
+    s_a11y_repeat = repeat_choice;
+    s_a11y_toggle = toggle_choice;
+    fprintf(stderr, "[A11Y] hold to repeat: %s, hold toggle: %s (PC options page)\n",
+            a11y_repeat_label(repeat_choice), a11y_toggle_label(toggle_choice));
+    fflush(stderr);
+}
+
 /* DWORD XInputGetState(HANDLE, PXINPUT_STATE): 4-byte packet number + 18-byte XINPUT_GAMEPAD (same layout) */
 void sub_00205439(void)
 {
@@ -254,17 +285,24 @@ void sub_00205439(void)
     const uint8_t *b;
     struct pc_pad_result pr;
     if (xbox_InputGetState(port, &st) != 0) {
-        /* A disconnected pad must not leave Start or the d-pad held. */
+        /* A disconnected pad must not leave Start or the d-pad held, or a trigger latched. */
         pc_options_host_on_port((int)port, 0);
+        a11y_pad_reset(&s_a11y_pad[port]);
         g_eax = 1167; g_esp += 12; return;   /* ERROR_DEVICE_NOT_CONNECTED */
     }
     /* PC options is a host page. Start alone still reaches the guest. */
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;
+    a11y_settle();
     if (pr.suppress_motion) {
+        /* Page open: the filter sees nothing held (repeat stops, a latch stays), the game sees nothing. */
+        uint8_t none[A11Y_BTN_COUNT] = { 0 };
+        a11y_pad_filter(&s_a11y_pad[port], 0, a11y_toggle_mask(s_a11y_toggle), none, GetTickCount());
         memset(st.bAnalog, 0, sizeof st.bAnalog);
         memset(st.thumb, 0, sizeof st.thumb);
-    }
+    } else
+        a11y_pad_filter(&s_a11y_pad[port], a11y_repeat_mask(s_a11y_repeat), a11y_toggle_mask(s_a11y_toggle),
+                        st.bAnalog, GetTickCount());
     b = (const uint8_t *)&st;
     for (i = 0; i < 22; i++) MEM8(dst + i) = b[i];
     g_eax = 0; g_esp += 12;
