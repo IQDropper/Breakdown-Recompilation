@@ -67,6 +67,14 @@ if errorlevel 1 (
 )
 
 echo [ok] VSync can be switched while running (PC settings page).
+echo --- patch_d3d11_horplus.py ---
+%PY% patch_d3d11_horplus.py
+if errorlevel 1 (
+  echo [error] patch_d3d11_horplus.py failed
+  exit /b 1
+)
+
+echo [ok] Opt-in Hor+ widescreen (RECOMP_HORPLUS=16:9).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
 exit /b 0
