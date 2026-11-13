@@ -10,6 +10,7 @@
  */
 #include "display_host.h"
 #include "a11y_input.h"
+#include "skins.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,6 +179,7 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     o->vsync = s && s[0] == '1';
     o->a11y_repeat = a11y_repeat_from_token(env_get(get, "RECOMP_A11Y_REPEAT"));
     o->a11y_toggle = a11y_toggle_from_token(env_get(get, "RECOMP_A11Y_TOGGLE"));
+    o->outfit = skins_choice_from_token(env_get(get, "RECOMP_HERO_OUTFIT"));
 }
 
 #if defined(_WIN32) && !defined(DISPLAY_HOST_TEST)
@@ -289,7 +291,8 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
 }
 
 static const char *const s_speed_keys[] = {
-    "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC", "RECOMP_A11Y_REPEAT", "RECOMP_A11Y_TOGGLE"
+    "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC", "RECOMP_A11Y_REPEAT", "RECOMP_A11Y_TOGGLE",
+    "RECOMP_HERO_OUTFIT"
 };
 static int s_speed_from_launch[sizeof s_speed_keys / sizeof s_speed_keys[0]];
 

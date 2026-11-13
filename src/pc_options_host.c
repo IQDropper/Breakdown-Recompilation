@@ -14,6 +14,7 @@
 #include "pc_options_host.h"
 #include "video_config.h"
 #include "a11y_input.h"
+#include "skins.h"
 #include "display_host.h"
 #include "kernel/nv2a_backend_common.h"
 
@@ -46,7 +47,7 @@ static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
 static char b_fps60[2], b_pipe[2], b_vsync[2];
-static char b_repeat[8], b_toggle[8];   /* a11y_input.h tokens: "abxy", "both", ... */
+static char b_repeat[8], b_toggle[8], b_outfit[12];   /* a11y_input.h tokens: "abxy", "both", ... */
 
 struct pc_apply {
     int action;
@@ -89,6 +90,8 @@ extern void breakdown_fps60_set(int on);
 extern void nv2a_d3d11_set_vsync(int on) __attribute__((weak));
 /* src/recomp_manual.c: hold to repeat / hold toggle (A11Y-2/3), A11Y_REPEAT_* / A11Y_TOGGLE_*, live. */
 extern void breakdown_a11y_set(int repeat_choice, int toggle_choice);
+/* src/recomp_manual.c: hero outfit (S7.2), a skins.h choice; used from the next spawn. */
+extern void breakdown_hero_outfit_set(int choice);
 
 static unsigned env_locks(void)
 {
@@ -110,6 +113,7 @@ static unsigned env_locks(void)
     if (display_host_launch_set("RECOMP_PRESENT_VSYNC")) mask |= PC_LOCK_VSYNC;
     if (display_host_launch_set("RECOMP_A11Y_REPEAT")) mask |= PC_LOCK_REPEAT;
     if (display_host_launch_set("RECOMP_A11Y_TOGGLE")) mask |= PC_LOCK_TOGGLE;
+    if (display_host_launch_set("RECOMP_HERO_OUTFIT")) mask |= PC_LOCK_OUTFIT;
     return mask;
 }
 
@@ -170,6 +174,7 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_PRESENT_VSYNC") == 0) return b_vsync;
     if (strcmp(name, "RECOMP_A11Y_REPEAT") == 0) return b_repeat;
     if (strcmp(name, "RECOMP_A11Y_TOGGLE") == 0) return b_toggle;
+    if (strcmp(name, "RECOMP_HERO_OUTFIT") == 0) return b_outfit;
     return NULL;
 }
 
@@ -187,6 +192,7 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_vsync, sizeof b_vsync, "%d", c.vsync ? 1 : 0);
     snprintf(b_repeat, sizeof b_repeat, "%s", a11y_repeat_token(c.a11y_repeat));
     snprintf(b_toggle, sizeof b_toggle, "%s", a11y_toggle_token(c.a11y_toggle));
+    snprintf(b_outfit, sizeof b_outfit, "%s", skins_choice_token(c.outfit));
 }
 
 static int style_is_borderless(HWND hwnd)
@@ -325,6 +331,7 @@ static int apply_live(const struct video_settings *s, int restyle)
     request_opts(&c);
     breakdown_fps60_set(s->fps60);   /* 60 FPS switches at once; the renderer setting waits for a restart */
     breakdown_a11y_set(s->a11y_repeat, s->a11y_toggle);
+    breakdown_hero_outfit_set(s->outfit);
     if (nv2a_d3d11_set_vsync) {
         static int s_vs = -1;
         nv2a_d3d11_set_vsync(s->vsync);

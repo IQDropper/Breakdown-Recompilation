@@ -74,6 +74,7 @@ set(GAME_SOURCES
     src/tuning_host.c
     src/tuning_pad.c
     src/skill_combos.c
+    src/skins.c
     # Add game-specific sources here, e.g.:
     # src/asset_loader.c
     # src/custom_renderer.c

@@ -29,6 +29,7 @@ struct video_settings {
     int vsync;             /* 0/1, RECOMP_PRESENT_VSYNC: wait for the display, no tearing (applies at once) */
     int a11y_repeat;       /* A11Y_REPEAT_*, RECOMP_A11Y_REPEAT: hold a button = 10 presses/s (applies at once) */
     int a11y_toggle;       /* A11Y_TOGGLE_*, RECOMP_A11Y_TOGGLE: a trigger latches on a press (applies at once) */
+    int outfit;            /* skins.h choice, RECOMP_HERO_OUTFIT: hero outfit (next spawn) */
 };
 
 enum {
@@ -42,6 +43,7 @@ enum {
     VIDEO_ROW_VSYNC,
     VIDEO_ROW_REPEAT,
     VIDEO_ROW_TOGGLE,
+    VIDEO_ROW_OUTFIT,
     VIDEO_ROW_APPLY,
     VIDEO_ROW_OK,
     VIDEO_ROW_CANCEL,
