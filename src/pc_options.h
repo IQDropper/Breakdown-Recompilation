@@ -34,6 +34,8 @@ extern "C" {
 #define PC_LOCK_FPS60  0x20u
 #define PC_LOCK_PIPE   0x40u
 #define PC_LOCK_VSYNC  0x80u
+#define PC_LOCK_REPEAT 0x100u
+#define PC_LOCK_TOGGLE 0x200u
 
 enum {
     PC_ROW_SCALE = 0,
@@ -44,10 +46,13 @@ enum {
     PC_ROW_FPS60,
     PC_ROW_PIPELINE,
     PC_ROW_VSYNC,
+    PC_ROW_REPEAT,   /* A11Y-2 hold to repeat */
+    PC_ROW_TOGGLE,   /* A11Y-3 hold toggle */
     PC_ROW_APPLY,
     PC_ROW_RESET,
     PC_ROW_REVERT,
-    PC_ROW_COUNT
+    PC_ROW_COUNT,
+    PC_ROW_LAST_SETTING = PC_ROW_TOGGLE   /* rows 0..this are video_settings rows (same index as VIDEO_ROW_*) */
 };
 
 enum {

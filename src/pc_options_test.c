@@ -3,6 +3,7 @@
  *     src/pc_options_test.c src/pc_options.c src/video_config.c src/display_host.c
  */
 #include "pc_options.h"
+#include "a11y_input.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -306,7 +307,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("eleven rows", PC_ROW_COUNT == 11);
+    expect("thirteen rows", PC_ROW_COUNT == 13);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -371,7 +372,7 @@ static void test_vsync_row(void)
     expect("right turns vsync on", r.action == PC_ACT_PREVIEW && pc_options_draft()->vsync == 1 && strcmp(buf, "On") == 0);
     pulse(0);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("apply follows vsync", pc_options_row() == PC_ROW_APPLY);
+    expect("hold to repeat follows vsync", pc_options_row() == PC_ROW_REPEAT);
     while (pc_options_row() != PC_ROW_RESET)
         pulse(PC_PAD_DPAD_DOWN);
     pc_options_on_port(0, PC_PAD_A);
@@ -389,6 +390,72 @@ static void test_vsync_row(void)
     expect("locked vsync says launch script", strstr(buf, "launch script") != NULL);
     pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
     expect("locked vsync does not change", pc_options_draft()->vsync == 1);
+    pc_options_on_esc();
+}
+
+static void test_a11y_rows(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    char buf[64];
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(0);
+    pc_options_on_f10();
+    expect("repeat row is named", strcmp(pc_options_row_title(PC_ROW_REPEAT), "Hold to repeat") == 0);
+    expect("toggle row is named", strcmp(pc_options_row_title(PC_ROW_TOGGLE), "Hold toggle") == 0);
+    expect("video rows match page rows", PC_ROW_REPEAT == VIDEO_ROW_REPEAT && PC_ROW_TOGGLE == VIDEO_ROW_TOGGLE);
+    expect("repeat row has help text", strstr(video_row_detail(pc_options_draft(), PC_ROW_REPEAT), "10 presses") != NULL);
+    expect("toggle row has help text", strstr(video_row_detail(pc_options_draft(), PC_ROW_TOGGLE), "again") != NULL);
+    while (pc_options_row() != PC_ROW_REPEAT)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_REPEAT, buf, sizeof buf);
+    expect("repeat starts off", strcmp(buf, "Off") == 0 && pc_options_draft()->a11y_repeat == A11Y_REPEAT_OFF);
+    r = pc_options_on_port(0, PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_REPEAT, buf, sizeof buf);
+    expect("right picks A", r.action == PC_ACT_PREVIEW && pc_options_draft()->a11y_repeat == A11Y_REPEAT_A
+                                && strcmp(buf, "A") == 0);
+    pulse(0);
+    pulse(PC_PAD_DPAD_LEFT);
+    pulse(PC_PAD_DPAD_LEFT);
+    pc_options_row_value(PC_ROW_REPEAT, buf, sizeof buf);
+    expect("left wraps to A B X Y", pc_options_draft()->a11y_repeat == A11Y_REPEAT_FACE && strcmp(buf, "A B X Y") == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("toggle follows repeat", pc_options_row() == PC_ROW_TOGGLE);
+    pc_options_row_value(PC_ROW_TOGGLE, buf, sizeof buf);
+    expect("toggle starts off", strcmp(buf, "Off") == 0 && pc_options_draft()->a11y_toggle == A11Y_TOGGLE_OFF);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_TOGGLE, buf, sizeof buf);
+    expect("right picks right trigger", pc_options_draft()->a11y_toggle == A11Y_TOGGLE_RT && strcmp(buf, "Right trigger") == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("apply follows toggle", pc_options_row() == PC_ROW_APPLY);
+    while (pc_options_row() != PC_ROW_RESET)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_on_port(0, PC_PAD_A);
+    expect("reset turns both off", pc_options_draft()->a11y_repeat == A11Y_REPEAT_OFF
+                                       && pc_options_draft()->a11y_toggle == A11Y_TOGGLE_OFF);
+    pc_options_on_esc();
+
+    pc_options_reset();
+    s.a11y_repeat = A11Y_REPEAT_B;
+    s.a11y_toggle = A11Y_TOGGLE_BOTH;
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(PC_LOCK_REPEAT | PC_LOCK_TOGGLE);
+    pc_options_on_f10();
+    while (pc_options_row() != PC_ROW_REPEAT)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_row_value(PC_ROW_REPEAT, buf, sizeof buf);
+    expect("locked repeat says launch script", strstr(buf, "launch script") != NULL);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("locked repeat does not change", pc_options_draft()->a11y_repeat == A11Y_REPEAT_B);
+    pulse(PC_PAD_DPAD_DOWN);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("locked toggle does not change", pc_options_draft()->a11y_toggle == A11Y_TOGGLE_BOTH);
+    while (pc_options_row() != PC_ROW_RESET)
+        pulse(PC_PAD_DPAD_DOWN);
+    pc_options_on_port(0, PC_PAD_A);
+    expect("reset keeps locked holds", pc_options_draft()->a11y_repeat == A11Y_REPEAT_B
+                                           && pc_options_draft()->a11y_toggle == A11Y_TOGGLE_BOTH);
     pc_options_on_esc();
 }
 
@@ -444,6 +511,7 @@ int main(void)
     test_start_alone();
     test_speed_rows();
     test_vsync_row();
+    test_a11y_rows();
     test_window_mode_row_has_exclusive();
     test_chord();
     test_same_poll_chord();
