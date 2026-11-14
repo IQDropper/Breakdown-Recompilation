@@ -1,7 +1,7 @@
 /*
  * video_menu.c - starts the PC options host overlay.
  *
- * F10 and Back+Start open an owned borderless window positioned over the
+ * F10 and a short Back press open an owned borderless window positioned over the
  * 4:3 picture. It is not drawn into the frame and it is not the Xbox
  * Options screen.
  */
