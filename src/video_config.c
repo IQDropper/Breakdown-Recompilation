@@ -40,6 +40,8 @@ enum {
     KEY_KEYMAP,
     KEY_HORPLUS,
     KEY_CONTENT,
+    KEY_MONO,
+    KEY_SUBS,
     KEY_COUNT
 };
 
@@ -62,6 +64,8 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_KEYMAP",
     "RECOMP_HORPLUS",
     "RECOMP_CONTENT",
+    "RECOMP_MONO_AUDIO",
+    "RECOMP_SUBTITLES",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -204,6 +208,8 @@ static void store_settings(const struct video_settings *s)
     snprintf(s_val[KEY_KEYMAP], sizeof s_val[KEY_KEYMAP], "%s", c.keymap);
     snprintf(s_val[KEY_HORPLUS], sizeof s_val[KEY_HORPLUS], "%s", video_settings_horplus_token(&c));
     snprintf(s_val[KEY_CONTENT], sizeof s_val[KEY_CONTENT], "%s", content_mode_token(c.content));
+    snprintf(s_val[KEY_MONO], sizeof s_val[KEY_MONO], "%d", c.mono ? 1 : 0);
+    snprintf(s_val[KEY_SUBS], sizeof s_val[KEY_SUBS], "%s", video_subs_token(c.subs));
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -222,6 +228,8 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_KEYMAP] = c.keymap[0] != 0;
     s_have[KEY_HORPLUS] = 1;
     s_have[KEY_CONTENT] = 1;
+    s_have[KEY_MONO] = 1;
+    s_have[KEY_SUBS] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -264,6 +272,8 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# CONTROL=KEY|KEY2 separated by ; (e.g. LT=1|Q;RT=3|E). Empty = default keys.\n"
                 "# RECOMP_CONTENT: classic (the original game) or new (hidden texture lines, flash scares,\n"
                 "# new moves). Fixes stay on in both.\n"
+                "# RECOMP_MONO_AUDIO: 1 = the same sound in both ears (one-sided hearing).\n"
+                "# RECOMP_SUBTITLES: game (leave the game's Caption option), on or off.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
@@ -281,7 +291,9 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "RECOMP_PAD_DEADZONE=%d\n"
                 "RECOMP_KEYMAP=%s\n"
                 "RECOMP_HORPLUS=%s\n"
-                "RECOMP_CONTENT=%s\n",
+                "RECOMP_CONTENT=%s\n"
+                "RECOMP_MONO_AUDIO=%d\n"
+                "RECOMP_SUBTITLES=%s\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
@@ -291,7 +303,7 @@ int video_config_save(const char *path, const struct video_settings *in)
                 a11y_repeat_token(s.a11y_repeat), a11y_toggle_token(s.a11y_toggle),
                 skins_choice_token(s.outfit), video_text_size_percent(s.text_size),
                 video_mouse_units(s.mouse_speed), s.mouse_invert ? 1 : 0, video_deadzone_units(s.deadzone),
-                s.keymap, video_settings_horplus_token(&s), content_mode_token(s.content)) < 0) {
+                s.keymap, video_settings_horplus_token(&s), content_mode_token(s.content), s.mono ? 1 : 0, video_subs_token(s.subs)) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -351,6 +363,8 @@ void video_settings_stock(struct video_settings *s)
     s->a11y_toggle = A11Y_TOGGLE_OFF;
     s->outfit = 0;
     s->content = CONTENT_CLASSIC;
+    s->mono = 0;
+    s->subs = 0;
     s->text_size = 0;
     s->mouse_speed = VIDEO_MOUSE_DEFAULT;
     s->mouse_invert = 0;
@@ -411,6 +425,9 @@ void video_settings_clamp(struct video_settings *s)
     if (s->outfit < 0 || s->outfit >= SKINS_CHOICES)
         s->outfit = 0;
     s->content = s->content == CONTENT_NEW ? CONTENT_NEW : CONTENT_CLASSIC;
+    s->mono = s->mono ? 1 : 0;
+    if (s->subs < 0 || s->subs > 2)
+        s->subs = 0;
     if (s->text_size < 0 || s->text_size >= VIDEO_TEXT_SIZES)
         s->text_size = 0;
     if (s->mouse_speed < 0 || s->mouse_speed >= VIDEO_MOUSE_SPEEDS)
@@ -565,12 +582,30 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->a11y_toggle = c->a11y_toggle;
     s->outfit = c->outfit;
     s->content = c->content;
+    s->mono = c->mono;
+    s->subs = c->subs;
     s->text_size = c->text_size;
     s->mouse_speed = video_mouse_index(c->mouse_sens);
     s->mouse_invert = c->mouse_invert;
     s->deadzone = video_deadzone_index(c->deadzone);
     snprintf(s->keymap, sizeof s->keymap, "%s", c->keymap);
     video_settings_clamp(s);
+}
+
+const char *video_subs_token(int subs)
+{
+    return subs == 1 ? "on" : subs == 2 ? "off" : "game";
+}
+
+int video_subs_from_token(const char *t)
+{
+    if (!t)
+        return 0;
+    if (!strcmp(t, "on") || !strcmp(t, "1"))
+        return 1;
+    if (!strcmp(t, "off") || !strcmp(t, "0"))
+        return 2;
+    return 0;
 }
 
 const char *video_row_title(int row)
@@ -590,6 +625,8 @@ const char *video_row_title(int row)
         "Outfit",
         "Content",
         "Text size",
+        "Mono audio",
+        "Subtitles",
         "Mouse speed",
         "Invert mouse",
         "Stick dead zone",
@@ -681,6 +718,12 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->text_size;
         s->text_size = wrap_index(s->text_size, VIDEO_TEXT_SIZES, dir);
         return s->text_size != before;
+    case VIDEO_ROW_MONO:
+        s->mono = !s->mono;
+        return 1;
+    case VIDEO_ROW_SUBS:
+        s->subs = wrap_index(s->subs, 3, dir);
+        return 1;
     case VIDEO_ROW_MOUSE:
         before = s->mouse_speed;
         s->mouse_speed = wrap_index(s->mouse_speed, VIDEO_MOUSE_SPEEDS, dir);
@@ -753,6 +796,12 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_TEXT:
         snprintf(buf, n, "%d%%", video_text_size_percent(s->text_size));
         break;
+    case VIDEO_ROW_MONO:
+        snprintf(buf, n, "%s", s->mono ? "On" : "Off");
+        break;
+    case VIDEO_ROW_SUBS:
+        snprintf(buf, n, "%s", s->subs == 1 ? "On" : s->subs == 2 ? "Off" : "Game's choice");
+        break;
     case VIDEO_ROW_MOUSE:
         snprintf(buf, n, "%d%%", video_mouse_percent(s->mouse_speed));
         break;
@@ -822,6 +871,11 @@ const char *video_row_detail(const struct video_settings *s, int row)
                "flash scares, new moves). Fixes stay on in both. Textures change the next time you start the game.";
     case VIDEO_ROW_TEXT:
         return "Text size on this PC page: 100, 150 or 200 percent. It also grows with the window. Changes at once.";
+    case VIDEO_ROW_SUBS:
+        return "The game's own subtitles (timed, from its caption files). Game's choice leaves the game's "
+               "Options setting alone; On or Off keeps it that way (it wins over the game's own Options). Changes at once.";
+    case VIDEO_ROW_MONO:
+        return "On: the same sound in both ears (left and right mixed), for one-sided hearing or one earbud. Changes at once.";
     case VIDEO_ROW_MOUSE:
         return "How fast the mouse turns the view. Changes at once.";
     case VIDEO_ROW_INVERT:

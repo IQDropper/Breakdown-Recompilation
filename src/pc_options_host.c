@@ -10,6 +10,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include "content_mode.h"
+extern void xa2_set_mono(int on) __attribute__((weak));   /* A11Y-11 */
+extern void breakdown_subtitles_set(int subs) __attribute__((weak));   /* A11Y-6b, recomp_manual.c */
 #include <windows.h>
 
 #include "pc_options_host.h"
@@ -49,7 +51,7 @@ static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
 static char b_fps60[2], b_pipe[2], b_vsync[2];
-static char b_repeat[8], b_toggle[8], b_outfit[12], b_text[8], b_content[8];   /* a11y_input.h tokens: "abxy", "both", ... */
+static char b_repeat[8], b_toggle[8], b_outfit[12], b_text[8], b_content[8], b_mono[4], b_subs[8];   /* a11y_input.h tokens: "abxy", "both", ... */
 
 struct pc_apply {
     int action;
@@ -107,6 +109,8 @@ static unsigned env_locks(void)
     if (v && v[0]) mask |= PC_LOCK_ASPECT;
     if (display_host_launch_set("RECOMP_HORPLUS")) mask |= PC_LOCK_WIDE;
     if (display_host_launch_set("RECOMP_CONTENT")) mask |= PC_LOCK_CONTENT;
+    if (display_host_launch_set("RECOMP_MONO_AUDIO")) mask |= PC_LOCK_MONO;
+    if (display_host_launch_set("RECOMP_SUBTITLES")) mask |= PC_LOCK_SUBS;
     v = getenv("RECOMP_PRESENT_FILTER");
     if (v && v[0]) mask |= PC_LOCK_FILTER;
     v = getenv("RECOMP_PRESENT_FULLSCREEN");
@@ -181,6 +185,8 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_A11Y_TOGGLE") == 0) return b_toggle;
     if (strcmp(name, "RECOMP_HERO_OUTFIT") == 0) return b_outfit;
     if (strcmp(name, "RECOMP_CONTENT") == 0) return b_content;
+    if (strcmp(name, "RECOMP_MONO_AUDIO") == 0) return b_mono;
+    if (strcmp(name, "RECOMP_SUBTITLES") == 0) return b_subs;
     if (strcmp(name, "RECOMP_PC_TEXT_SIZE") == 0) return b_text;
     return NULL;
 }
@@ -201,6 +207,8 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_toggle, sizeof b_toggle, "%s", a11y_toggle_token(c.a11y_toggle));
     snprintf(b_outfit, sizeof b_outfit, "%s", skins_choice_token(c.outfit));
     snprintf(b_content, sizeof b_content, "%s", content_mode_token(c.content));
+    snprintf(b_mono, sizeof b_mono, "%d", c.mono ? 1 : 0);
+    snprintf(b_subs, sizeof b_subs, "%s", video_subs_token(c.subs));
     snprintf(b_text, sizeof b_text, "%d", video_text_size_percent(c.text_size));
 }
 
@@ -367,6 +375,10 @@ static int apply_live(const struct video_settings *s, int restyle)
     breakdown_a11y_set(s->a11y_repeat, s->a11y_toggle);
     breakdown_hero_outfit_set(s->outfit);
     content_mode_set(s->content);
+    if (xa2_set_mono)
+        xa2_set_mono(s->mono);   /* A11Y-11 */
+    if (breakdown_subtitles_set)
+        breakdown_subtitles_set(s->subs);   /* A11Y-6b */
     apply_controls(s);
     if (nv2a_d3d11_set_vsync) {
         static int s_vs = -1;
@@ -1029,13 +1041,13 @@ static void attach_game(HWND hwnd)
     s_game = hwnd;
     prev = SetWindowLongPtrA(hwnd, GWLP_WNDPROC, proc_to_long(game_proc));
     s_old = proc_from_long(prev);
-    fprintf(stderr, "[PC] Back+Start opens the host overlay over the 4:3 picture. F10 toggles it.\n");
+    fprintf(stderr, "[PC] Back (a short press) opens the host overlay over the 4:3 picture. F10 toggles it.\n");
 }
 
 /* A11Y-6 first launch: open this page once, with a welcome line that points at the accessibility rows, a few
  * seconds after the game window appears. A marker file in %LOCALAPPDATA%\\xboxrecomp keeps it from showing again.
  * RECOMP_FIRST_LAUNCH=0 never shows it; =1 shows it every launch. */
-#define FIRST_LAUNCH_NOTE "Welcome! Text size, Hold to repeat, Hold toggle and Keys are here. Subtitles: the game's Options (Caption)."
+#define FIRST_LAUNCH_NOTE "Welcome! Text size, Hold to repeat, Hold toggle and Keys are here. Subtitles and Mono audio are here too."
 void pc_options_host_open(void);
 static DWORD WINAPI first_launch(LPVOID unused)
 {
@@ -1108,7 +1120,7 @@ void pc_options_host_start(void)
     fprintf(stderr,
             "[PC] owned borderless host overlay over the 4:3 picture "
             "(not drawn into the frame, not the Xbox Options screen) "
-            "when the D3D11 window (%s) exists. Back+Start opens it. F10 toggles it.\n",
+            "when the D3D11 window (%s) exists. Back (a short press) opens it. F10 toggles it.\n",
             GAME_CLASS);
     thread = CreateThread(NULL, 0, wait_for_game, NULL, 0, NULL);
     if (thread)
