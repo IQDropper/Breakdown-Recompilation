@@ -57,7 +57,7 @@ The save is 0x1FC50 bytes (`UDATA/4e4d0009/<slot>/data.sav`). Full layout as far
 | 0x6A64..0x6ABC | sizes, offsets and counts of the saved-object data at 0x7C30 (0x6A70 = Derrick's block, 0x6A80 = Alex's, 0x6A98 / 0x6AA8 / 0x6AB8 = counts of saved characters / type-0x11B / type-0x102 objects) | `Save_BuildCheckpoint` |
 | 0x6AC0..0x6B5F | area-start copies: vsn, index, 0x6AD0 (0x30 bytes from 0x2BB90), counters 0x6B00, section 0x6B10, scene pack 0x6B38 | `Save_BuildAreaStart` 0x28030 |
 | 0x6B60 / 0x7B00 | **area-start copy of the store** (numbers / flags) | `Save_BuildAreaStart` |
-| 0x7C30.. | saved-object data: first a 0x18A4-byte block (0xC8E30), then Derrick (position at +0xC = 0x94E0 in real saves, Alex's at +0x18 = 0x94EC, turn at +0x28), Alex, then saved characters / objects | `Save_BuildCheckpoint` |
+| 0x7C30.. | saved-object data: first the MI_EVENT list (size at 0x6A6C, 0x1400 = 64 x 0x50, `MiEvent_Collect` 0xC8F30, empty in every save seen), then Derrick's 0x454-byte block (offset at 0x6A70, 0x18A4 in real saves): +0x8 flags, +0xC position (0x94E0), +0x18 Alex's position (0x94EC), +0x28 turn, **+0x2C u16 motion script (11 = bhb_mo_hero), +0x2E u16 AI script he is running** (810 = bhb_ai_s02_HE at cp02a_05, 989 = the burger-room scene script at cp02a_02); then Alex (size 0 so far), then saved characters / objects | `Save_BuildCheckpoint` |
 | 0x1FC1C | 0xBD040119 marker + 4 values (0x12E40) | |
 | 0x1FC30 | HMAC-SHA1 signature over 0..0x1FC30 (recomp key = 16 zero bytes) | `Save_WriteSlot` 0x29290 |
 
@@ -143,7 +143,20 @@ Index 0x08, area 0x90, section 0xB8, pack 0xE0, name 0x120, vsn 0x140 (as before
 - event-state counts 0x0C / 0x0E = 0 and saved-object counts 0x6A98 / 0x6AA8 / 0x6AB8 = 0, so the level uses its
   own defaults (the input save's event ids belong to its own area; the chapter script's `Setting` rebuilds doors and
   items from the flags);
-- Derrick and Alex at the checkpoint's trigger box.
+- Derrick and Alex at the checkpoint's trigger box;
+- Derrick's AI script id (+0x2E of his block) = the area's chapter control script (`hero_ai` in the table; for
+  labo1, labo2, opening and ending, which have none, the area's earliest own scene script); the MI_EVENT list is
+  emptied with the event lists.
+
+**Why cross-area jumps stayed black (in-game test of the first version, 2026-11-14):** jumps inside hon_under
+worked, jumps to bettou loaded the area and then never updated Derrick, with or without the new flags and event
+lists. The input save (cp02a_02) was made while Derrick ran the burger-room scene script (id 989), which only
+hon_under's pack carries. In bettou that script does not exist, so he is never rebuilt. A real cp02a_05 save holds
+810 (the chapter script, in both areas' packs); the rebuilt cp02a_05 now matches it byte for byte in that block.
+`--keep-ai` keeps the input's id (for bisecting).
+
+**Slot folders:** each slot needs its own `SaveMeta.xbx` with `Name=GAME nn` next to `data.sav`, or the load
+menu shows EMPTY. Copy the input slot's folder, replace `data.sav`, set the Name line.
 `--keep-flags`, `--keep-events`, `--keep-pos` and `--block` turn each part off.
 
 ## 6. Open

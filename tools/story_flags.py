@@ -432,6 +432,16 @@ def boxes(area):
     return out
 
 
+def hero_script(area, ids, packs):
+    """The AI script Derrick should run in an area: its chapter control script bhb_ai_sNN_HE (the lowest chapter
+    in the area's own pack), else the area's earliest scene script ending in _HE (labo1, labo2, opening, ending).
+    Derrick's saved block keeps this id at +0x2E; a script that is not in the new area's packs leaves him out."""
+    mine = sorted(n for n, pl in packs.items() if n.endswith('_HE') and 'area/%s/%s.pak' % (area, area) in pl)
+    chapter = [n for n in mine if re.match(r'bhb_ai_s\d\d_HE$', n)]
+    own = [n for n in mine if len(packs[n]) == 1]      # scene scripts only this area carries (ending also has s09e01)
+    return (chapter or own or mine or [''])[0]
+
+
 def checkpoint_progress():
     """{checkpoint: entry} for all 192 checkpoints. See docs/formats/save_story.md for how each field is found."""
     import save_checkpoint
@@ -486,6 +496,8 @@ def checkpoint_progress():
                      flags=sorted(set(start[area]) | set(pending['flags_before'])))
         else:
             e.update(method='area', flags=sorted(start[area]))
+        hero = pending['chapter'] if pending is not None else hero_script(area, ids, packs)
+        e.update(hero_ai=ids.get(hero, 0), hero_ai_name=hero)
         out[name] = e
     out = dict(sorted(out.items(), key=lambda kv: kv[1]['index']))
     return out

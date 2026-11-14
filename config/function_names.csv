@@ -153,3 +153,6 @@ address,name,system,confidence,evidence
 0xAC690,Script_AreaId,script,sure,"game command #871: byte 0x29C5F5 = id of the area being played (chapter scripts switch on it)"
 0x82940,Script_SaveCheckpoint,save,sure,"game command Save_Checkpoint (#1519) -> Save_BuildCheckpoint(name)"
 0x370F0,EvSavePoint_Update,save,likely,"save-point event (EV_TYPE_LOAD with SAVE_POINT): mode 2 (set by an OBSERVE_AND when Derrick is in areahit_cpXX) -> Save_BuildCheckpoint(NAME_ID, SAVE_PLAYER, SAVE_NAVI), mode 3 = short wait, then 1"
+0x2A2D0,Resume_RestoreAreaObjects,save,likely,"after the area loads: the 0x84-byte records (count 0x0E) by event id, the MI_EVENT list from 0x7C30 (0xC8F60), then Resume_RestoreChars / Obj11B / Obj102"
+0xC8F30,MiEvent_Collect,save,likely,"collects events named MI_EVENT (up to 64 x 0x50 bytes at 0x3E59B0); saved as the first 0x1400 bytes at save 0x7C30"
+0xC8F60,MiEvent_Restore,save,likely,"re-creates each saved MI_EVENT entry (0x26AE0 kind 3)"

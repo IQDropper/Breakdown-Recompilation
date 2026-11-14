@@ -12,7 +12,12 @@ A save (UDATA/4e4d0009/<slot>/data.sav, 0x1FC50 bytes) is laid out in docs/forma
   tools/checkpoint_progress.json (made by tools/story_flags.py from the game's scripts);
   0x0C / 0x0E event-state list counts = 0 and the saved-object counts 0x6A98 / 0x6AA8 / 0x6AB8 = 0, so the level
   starts from its own defaults instead of another area's event states;
-  Derrick's position (saved-object block + 0xC, 0x94E0 in real saves) = the checkpoint's trigger box, on the floor.
+  Derrick's position (saved-object block + 0xC, 0x94E0 in real saves) = the checkpoint's trigger box, on the floor;
+  Derrick's AI script id (hero block + 0x2E, u16) = the area's chapter control script. A script that is not in the
+  new area's packs (a save made mid-scene, e.g. 989 burger room) leaves Derrick out after a cross-area jump;
+  the 0x1400-byte MI_EVENT list at 0x7C30 is emptied with the event lists.
+A slot folder also needs its SaveMeta.xbx ("Name=GAME nn"), or the load menu shows the slot as EMPTY: copy the
+input slot's folder and replace data.sav, then set the Name line.
 Weapons and powers stay as they were in the input save. Signature (0x1FC30, 20 bytes) = HMAC-SHA1 over 0..0x1FC30
 with the recomp's console key (16 zero bytes, external/xboxrecomp kernel_bridge.c XboxSignatureKey).
 
@@ -22,6 +27,7 @@ Usage:
   python tools/save_checkpoint.py IN.sav OUT.sav save_cp02b_02   copy IN to OUT at that checkpoint (re-signed)
       --block PACK      story-scene pack instead of the derived one     --keep-flags  leave flags/numbers as in IN
       --keep-events     leave IN's event-state and saved-object lists   --keep-pos    leave Derrick where IN had him
+      --keep-ai         leave Derrick's AI script id as in IN
   python tools/save_checkpoint.py --check FILE.sav               area/checkpoint, flags on, signature ok
 Never point OUT at your real save folder; test with RECOMP_SAVE_DIR=<copy>.
 """
@@ -61,6 +67,8 @@ SAVE_FLAG = 2007                     # written by the save code itself (0x12AB80
 EVENTS_N_AT = 0x0C                   # u16 x2: 12-byte event-state records at 0x144, 0x84-byte records at 0x4944
 OBJ_COUNTS = (0x6A98, 0x6AA8, 0x6AB8)  # saved objects put back by event id on load (0x28930 / 0x28A00 / 0x28A90)
 BLOB_AT, HERO_OFF_AT = 0x7C30, 0x6A70  # saved-object data; u32 at 0x6A70 = offset of Derrick's block in it
+MI_SIZE_AT = 0x6A6C                  # u32 size of the MI_EVENT list at the start of the saved-object data
+HERO_AI = 0x2E                       # u16 in Derrick's block: his AI script id (+0x2C = motion script, 11)
 PROGRESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'checkpoint_progress.json')
 
 
@@ -150,7 +158,7 @@ def flags_of(buf):
     return [i for i in range(FLAG_BYTES * 8) if buf[FLAGS_AT + (i >> 3)] >> (i & 7) & 1]
 
 
-def set_checkpoint(buf, name, block='', keep_flags=False, keep_events=False, keep_pos=False):
+def set_checkpoint(buf, name, block='', keep_flags=False, keep_events=False, keep_pos=False, keep_ai=False):
     rows = checkpoints()
     idx = next((i for i, r in enumerate(rows) if r[0] == name), None)
     if idx is None:
@@ -176,11 +184,17 @@ def set_checkpoint(buf, name, block='', keep_flags=False, keep_events=False, kee
         struct.pack_into('<hh', buf, EVENTS_N_AT, 0, 0)
         for at in OBJ_COUNTS:
             struct.pack_into('<I', buf, at, 0)
+        mi = struct.unpack_from('<I', buf, MI_SIZE_AT)[0]           # MI_EVENT list (0xC8E30), put back by 0xC8F60
+        if 0 < mi <= struct.unpack_from('<I', buf, HERO_OFF_AT)[0]:
+            buf[BLOB_AT:BLOB_AT + mi] = bytes(mi)
+    hero = BLOB_AT + struct.unpack_from('<I', buf, HERO_OFF_AT)[0]
+    if hero + HERO_AI + 2 > SIG_AT:
+        raise SystemExit('Derrick\'s block offset (0x6A70) looks wrong in this save')
     if not keep_pos and 'position' in p:
-        hero = BLOB_AT + struct.unpack_from('<I', buf, HERO_OFF_AT)[0]
-        if hero + 0x24 <= SIG_AT:
-            struct.pack_into('<3f', buf, hero + 0xC, *p['position'])     # Derrick (0x94E0 in real saves)
-            struct.pack_into('<3f', buf, hero + 0x18, *p['position'])    # Alex (0x94EC), next to him
+        struct.pack_into('<3f', buf, hero + 0xC, *p['position'])     # Derrick (0x94E0 in real saves)
+        struct.pack_into('<3f', buf, hero + 0x18, *p['position'])    # Alex (0x94EC), next to him
+    if not keep_ai and p.get('hero_ai'):
+        struct.pack_into('<H', buf, hero + HERO_AI, p['hero_ai'])
     assert len(buf) == SAVE_SIZE
     sign(buf)
     return p
@@ -215,11 +229,12 @@ def main():
     if os.path.abspath(dst) == os.path.abspath(src):
         raise SystemExit('refusing to overwrite the input save')
     p = set_checkpoint(buf, name, a[a.index('--block') + 1] if '--block' in a else '', '--keep-flags' in a,
-                       '--keep-events' in a, '--keep-pos' in a)
+                       '--keep-events' in a, '--keep-pos' in a, '--keep-ai' in a)
     open(dst, 'wb').write(buf)
     print('wrote %s: area=%s checkpoint=%s signature_ok=%s' % ((dst,) + check(buf)))
-    print('  scene=%s pack=%s flags=%d (%s)' % (p.get('scene', '-'), p.get('block', '-'), len(p.get('flags', [])),
-                                               p.get('method', 'no progress entry')))
+    print('  scene=%s pack=%s flags=%d (%s) hero AI=%s %s' % (
+        p.get('scene', '-'), p.get('block', '-'), len(p.get('flags', [])), p.get('method', 'no progress entry'),
+        p.get('hero_ai', '-'), p.get('hero_ai_name', '')))
     if 'position' not in p:
         print('  no trigger box for %s: Derrick stays where the input save had him' % name)
     return 0
