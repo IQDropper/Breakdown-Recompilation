@@ -679,7 +679,7 @@ index,name,args,note,wrapper,calls,argtypes,returns,uses,confidence
 675,,,,0x8DD70,0x9E5F0,,int,0,
 676,,,,0x8DD80,0x9E120,ifffff,int,2,
 677,,,,0x8DDD0,0x9E180,f,,0,
-678,,,,0x8DDF0,0xAC2E0,ii,,800,
+678,AI_SetScript,id x,hands the character to another AI script (scene scripts from the chapter FlagCheck),0x8DDF0,0xAC2E0,ii,,800,likely
 679,,,,0x8DE10,0x9B5B0,,,0,
 680,,,,0x8DE20,0x9B2F0,ii,,47,
 681,,,,0x8DE40,0x9B320,ii,,53,
@@ -770,7 +770,7 @@ index,name,args,note,wrapper,calls,argtypes,returns,uses,confidence
 766,,,,0x8E740,0x9DAB0,,,8,
 767,,,,0x8E750,0x161680,ii,,0,
 768,,,,0x8A560,0x52A10,,int,0,
-769,,,,0x8E770,0xAC640,ii,,1155,
+769,Flag_Set,i on,story flag i on/off (0x27C10); saved at 0x6964,0x8E770,0xAC640,ii,,1155,sure
 770,Global_IsOn,i,game-wide flag i == 1,0x8E790,0xAC660,i,int,1460,likely
 771,,,,0x8E7B0,0xAE880,i,,15,
 772,,,,0x8E7D0,0xAE8B0,s,,17,
@@ -849,7 +849,7 @@ index,name,args,note,wrapper,calls,argtypes,returns,uses,confidence
 845,,,,0x8F070,0x97050,i,,0,
 846,,,,0x8F090,0x9DBF0,,float,1,
 847,,,,0x8F0A0,0x9DC20,,float,1,
-848,,,,0x8F0B0,0x82160,s,int,1162,
+848,Event_GetMode,name,mode of a level event; trigger boxes read 2 when Derrick is inside,0x8F0B0,0x82160,s,int,1162,likely
 849,,,,0x8F0D0,0x821C0,si,,737,
 850,,,,0x8F0F0,0x821E0,si,,440,
 851,,,,0x89A10,0x161680,i,,2,
@@ -866,13 +866,13 @@ index,name,args,note,wrapper,calls,argtypes,returns,uses,confidence
 862,,,,0x8F230,0x7DA10,if,int,185,
 863,,,,0x8F260,0x7DA50,iif,int,0,
 864,,,,0x8F290,0x7DA30,if,int,0,
-865,,,,0x8F2C0,0x82120,s,int,74,
-866,,,,0x8F2E0,0x82960,s,int,306,
+865,Event_Exists,name,nonzero if the level has an event with this name,0x8F2C0,0x82120,s,int,74,likely
+866,Block_Load,pack,loads a story-scene pack ('area/hon_under/block_B_s02a02_100_p'); the save keeps it at 0xE0,0x8F2E0,0x82960,s,int,306,likely
 867,,,,0x8F300,0x82980,s,,182,
 868,,,,0x8F320,0xAD8B0,,int,0,
 869,,,,0x8F330,0x9E8B0,,int,3551,
 870,,,,0x8F340,0x9E8C0,,int,418,
-871,,,,0x8F350,0xAC690,,int,267,
+871,Area_GetId,,"id of the area being played (byte 0x29C5F5): 1 hon_under, 2 bettou ...; chapter scripts switch on it",0x8F350,0xAC690,,int,267,sure
 872,,,,0x8F360,0x9E650,,int,2,
 873,,,,0x8F330,0x9E8B0,,int,727,
 874,,,,0x8F340,0x9E8C0,,int,99,
@@ -983,7 +983,7 @@ index,name,args,note,wrapper,calls,argtypes,returns,uses,confidence
 979,,,,0x902C0,0x9E270,,int,2,
 980,,,,0x902D0,0x9A810,,int,2,
 981,,,,0x902E0,0x9AA60,,int,0,
-982,,,,0x902F0,0x82990,s,int,287,
+982,Block_Find,pack,story-scene pack loaded? -1 = no (chapter FlagCheck then calls Block_Load),0x902F0,0x82990,s,int,287,likely
 983,,,,0x90310,0x9DE00,s,,38,
 984,,,,0x90330,0x9DE30,s,,0,
 985,,,,0x90350,0x9DE60,,,0,
@@ -1520,7 +1520,7 @@ index,name,args,note,wrapper,calls,argtypes,returns,uses,confidence
 1516,,,,0x94460,0x833C0,if,,9,
 1517,,,,0x94480,0x82510,f,,25,
 1518,,,,0x944A0,0x82540,ffff,,4,
-1519,,,,0x944E0,0x82940,s,int,12,
+1519,Save_Checkpoint,name,saves at a named checkpoint ('save_cpai02a_01') from a script,0x944E0,0x82940,s,int,12,sure
 1520,,,,0x94500,0x9C980,f,,0,
 1521,,,,0x94520,0x9C9D0,ffff,,0,
 1522,,,,0x94560,0xAC100,,,64,
