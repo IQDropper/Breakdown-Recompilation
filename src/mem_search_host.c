@@ -17,6 +17,9 @@
  *   note TEXT           echo TEXT into the log (marks a step)
  *   spawn TASK|#N [DIST] copy the character made by character task TASK (or level-file event N), DIST (60)
  *                       units from the hero
+ *   pak load PATH       load a game data file (romdata-relative, e.g. area/labo2/labo2_I.pak) into a free data
+ *                       slot with the game's own loader, so its models/animations exist in any area
+ *   pak free N | pak list   unload slot N (only one we loaded) / print the 15 data slots
  * Addresses are guest (Xbox) addresses in hex; *ADDR[+OFS] follows the pointer stored at
  * ADDR; A>B>C follows a chain (2A92D0>48>10 = [[2A92D0]+48]+10). Reads race the game thread; that is fine for searching.
  */
@@ -183,6 +186,21 @@ static void dump(uint32_t va, int n)
 static struct { char name[24]; volatile uint32_t va; } s_names[16];
 static volatile uint32_t s_spawn_task;
 static volatile float s_spawn_dist;
+
+static volatile int s_pak_op;   /* 1 load, 2 free, 3 list */
+static volatile int s_pak_slot;
+static char s_pak_path[128];
+
+int mem_search_take_pak(int *slot, char *path, int size)
+{
+    int op = s_pak_op;
+    if (!op)
+        return 0;
+    *slot = s_pak_slot;
+    snprintf(path, size, "%s", s_pak_path);
+    s_pak_op = 0;
+    return op;
+}
 
 int mem_search_take_spawn(uint32_t *task, float *dist)
 {
@@ -357,6 +375,20 @@ static void run(char *line)
         s_spawn_dist = b[0] ? (float)atof(b) : 60.0f;
         s_spawn_task = va;
         out("spawn queued: copy of task %08X, %.0f in front of the hero", va, s_spawn_dist);
+    } else if (!strncmp(line, "pak ", 4)) {
+        if (!strcmp(a, "load") && b[0]) {
+            sscanf(line, "%*s %*s %127s", s_pak_path);   /* b holds only 31 characters */
+            s_pak_op = 1;
+        } else if (!strcmp(a, "free") && b[0]) {
+            s_pak_slot = atoi(b);
+            s_pak_op = 2;
+        } else if (!strcmp(a, "list"))
+            s_pak_op = 3;
+        else {
+            out("pak: load PATH | free N | list");
+            return;
+        }
+        out("pak %s queued for the game thread", a);
     } else if (strncmp(line, "note", 4))
         out("unknown command");
 }

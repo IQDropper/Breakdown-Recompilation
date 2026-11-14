@@ -1314,6 +1314,136 @@ static void spawn_service(uint32_t hero, uint32_t hero_st)
     s_spawn_to[2] = hero_st ? MEMF(hero_st + 0x08) : 0.0f;
     fprintf(stderr, "[SPAWN] new character task %08X\n", (unsigned)s_spawned);
 }
+/* Model loader (dev, 2026-11-13): RECOMP_MEMSEARCH "pak load PATH | pak free N | pak list", or RECOMP_PAK_LOAD=PATH
+ * (loaded once, at the first hero update). Uses the game's own data manager (root [0x29F638], 15 slots):
+ *   0x1B520(name, slot, owner) reads sim:romdata/<name> whole (0x17F690) and registers it (0x1B4C0 -> 0x1B3A0):
+ *   every entry whose kind/id is not mapped yet points at this slot (ids already loaded keep their pak), then
+ *   textures (0x1A870), sounds (0x1B1F0), model buffers (0x1AA10) and scripts are set up; slot state = 1.
+ *   0x1B130(slot) frees it in the reverse order.
+ * Slot p: R+0xBC+p*0xC flags byte (1 = fixed memory), R+0xBD+p*0xC state (0 empty, 1 loaded, 'x' releasing),
+ * R+0xC0+p*0xC handle (-> pak base: 'BDPK', +4 entry count, entries of 0x80 from +0x40).
+ * Id lookup per kind k (0..7): R+0x44+k*0x10 id count, R+0x48+k*0x10 -> table of (s16 slot, s16 entry). */
+extern void sub_0001B520(void);
+extern void sub_0001B130(void);
+#define PAK_SLOTS 15
+static int s_pak_mine[PAK_SLOTS];
+static void pak_list(void)
+{
+    uint32_t r = MEM32(0x29F638);
+    int p;
+    if (!r) {
+        fprintf(stderr, "[PAK] no data manager yet\n");
+        return;
+    }
+    for (p = 0; p < PAK_SLOTS; p++) {
+        uint32_t h = MEM32(r + 0xC0 + p * 0xC), base = h ? MEM32(h) : 0;
+        fprintf(stderr, "[PAK] slot %2d flags %u state %02X handle %08X base %08X entries %d%s\n", p,
+                (unsigned)MEM8(r + 0xBC + p * 0xC), (unsigned)MEM8(r + 0xBD + p * 0xC), (unsigned)h,
+                (unsigned)base, base ? (int)MEM32(base + 4) : 0, s_pak_mine[p] ? " (ours)" : "");
+    }
+}
+/* where kind/id points now: slot and entry name, for the log */
+static void pak_where(uint32_t r, int kind, int id)
+{
+    uint32_t tab = MEM32(r + 0x48 + kind * 0x10), cnt = MEM32(r + 0x44 + kind * 0x10), e, h, base;
+    int16_t slot, idx;
+    char name[44];
+    int i;
+    if (!tab || id < 0 || (uint32_t)id >= cnt) {
+        fprintf(stderr, "[PAK] kind %d id %d: no table\n", kind, id);
+        return;
+    }
+    e = MEM32(tab) + id * 4;
+    slot = (int16_t)MEM16(e);
+    idx = (int16_t)MEM16(e + 2);
+    h = slot >= 0 && slot < PAK_SLOTS ? MEM32(r + 0xC0 + slot * 0xC) : 0;
+    base = h ? MEM32(h) : 0;
+    for (i = 0; i < 43; i++)
+        name[i] = base ? (char)MEM8(base + 0x40 + idx * 0x80 + 0x14 + i) : 0;
+    name[43] = 0;
+    fprintf(stderr, "[PAK] kind %d id %d -> slot %d entry %d %s\n", kind, id, slot, idx,
+            base ? name : "(not loaded)");
+}
+static void pak_service(void)
+{
+    static int s_env_done;
+    char path[128];
+    int slot = -1, op, p, p2;
+    uint32_t r = MEM32(0x29F638), save, eax, ecx, edx, edi, str;
+    if (!r)
+        return;
+    op = mem_search_take_pak(&slot, path, sizeof path);
+    if (!op && !s_env_done) {
+        const char *e = getenv("RECOMP_PAK_LOAD");
+        s_env_done = 1;
+        if (e && *e) {
+            snprintf(path, sizeof path, "%s", e);
+            op = 1;
+        }
+    }
+    if (op == 3) {
+        pak_list();
+        return;
+    }
+    if (op == 2) {
+        if (slot < 0 || slot >= PAK_SLOTS || !s_pak_mine[slot]) {
+            fprintf(stderr, "[PAK] slot %d was not loaded by us; not freeing it\n", slot);
+            return;
+        }
+        save = g_esp; eax = g_eax; ecx = g_ecx; edx = g_edx; edi = g_edi;
+        g_esp -= 4; MEM32(g_esp) = (uint32_t)slot;
+        g_esp -= 4; MEM32(g_esp) = 0;
+        sub_0001B130();
+        fprintf(stderr, "[PAK] freed slot %d -> %u\n", slot, (unsigned)(g_eax & 0xFF));
+        g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx; g_edi = edi;
+        s_pak_mine[slot] = 0;
+        return;
+    }
+    if (op != 1)
+        return;
+    for (p = PAK_SLOTS - 1; p >= 0; p--)   /* the game fills low slots first; take the highest empty one */
+        if (!MEM8(r + 0xBC + p * 0xC) && !MEM8(r + 0xBD + p * 0xC) && !MEM32(r + 0xC0 + p * 0xC))
+            break;
+    if (p < 0) {
+        fprintf(stderr, "[PAK] no free data slot for %s\n", path);
+        return;
+    }
+    save = g_esp; eax = g_eax; ecx = g_ecx; edx = g_edx; edi = g_edi;
+    g_esp -= (uint32_t)((strlen(path) + 4) & ~3u);   /* the name lives on the guest stack during the call */
+    str = g_esp;
+    for (p2 = 0; p2 <= (int)strlen(path); p2++)
+        MEM8(str + p2) = (uint8_t)path[p2];
+    g_esp -= 4; MEM32(g_esp) = 0;              /* owner (kept at slot +0xC4) */
+    g_esp -= 4; MEM32(g_esp) = (uint32_t)p;
+    g_esp -= 4; MEM32(g_esp) = str;
+    g_esp -= 4; MEM32(g_esp) = 0;              /* return address (unused) */
+    sub_0001B520();
+    op = (int)(g_eax & 0xFF);
+    g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx; g_edi = edi;
+    if (!op) {
+        fprintf(stderr, "[PAK] loading %s into slot %d failed (file missing or not a pak)\n", path, p);
+        return;
+    }
+    s_pak_mine[p] = 1;
+    {
+        uint32_t base = MEM32(MEM32(r + 0xC0 + p * 0xC));
+        int n = (int)MEM32(base + 4), i, mine = 0, dup = 0;
+        for (i = 0; i < n; i++) {
+            uint32_t e = base + 0x40 + i * 0x80;
+            if (MEM8(e + 7) == 'f')
+                mine++;
+            else
+                dup++;
+        }
+        fprintf(stderr, "[PAK] loaded %s into slot %d: %d entries, %d new ids, %d already loaded elsewhere\n",
+                path, p, n, mine, dup);
+        for (i = 0; i < n; i++) {
+            uint32_t e = base + 0x40 + i * 0x80;
+            if (MEM8(e + 2) == 1 && MEM8(e + 7) == 'f')
+                pak_where(r, 1, (int16_t)MEM16(e + 4));
+        }
+    }
+}
 static uint32_t s_hero_life_block;   /* status + 0x5AAC of the hero, refreshed by every hero update */
 static void hero_fill_life(uint32_t st)
 {
@@ -1355,6 +1485,7 @@ void sub_0003E710(void)
         pos_log(hero, st);
         damage_log(hero, st);
         spawn_service(hero, st);
+        pak_service();
         if (st && (move_k > 1e-3f || move_k < -1e-3f)) {
             /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
              * update; remember the stretched position so the next step is measured from it. */

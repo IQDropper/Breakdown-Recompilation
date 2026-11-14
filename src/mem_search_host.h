@@ -9,4 +9,6 @@ void mem_search_name(const char *name, uint32_t va);
  * the level files' CHAR_CREATE handler, 0x413C0) and puts the copy DIST units in front of the hero. Queued here,
  * run by mem_search_take_spawn() from the hero update. */
 int mem_search_take_spawn(uint32_t *task, float *dist);
+/* "pak load PATH | pak free N | pak list": returns 1 / 2 / 3 (0 = nothing queued). Run from the hero update. */
+int mem_search_take_pak(int *slot, char *path, int size);
 #endif
