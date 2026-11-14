@@ -39,6 +39,7 @@ struct display_choice {
     int      a11y_repeat;      /* RECOMP_A11Y_REPEAT: A11Y_REPEAT_* (a11y_input.h), 0 = off */
     int      a11y_toggle;      /* RECOMP_A11Y_TOGGLE: A11Y_TOGGLE_* (a11y_input.h), 0 = off */
     int      outfit;           /* RECOMP_HERO_OUTFIT: skins.h choice, 0 = the game's choice */
+    int      content;          /* RECOMP_CONTENT: content_mode.h, 0 classic (default), 1 new */
     int      text_size;        /* RECOMP_PC_TEXT_SIZE: 0 100%, 1 150%, 2 200% (PC page text) */
     int      mouse_sens;       /* RECOMP_MOUSE_SENS units, 1200 default */
     int      mouse_invert;     /* RECOMP_MOUSE_INVERT=1 */

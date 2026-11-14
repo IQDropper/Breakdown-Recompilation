@@ -9,6 +9,7 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#include "content_mode.h"
 #include <windows.h>
 
 #include "pc_options_host.h"
@@ -48,7 +49,7 @@ static char b_aspect[8];
 static char b_filter[12];
 static char b_full[12]; /* "0", "1", "exclusive" */
 static char b_fps60[2], b_pipe[2], b_vsync[2];
-static char b_repeat[8], b_toggle[8], b_outfit[12], b_text[8];   /* a11y_input.h tokens: "abxy", "both", ... */
+static char b_repeat[8], b_toggle[8], b_outfit[12], b_text[8], b_content[8];   /* a11y_input.h tokens: "abxy", "both", ... */
 
 struct pc_apply {
     int action;
@@ -105,6 +106,7 @@ static unsigned env_locks(void)
     v = getenv("RECOMP_DISPLAY_ASPECT");
     if (v && v[0]) mask |= PC_LOCK_ASPECT;
     if (display_host_launch_set("RECOMP_HORPLUS")) mask |= PC_LOCK_WIDE;
+    if (display_host_launch_set("RECOMP_CONTENT")) mask |= PC_LOCK_CONTENT;
     v = getenv("RECOMP_PRESENT_FILTER");
     if (v && v[0]) mask |= PC_LOCK_FILTER;
     v = getenv("RECOMP_PRESENT_FULLSCREEN");
@@ -178,6 +180,7 @@ static char *bound_get(const char *name)
     if (strcmp(name, "RECOMP_A11Y_REPEAT") == 0) return b_repeat;
     if (strcmp(name, "RECOMP_A11Y_TOGGLE") == 0) return b_toggle;
     if (strcmp(name, "RECOMP_HERO_OUTFIT") == 0) return b_outfit;
+    if (strcmp(name, "RECOMP_CONTENT") == 0) return b_content;
     if (strcmp(name, "RECOMP_PC_TEXT_SIZE") == 0) return b_text;
     return NULL;
 }
@@ -197,6 +200,7 @@ static void bind_settings(const struct video_settings *s)
     snprintf(b_repeat, sizeof b_repeat, "%s", a11y_repeat_token(c.a11y_repeat));
     snprintf(b_toggle, sizeof b_toggle, "%s", a11y_toggle_token(c.a11y_toggle));
     snprintf(b_outfit, sizeof b_outfit, "%s", skins_choice_token(c.outfit));
+    snprintf(b_content, sizeof b_content, "%s", content_mode_token(c.content));
     snprintf(b_text, sizeof b_text, "%d", video_text_size_percent(c.text_size));
 }
 
@@ -362,6 +366,7 @@ static int apply_live(const struct video_settings *s, int restyle)
     breakdown_fps60_set(s->fps60);   /* 60 FPS switches at once; the renderer setting waits for a restart */
     breakdown_a11y_set(s->a11y_repeat, s->a11y_toggle);
     breakdown_hero_outfit_set(s->outfit);
+    content_mode_set(s->content);
     apply_controls(s);
     if (nv2a_d3d11_set_vsync) {
         static int s_vs = -1;

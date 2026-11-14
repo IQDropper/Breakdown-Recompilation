@@ -160,6 +160,27 @@ static void test_roundtrip(void)
     display_host_choose(display_getenv_layered, &c);
     video_settings_from_choice(&c, &loaded);
     expect("roundtrip hor+", loaded.horplus == 1 && c.horplus == 1);
+    expect("content classic by default", loaded.content == 0 && c.content == 0
+           && strcmp(video_config_getenv("RECOMP_CONTENT"), "classic") == 0);
+    s.content = 1;
+    expect("save content", video_config_save(path, &s) == 0 && video_config_load(path) == 1
+           && strcmp(video_config_getenv("RECOMP_CONTENT"), "new") == 0);
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &loaded);
+    expect("roundtrip content new", loaded.content == 1 && c.content == 1);
+    {
+        struct video_settings r = loaded;
+        char vb[16];
+        video_settings_recommended(&r);
+        expect("recommended keeps content", r.content == 1);
+        video_settings_stock(&r);
+        expect("stock content is classic", r.content == 0
+               && strcmp(video_settings_value(&r, VIDEO_ROW_CONTENT, vb, sizeof vb), "Classic") == 0);
+        expect("content nudge", video_settings_nudge(&r, VIDEO_ROW_CONTENT, 1) && r.content == 1
+               && strcmp(video_settings_value(&r, VIDEO_ROW_CONTENT, vb, sizeof vb), "New") == 0);
+        expect("content title and detail", strcmp(video_row_title(VIDEO_ROW_CONTENT), "Content") == 0
+               && strstr(video_row_detail(&r, VIDEO_ROW_CONTENT), "Classic") != NULL);
+    }
     remove(path);
 }
 

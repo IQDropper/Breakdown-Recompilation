@@ -34,7 +34,7 @@ static int lock_for_row(int row)
     static const unsigned bits[PC_ROW_LAST_SETTING + 1] = {
         PC_LOCK_SCALE, PC_LOCK_WINDOW, PC_LOCK_ASPECT, PC_LOCK_WIDE, PC_LOCK_FILTER, PC_LOCK_MODE,
         PC_LOCK_FPS60, PC_LOCK_PIPE, PC_LOCK_VSYNC, PC_LOCK_REPEAT, PC_LOCK_TOGGLE, PC_LOCK_OUTFIT,
-        PC_LOCK_TEXT, PC_LOCK_MOUSE, PC_LOCK_INVERT, PC_LOCK_DEADZONE, PC_LOCK_KEYS
+        PC_LOCK_CONTENT, PC_LOCK_TEXT, PC_LOCK_MOUSE, PC_LOCK_INVERT, PC_LOCK_DEADZONE, PC_LOCK_KEYS
     };
     if (row < 0 || row > PC_ROW_LAST_SETTING)
         return 0;
@@ -164,6 +164,8 @@ static void activate(struct pc_pad_result *r)
         s_draft.a11y_toggle = stock.a11y_toggle;
     if (!lock_for_row(PC_ROW_OUTFIT))
         s_draft.outfit = stock.outfit;
+    if (!lock_for_row(PC_ROW_CONTENT))
+        s_draft.content = stock.content;
     if (!lock_for_row(PC_ROW_TEXT))
         s_draft.text_size = stock.text_size;
     if (!lock_for_row(PC_ROW_MOUSE))
@@ -405,6 +407,7 @@ const char *pc_options_row_title(int row)
         "Hold to repeat",
         "Hold toggle",
         "Outfit",
+        "Content",
         "Text size",
         "Mouse speed",
         "Invert mouse",
