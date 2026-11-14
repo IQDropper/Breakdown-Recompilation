@@ -82,6 +82,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo --- patch_mono_audio.py ---
+%PY% patch_mono_audio.py
+if errorlevel 1 (
+  echo [error] patch_mono_audio.py failed
+  exit /b 1
+)
+echo [ok] Mono audio option (RECOMP_MONO_AUDIO / PC options).
 echo [ok] Opt-in Hor+ widescreen (RECOMP_HORPLUS=16:9).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.

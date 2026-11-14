@@ -12,6 +12,8 @@
 #include "a11y_input.h"
 #include "skins.h"
 #include "content_mode.h"
+/* A11Y-11: in the toolkit audio output once patch_mono_audio.py is applied (weak: absent in unit tests). */
+extern void xa2_set_mono(int on) __attribute__((weak));
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -184,6 +186,8 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     o->a11y_toggle = a11y_toggle_from_token(env_get(get, "RECOMP_A11Y_TOGGLE"));
     o->outfit = skins_choice_from_token(env_get(get, "RECOMP_HERO_OUTFIT"));
     o->content = content_mode_from_token(env_get(get, "RECOMP_CONTENT"));
+    s = env_get(get, "RECOMP_MONO_AUDIO");
+    o->mono = s && s[0] == '1';
     s = env_get(get, "RECOMP_PC_TEXT_SIZE");   /* 100 / 150 / 200 -> 0 / 1 / 2 (video_text_size_index) */
     o->text_size = !s ? 0 : atoi(s) == 150 ? 1 : atoi(s) == 200 ? 2 : 0;
     s = env_get(get, "RECOMP_MOUSE_SENS");
@@ -321,7 +325,8 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
 static const char *const s_speed_keys[] = {
     "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC", "RECOMP_A11Y_REPEAT", "RECOMP_A11Y_TOGGLE",
     "RECOMP_HERO_OUTFIT", "RECOMP_PC_TEXT_SIZE", "RECOMP_MOUSE_SENS", "RECOMP_MOUSE_INVERT",
-    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP", "RECOMP_HORPLUS", "RECOMP_CONTENT"
+    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP", "RECOMP_HORPLUS", "RECOMP_CONTENT",
+    "RECOMP_MONO_AUDIO"
 };
 static int s_speed_from_launch[sizeof s_speed_keys / sizeof s_speed_keys[0]];
 
@@ -405,6 +410,11 @@ void display_host_init(void)
         opts.fullscreen = DISPLAY_BORDERLESS;
     }
     nv2a_host_opts_set(&opts);
+    if (xa2_set_mono)
+        xa2_set_mono(c.mono);   /* A11Y-11 (patch_mono_audio.py) */
+    if (c.mono)
+        fprintf(stderr, "[A11Y] mono audio %s\n", xa2_set_mono ? "on" : "asked for, but the audio patch is missing "
+                "(run APPLY_RENDER_PATCHES.cmd and rebuild)");
     content_mode_set(c.content);   /* S10.15: before the pack, which picks the classic or the new build */
     fprintf(stderr, "[CONTENT] %s\n", c.content ? "new (our added content on)" : "classic (the original game)");
     display_load_pack();

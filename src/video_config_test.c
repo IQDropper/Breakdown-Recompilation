@@ -181,6 +181,27 @@ static void test_roundtrip(void)
         expect("content title and detail", strcmp(video_row_title(VIDEO_ROW_CONTENT), "Content") == 0
                && strstr(video_row_detail(&r, VIDEO_ROW_CONTENT), "Classic") != NULL);
     }
+    expect("mono off by default", loaded.mono == 0 && c.mono == 0
+           && strcmp(video_config_getenv("RECOMP_MONO_AUDIO"), "0") == 0);
+    s.mono = 1;
+    expect("save mono", video_config_save(path, &s) == 0 && video_config_load(path) == 1
+           && strcmp(video_config_getenv("RECOMP_MONO_AUDIO"), "1") == 0);
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &loaded);
+    expect("roundtrip mono on", loaded.mono == 1 && c.mono == 1);
+    {
+        struct video_settings r = loaded;
+        char vb[16];
+        video_settings_recommended(&r);
+        expect("recommended keeps mono", r.mono == 1);
+        video_settings_stock(&r);
+        expect("stock mono is off", r.mono == 0
+               && strcmp(video_settings_value(&r, VIDEO_ROW_MONO, vb, sizeof vb), "Off") == 0);
+        expect("mono nudge", video_settings_nudge(&r, VIDEO_ROW_MONO, 1) && r.mono == 1
+               && strcmp(video_settings_value(&r, VIDEO_ROW_MONO, vb, sizeof vb), "On") == 0);
+        expect("mono title and detail", strcmp(video_row_title(VIDEO_ROW_MONO), "Mono audio") == 0
+               && strstr(video_row_detail(&r, VIDEO_ROW_MONO), "both ears") != NULL);
+    }
     remove(path);
 }
 
