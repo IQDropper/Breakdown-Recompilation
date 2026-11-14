@@ -29,7 +29,7 @@ MOUSE BUTTONS — LEGACY
   Side button (forward) ..... Right trigger
 
 PC OPTIONS (owned borderless host overlay over the 4:3 picture, not drawn into the frame, not an Xbox screen)
-  Back + Start .............. opens PC options (Backspace + Enter)
+  Back (short press) ........ opens PC options (Backspace); Back + Start stays the game's own
   F10 ....................... same page, backup toggle
        Start alone still pauses and still advances the title.
        Internal resolution, window size, letterbox aspect (4:3, 16:9,
