@@ -5,6 +5,7 @@
  * This file only stores the strings and the labels the menu shows.
  */
 #include "video_config.h"
+#include "content_mode.h"
 #include "a11y_input.h"
 #include "skins.h"
 #include "keymap.h"
@@ -38,6 +39,7 @@ enum {
     KEY_DEADZONE,
     KEY_KEYMAP,
     KEY_HORPLUS,
+    KEY_CONTENT,
     KEY_COUNT
 };
 
@@ -59,6 +61,7 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_PAD_DEADZONE",
     "RECOMP_KEYMAP",
     "RECOMP_HORPLUS",
+    "RECOMP_CONTENT",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -200,6 +203,7 @@ static void store_settings(const struct video_settings *s)
     snprintf(s_val[KEY_DEADZONE], sizeof s_val[KEY_DEADZONE], "%d", video_deadzone_units(c.deadzone));
     snprintf(s_val[KEY_KEYMAP], sizeof s_val[KEY_KEYMAP], "%s", c.keymap);
     snprintf(s_val[KEY_HORPLUS], sizeof s_val[KEY_HORPLUS], "%s", video_settings_horplus_token(&c));
+    snprintf(s_val[KEY_CONTENT], sizeof s_val[KEY_CONTENT], "%s", content_mode_token(c.content));
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -217,6 +221,7 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_DEADZONE] = 1;
     s_have[KEY_KEYMAP] = c.keymap[0] != 0;
     s_have[KEY_HORPLUS] = 1;
+    s_have[KEY_CONTENT] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -257,6 +262,8 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# RECOMP_MOUSE_SENS: mouse look speed (1200 = 100%%). RECOMP_MOUSE_INVERT: 1 = up is down.\n"
                 "# RECOMP_PAD_DEADZONE: stick dead zone, 0..32767. RECOMP_KEYMAP: remapped keys,\n"
                 "# CONTROL=KEY|KEY2 separated by ; (e.g. LT=1|Q;RT=3|E). Empty = default keys.\n"
+                "# RECOMP_CONTENT: classic (the original game) or new (hidden texture lines, flash scares,\n"
+                "# new moves). Fixes stay on in both.\n"
                 "RECOMP_RENDER_SCALE=%u\n"
                 "RECOMP_WINDOW_SCALE=%u\n"
                 "RECOMP_DISPLAY_ASPECT=%s\n"
@@ -273,7 +280,8 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "RECOMP_MOUSE_INVERT=%d\n"
                 "RECOMP_PAD_DEADZONE=%d\n"
                 "RECOMP_KEYMAP=%s\n"
-                "RECOMP_HORPLUS=%s\n",
+                "RECOMP_HORPLUS=%s\n"
+                "RECOMP_CONTENT=%s\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
@@ -283,7 +291,7 @@ int video_config_save(const char *path, const struct video_settings *in)
                 a11y_repeat_token(s.a11y_repeat), a11y_toggle_token(s.a11y_toggle),
                 skins_choice_token(s.outfit), video_text_size_percent(s.text_size),
                 video_mouse_units(s.mouse_speed), s.mouse_invert ? 1 : 0, video_deadzone_units(s.deadzone),
-                s.keymap, video_settings_horplus_token(&s)) < 0) {
+                s.keymap, video_settings_horplus_token(&s), content_mode_token(s.content)) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -342,6 +350,7 @@ void video_settings_stock(struct video_settings *s)
     s->a11y_repeat = A11Y_REPEAT_OFF;
     s->a11y_toggle = A11Y_TOGGLE_OFF;
     s->outfit = 0;
+    s->content = CONTENT_CLASSIC;
     s->text_size = 0;
     s->mouse_speed = VIDEO_MOUSE_DEFAULT;
     s->mouse_invert = 0;
@@ -401,6 +410,7 @@ void video_settings_clamp(struct video_settings *s)
         s->a11y_toggle = A11Y_TOGGLE_OFF;
     if (s->outfit < 0 || s->outfit >= SKINS_CHOICES)
         s->outfit = 0;
+    s->content = s->content == CONTENT_NEW ? CONTENT_NEW : CONTENT_CLASSIC;
     if (s->text_size < 0 || s->text_size >= VIDEO_TEXT_SIZES)
         s->text_size = 0;
     if (s->mouse_speed < 0 || s->mouse_speed >= VIDEO_MOUSE_SPEEDS)
@@ -554,6 +564,7 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->a11y_repeat = c->a11y_repeat;
     s->a11y_toggle = c->a11y_toggle;
     s->outfit = c->outfit;
+    s->content = c->content;
     s->text_size = c->text_size;
     s->mouse_speed = video_mouse_index(c->mouse_sens);
     s->mouse_invert = c->mouse_invert;
@@ -577,6 +588,7 @@ const char *video_row_title(int row)
         "Hold to repeat",
         "Hold toggle",
         "Outfit",
+        "Content",
         "Text size",
         "Mouse speed",
         "Invert mouse",
@@ -662,6 +674,9 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->outfit;
         s->outfit = wrap_index(s->outfit, SKINS_CHOICES, dir);
         return s->outfit != before;
+    case VIDEO_ROW_CONTENT:
+        s->content = s->content == CONTENT_NEW ? CONTENT_CLASSIC : CONTENT_NEW;
+        return 1;
     case VIDEO_ROW_TEXT:
         before = s->text_size;
         s->text_size = wrap_index(s->text_size, VIDEO_TEXT_SIZES, dir);
@@ -732,6 +747,9 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_OUTFIT:
         snprintf(buf, n, "%s", skins_choice_label(s->outfit));
         break;
+    case VIDEO_ROW_CONTENT:
+        snprintf(buf, n, "%s", content_mode_label(s->content));
+        break;
     case VIDEO_ROW_TEXT:
         snprintf(buf, n, "%d%%", video_text_size_percent(s->text_size));
         break;
@@ -799,6 +817,9 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_OUTFIT:
         return "Derrick's outfit, from the ones the game has. Shows the next time he appears (load a save). "
                "Story outfits still win. An outfit only shows where the game has its model loaded.";
+    case VIDEO_ROW_CONTENT:
+        return "Classic: the original game. New: our added content (hidden lines in the HD textures, "
+               "flash scares, new moves). Fixes stay on in both. Textures change the next time you start the game.";
     case VIDEO_ROW_TEXT:
         return "Text size on this PC page: 100, 150 or 200 percent. It also grows with the window. Changes at once.";
     case VIDEO_ROW_MOUSE:
