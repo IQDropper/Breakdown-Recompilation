@@ -35,6 +35,7 @@ struct display_choice {
     int      fps60;            /* RECOMP_FPS60=1: gameplay at 60 FPS */
     int      pipeline;         /* RECOMP_PB_PIPELINE=1: game doesn't wait for the renderer */
     int      vsync;            /* RECOMP_PRESENT_VSYNC=1: Present waits for the display */
+    int      horplus;          /* RECOMP_HORPLUS set to a wide W:H (not "off"): wider view, read at start */
     int      a11y_repeat;      /* RECOMP_A11Y_REPEAT: A11Y_REPEAT_* (a11y_input.h), 0 = off */
     int      a11y_toggle;      /* RECOMP_A11Y_TOGGLE: A11Y_TOGGLE_* (a11y_input.h), 0 = off */
     int      outfit;           /* RECOMP_HERO_OUTFIT: skins.h choice, 0 = the game's choice */

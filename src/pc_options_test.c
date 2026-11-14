@@ -307,7 +307,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("nineteen rows", PC_ROW_COUNT == 19);
+    expect("twenty-one rows", PC_ROW_COUNT == 21);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -350,6 +350,44 @@ static void test_window_mode_row_has_exclusive(void)
         pulse(PC_PAD_DPAD_DOWN);
     r = pc_options_on_port(0, PC_PAD_A);
     expect("reset leaves exclusive", pc_options_draft()->borderless == 0);
+    pc_options_on_esc();
+}
+
+static void test_recommended_row(void)
+{
+    struct video_settings s = base_settings();
+    struct pc_pad_result r;
+    char buf[64];
+    s.window_scale = 3;
+    s.borderless = 1;
+    s.mouse_speed = 4;
+    pc_options_reset();
+    pc_options_set_baseline(&s);
+    pc_options_set_locks(PC_LOCK_FPS60);
+    pc_options_on_f10();
+    expect("recommended row is named", strcmp(pc_options_row_title(PC_ROW_RECOMMENDED), "Recommended") == 0);
+    expect("wide view row follows aspect", PC_ROW_WIDE == PC_ROW_ASPECT + 1
+           && strcmp(pc_options_row_title(PC_ROW_WIDE), "Wide view") == 0);
+    while (pc_options_row() != PC_ROW_RECOMMENDED)
+        pulse(PC_PAD_DPAD_DOWN);
+    r = pc_options_on_port(0, PC_PAD_A);
+    expect("recommended previews", r.action == PC_ACT_PREVIEW);
+    expect("recommended picture",
+           pc_options_draft()->render_scale == 4 && pc_options_draft()->filter == 1
+           && pc_options_draft()->aspect == 1 && pc_options_draft()->horplus == 1
+           && pc_options_draft()->pipeline == 1 && pc_options_draft()->vsync == 1);
+    expect("recommended skips a locked row", pc_options_draft()->fps60 == s.fps60);
+    expect("recommended keeps window and controls",
+           pc_options_draft()->window_scale == 3 && pc_options_draft()->borderless == 1
+           && pc_options_draft()->mouse_speed == 4);
+    pc_options_row_value(PC_ROW_WIDE, buf, sizeof buf);
+    expect("wide view shows hor+", strcmp(buf, "Hor+") == 0);
+    expect("committed unchanged until apply", pc_options_committed()->render_scale == s.render_scale);
+    pulse(0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("reset follows recommended", pc_options_row() == PC_ROW_RESET);
+    pc_options_on_port(0, PC_PAD_A);
+    expect("reset turns hor+ off", pc_options_draft()->horplus == 0);
     pc_options_on_esc();
 }
 
@@ -558,6 +596,7 @@ int main(void)
     test_start_alone();
     test_speed_rows();
     test_vsync_row();
+    test_recommended_row();
     test_a11y_rows();
     test_window_mode_row_has_exclusive();
     test_chord();

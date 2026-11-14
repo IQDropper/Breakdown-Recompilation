@@ -37,6 +37,7 @@ enum {
     KEY_INVERT,
     KEY_DEADZONE,
     KEY_KEYMAP,
+    KEY_HORPLUS,
     KEY_COUNT
 };
 
@@ -57,6 +58,7 @@ static const char *const s_keys[KEY_COUNT] = {
     "RECOMP_MOUSE_INVERT",
     "RECOMP_PAD_DEADZONE",
     "RECOMP_KEYMAP",
+    "RECOMP_HORPLUS",
 };
 
 static const char *const s_aspects[] = { "4:3", "16:9", "16:10", "21:9" };
@@ -197,6 +199,7 @@ static void store_settings(const struct video_settings *s)
     snprintf(s_val[KEY_INVERT], sizeof s_val[KEY_INVERT], "%d", c.mouse_invert ? 1 : 0);
     snprintf(s_val[KEY_DEADZONE], sizeof s_val[KEY_DEADZONE], "%d", video_deadzone_units(c.deadzone));
     snprintf(s_val[KEY_KEYMAP], sizeof s_val[KEY_KEYMAP], "%s", c.keymap);
+    snprintf(s_val[KEY_HORPLUS], sizeof s_val[KEY_HORPLUS], "%s", video_settings_horplus_token(&c));
     s_have[KEY_SCALE] = 1;
     s_have[KEY_WINDOW] = 1;
     s_have[KEY_ASPECT] = 1;
@@ -213,6 +216,7 @@ static void store_settings(const struct video_settings *s)
     s_have[KEY_INVERT] = 1;
     s_have[KEY_DEADZONE] = 1;
     s_have[KEY_KEYMAP] = c.keymap[0] != 0;
+    s_have[KEY_HORPLUS] = 1;
 }
 
 int video_config_save(const char *path, const struct video_settings *in)
@@ -239,7 +243,8 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "# run_native.cmd sets some of these, so it ignores this file\n"
                 "# until those variables are unset.\n"
                 "# RECOMP_PRESENT_FULLSCREEN: 0 windowed, 1 borderless, exclusive.\n"
-                "# Hor+ is not a setting on this toolkit pin.\n"
+                "# RECOMP_HORPLUS: off, or the aspect (16:9 ...) = a wider view instead of bars\n"
+                "# (takes effect on the next launch).\n"
                 "# RECOMP_FPS60: 1 = gameplay at 60 FPS. RECOMP_PB_PIPELINE: 1 = the game\n"
                 "# does not wait for the renderer (takes effect on the next launch).\n"
                 "# RECOMP_PRESENT_VSYNC: 1 = wait for the display (no tearing).\n"
@@ -267,7 +272,8 @@ int video_config_save(const char *path, const struct video_settings *in)
                 "RECOMP_MOUSE_SENS=%d\n"
                 "RECOMP_MOUSE_INVERT=%d\n"
                 "RECOMP_PAD_DEADZONE=%d\n"
-                "RECOMP_KEYMAP=%s\n",
+                "RECOMP_KEYMAP=%s\n"
+                "RECOMP_HORPLUS=%s\n",
                 VIDEO_CONFIG_FILENAME,
                 s.render_scale, s.window_scale,
                 video_settings_aspect_name(s.aspect),
@@ -277,7 +283,7 @@ int video_config_save(const char *path, const struct video_settings *in)
                 a11y_repeat_token(s.a11y_repeat), a11y_toggle_token(s.a11y_toggle),
                 skins_choice_token(s.outfit), video_text_size_percent(s.text_size),
                 video_mouse_units(s.mouse_speed), s.mouse_invert ? 1 : 0, video_deadzone_units(s.deadzone),
-                s.keymap) < 0) {
+                s.keymap, video_settings_horplus_token(&s)) < 0) {
         fclose(f);
         remove(tmp);
         return -1;
@@ -327,6 +333,7 @@ void video_settings_stock(struct video_settings *s)
     s->render_scale = 1;
     s->window_scale = 1;
     s->aspect = 0;
+    s->horplus = 0;
     s->filter = 0;
     s->borderless = 0;
     s->fps60 = 0;
@@ -340,6 +347,24 @@ void video_settings_stock(struct video_settings *s)
     s->mouse_invert = 0;
     s->deadzone = 0;
     s->keymap[0] = 0;
+}
+
+const char *video_settings_horplus_token(const struct video_settings *s)
+{
+    return s && s->horplus && s->aspect > 0 && s->aspect <= 3 ? s_aspects[s->aspect] : "off";
+}
+
+void video_settings_recommended(struct video_settings *s)
+{
+    if (!s)
+        return;
+    s->render_scale = 4;
+    s->aspect = 1;          /* 16:9 */
+    s->horplus = 1;
+    s->filter = 1;          /* linear */
+    s->fps60 = 1;
+    s->pipeline = 1;
+    s->vsync = 1;
 }
 
 void video_settings_clamp(struct video_settings *s)
@@ -358,6 +383,7 @@ void video_settings_clamp(struct video_settings *s)
         s->aspect = 0;
     if (s->aspect > 3)
         s->aspect = 3;
+    s->horplus = s->horplus ? 1 : 0;
     if (s->filter < 0)
         s->filter = 0;
     if (s->filter > 2)
@@ -518,6 +544,7 @@ void video_settings_from_choice(const struct display_choice *c, struct video_set
     s->window_scale = ws ? ws : 1u;
     aspect = video_settings_aspect_index(c->aspect);
     s->aspect = aspect < 0 ? 0 : aspect;
+    s->horplus = c->horplus;
     if (c->present_filter >= 0 && c->present_filter <= 2)
         s->filter = c->present_filter;
     s->borderless = c->fullscreen;
@@ -541,6 +568,7 @@ const char *video_row_title(int row)
         "Internal resolution",
         "Window size",
         "Aspect",
+        "Wide view",
         "Present filter",
         "Window mode",
         "60 FPS gameplay",
@@ -602,6 +630,9 @@ int video_settings_nudge(struct video_settings *s, int row, int dir)
         before = s->aspect;
         s->aspect = wrap_index(s->aspect, 4, dir);
         return s->aspect != before;
+    case VIDEO_ROW_WIDE:
+        s->horplus = !s->horplus;
+        return 1;
     case VIDEO_ROW_FILTER:
         before = s->filter;
         s->filter = wrap_index(s->filter, 3, dir);
@@ -668,6 +699,14 @@ char *video_settings_value(const struct video_settings *s, int row, char *buf, s
     case VIDEO_ROW_ASPECT:
         snprintf(buf, n, "%s", video_settings_aspect_name(s->aspect));
         break;
+    case VIDEO_ROW_WIDE:
+        if (!s->horplus)
+            snprintf(buf, n, "Bars");
+        else if (s->aspect == 0)
+            snprintf(buf, n, "Hor+ (needs a wide aspect)");
+        else
+            snprintf(buf, n, "Hor+");
+        break;
     case VIDEO_ROW_FILTER:
         if (s->filter >= 0 && s->filter <= 2)
             snprintf(buf, n, "%s", s_filter_labels[s->filter]);
@@ -731,7 +770,10 @@ const char *video_row_detail(const struct video_settings *s, int row)
     case VIDEO_ROW_WINDOW:
         return "Height is 480 times this. Width follows the aspect. Resizes the window now.";
     case VIDEO_ROW_ASPECT:
-        return "Letterbox the 4:3 frame. Hor+ is not available on this toolkit pin.";
+        return "Window shape. At a wide shape, Wide view picks bars beside the 4:3 frame or a wider view.";
+    case VIDEO_ROW_WIDE:
+        return "Bars: the 4:3 picture with bars at the sides. Hor+: the game shows more at the sides "
+               "(needs a wide Aspect). Takes effect the next time you start the game.";
     case VIDEO_ROW_FILTER:
         if (s && s->render_scale <= 1 && s->aspect != 0 && s->filter == 0)
             return "Nearest at internal 1x in a wide window keeps the image at the top left. "
@@ -739,7 +781,7 @@ const char *video_row_detail(const struct video_settings *s, int row)
         return "Nearest, linear, or integer. Changes on the next frame.";
     case VIDEO_ROW_MODE:
         return "Windowed, borderless on the monitor, or exclusive at this window size. "
-               "The 4:3 frame stays letterboxed. Hor+ is not available.";
+               "Wide view picks bars or a wider picture.";
     case VIDEO_ROW_FPS60:
         return "Play at 60 frames per second instead of the game's 30. Changes at once.";
     case VIDEO_ROW_PIPELINE:

@@ -1,0 +1,28 @@
+{
+  "about": "Breakdown PC settings presets (S10.3). The game uses video_settings_recommended() in src/video_config.c; this file is the record. Only the owner finalizes.",
+  "measured_on": "i7-9750H + GTX 1660 Ti, doorway room (GO kit reports/perf/sweep/costs.md, 2026-11-12)",
+  "presets": {
+    "recommended": {
+      "status": "finalized by Foster 2026-11-13",
+      "RECOMP_RENDER_SCALE": 4, "RECOMP_PRESENT_FILTER": "linear", "RECOMP_DISPLAY_ASPECT": "16:9", "RECOMP_HORPLUS": "16:9",
+      "RECOMP_FPS60": 1, "RECOMP_PB_PIPELINE": 1, "RECOMP_PRESENT_VSYNC": 1,
+      "used_for": "F10 page row 'Recommended', and the first start (no breakdown_video.cfg yet)",
+      "why": "no measured cost on the dev laptop (CPU-bound game); 'Don't wait for renderer' +19% FPS; smoothest"
+    },
+    "original": {
+      "status": "stock (the F10 'Reset' row)",
+      "RECOMP_RENDER_SCALE": 1, "RECOMP_PRESENT_FILTER": "nearest", "RECOMP_DISPLAY_ASPECT": "4:3", "RECOMP_HORPLUS": "off",
+      "RECOMP_FPS60": 0, "RECOMP_PB_PIPELINE": 0, "RECOMP_PRESENT_VSYNC": 0
+    },
+    "low": {
+      "status": "proposed, estimated (not measured on weak hardware)",
+      "RECOMP_RENDER_SCALE": 2, "RECOMP_PRESENT_FILTER": "linear", "RECOMP_DISPLAY_ASPECT": "4:3", "RECOMP_HORPLUS": "off",
+      "RECOMP_FPS60": 0, "RECOMP_PB_PIPELINE": 1, "RECOMP_PRESENT_VSYNC": 1
+    },
+    "handheld": {
+      "status": "proposed, estimated (Steam Deck not measured)",
+      "RECOMP_RENDER_SCALE": 2, "RECOMP_PRESENT_FILTER": "linear", "RECOMP_DISPLAY_ASPECT": "16:10", "RECOMP_HORPLUS": "16:10",
+      "RECOMP_FPS60": 0, "RECOMP_PB_PIPELINE": 1, "RECOMP_PRESENT_VSYNC": 1
+    }
+  }
+}

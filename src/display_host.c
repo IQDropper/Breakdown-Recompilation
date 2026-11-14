@@ -177,6 +177,8 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     o->pipeline = s && s[0] == '1';
     s = env_get(get, "RECOMP_PRESENT_VSYNC");
     o->vsync = s && s[0] == '1';
+    s = env_get(get, "RECOMP_HORPLUS");
+    o->horplus = s && strchr(s, ':') != NULL;
     o->a11y_repeat = a11y_repeat_from_token(env_get(get, "RECOMP_A11Y_REPEAT"));
     o->a11y_toggle = a11y_toggle_from_token(env_get(get, "RECOMP_A11Y_TOGGLE"));
     o->outfit = skins_choice_from_token(env_get(get, "RECOMP_HERO_OUTFIT"));
@@ -303,7 +305,7 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
 static const char *const s_speed_keys[] = {
     "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC", "RECOMP_A11Y_REPEAT", "RECOMP_A11Y_TOGGLE",
     "RECOMP_HERO_OUTFIT", "RECOMP_PC_TEXT_SIZE", "RECOMP_MOUSE_SENS", "RECOMP_MOUSE_INVERT",
-    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP"
+    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP", "RECOMP_HORPLUS"
 };
 static int s_speed_from_launch[sizeof s_speed_keys / sizeof s_speed_keys[0]];
 
@@ -329,6 +331,17 @@ void display_host_init(void)
         st = video_config_load(cfg);
     else
         cfg[0] = 0;
+    /* S10.3: a first start (no breakdown_video.cfg yet) begins on the finalized Recommended preset. The file is
+     * written once; after that it is the player's. Launch-script variables still win over it. */
+    if (st == 0 && cfg[0]) {
+        struct video_settings rec;
+        video_settings_stock(&rec);
+        video_settings_recommended(&rec);
+        if (video_config_save(cfg, &rec) == 0) {
+            st = video_config_load(cfg);
+            fprintf(stderr, "[VIDEO] first start: wrote the Recommended preset to %s\n", cfg);
+        }
+    }
     if (cfg[0])
         fprintf(stderr, "[VIDEO] config %s (%s)\n", cfg,
                 st == 1 ? "loaded" : st == 0 ? "not created yet" : "not read");
@@ -382,13 +395,14 @@ void display_host_init(void)
     tuning_host_start();
     fprintf(stderr,
             "[DISPLAY] render.scale=%u%s present.filter=%s%s fullscreen=%d (%s)"
-            " window=%ux%u aspect=%s%s (letterbox, 4:3 frame; hor+ is not in this pin)\n",
+            " window=%ux%u aspect=%s%s (%s)\n",
             c.render_scale, c.scale_clamped ? " (clamped to 1..4)" : "",
             c.filter_name,
             c.filter_promoted ? " (promoted so a wide window letterboxes)" : "",
             opts.fullscreen, fullscreen_word(opts.fullscreen),
             c.window_w, c.window_h, c.aspect,
-            c.aspect_unknown ? " (unknown aspect, using 4:3)" : "");
+            c.aspect_unknown ? " (unknown aspect, using 4:3)" : "",
+            c.horplus ? "wide view: hor+, the renderer reports it" : "wide view: bars beside the 4:3 frame");
     if (c.window_clamped)
         fprintf(stderr, "[DISPLAY] RECOMP_WINDOW_SCALE clamped to 1..6\n");
     fprintf(stderr,

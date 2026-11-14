@@ -104,6 +104,7 @@ static unsigned env_locks(void)
     if (v && v[0]) mask |= PC_LOCK_WINDOW;
     v = getenv("RECOMP_DISPLAY_ASPECT");
     if (v && v[0]) mask |= PC_LOCK_ASPECT;
+    if (display_host_launch_set("RECOMP_HORPLUS")) mask |= PC_LOCK_WIDE;
     v = getenv("RECOMP_PRESENT_FILTER");
     if (v && v[0]) mask |= PC_LOCK_FILTER;
     v = getenv("RECOMP_PRESENT_FULLSCREEN");
@@ -671,7 +672,7 @@ static void on_key(WPARAM vk, int down)
         refresh_baseline();
     r = pc_options_set_ui_bit(bit, down);
     if (r.action == PC_ACT_PREVIEW)
-        restyle = (vk == VK_LEFT || vk == VK_RIGHT || pc_options_row() == PC_ROW_RESET);
+        restyle = (vk == VK_LEFT || vk == VK_RIGHT || pc_options_row() == PC_ROW_RESET || pc_options_row() == PC_ROW_RECOMMENDED);
     if (r.action == PC_ACT_REVERT)
         restyle = 1;
     note_result(&r, restyle);
@@ -765,6 +766,9 @@ static void paint_page(HDC hdc, const RECT *rc)
         snprintf(detail, sizeof detail, "%s", video_row_detail(pc_options_draft(), row));
     else if (row == PC_ROW_APPLY)
         snprintf(detail, sizeof detail, "%s", "Write breakdown_video.cfg beside the exe. This page stays open.");
+    else if (row == PC_ROW_RECOMMENDED)
+        snprintf(detail, sizeof detail, "%s", "Preview the recommended picture: 4x, linear, 16:9 with Hor+, 60 FPS, "
+                 "don't wait for the renderer, VSync. Window size, controls and accessibility stay as they are.");
     else if (row == PC_ROW_RESET)
         snprintf(detail, sizeof detail, "%s", "Preview stock settings. Locked rows stay on the launch script.");
     else
@@ -1118,7 +1122,8 @@ struct pc_pad_result pc_options_host_on_port(int port, unsigned buttons)
     r = pc_options_on_port(port, buttons);
     restyle = 0;
     if (r.action == PC_ACT_PREVIEW)
-        restyle = video_row_needs_window(pc_options_row()) || pc_options_row() == PC_ROW_RESET;
+        restyle = video_row_needs_window(pc_options_row()) || pc_options_row() == PC_ROW_RESET
+                  || pc_options_row() == PC_ROW_RECOMMENDED;
     if (r.action == PC_ACT_REVERT)
         restyle = 1;
     note_result(&r, restyle);
