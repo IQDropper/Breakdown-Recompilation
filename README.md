@@ -6,6 +6,8 @@ Fan / preservation project: a **static recompilation** of the original Xbox game
 
 Share / clone: https://github.com/IQDropper/Breakdown-Recompilation
 
+Patch notes: [2026-11-13](docs/patch-notes/2026-11-13.md).
+
 ---
 
 ## Legal / ownership disclaimers (please read)
