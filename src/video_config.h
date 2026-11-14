@@ -32,6 +32,7 @@ struct video_settings {
     int a11y_toggle;       /* A11Y_TOGGLE_*, RECOMP_A11Y_TOGGLE: a trigger latches on a press (applies at once) */
     int outfit;            /* skins.h choice, RECOMP_HERO_OUTFIT: hero outfit (next spawn) */
     int content;           /* content_mode.h, RECOMP_CONTENT: 0 classic, 1 new content (S10.15) */
+    int subs;              /* 0 game's choice, 1 on, 2 off, RECOMP_SUBTITLES: the game's own Caption option (A11Y-6b) */
     int mono;              /* 0/1, RECOMP_MONO_AUDIO: left + right mixed to both ears (A11Y-11, applies at once) */
     int text_size;         /* 0 100%, 1 150%, 2 200%, RECOMP_PC_TEXT_SIZE: PC page text (applies at once) */
     int mouse_speed;       /* VIDEO_MOUSE_SPEEDS index (100% = 1200), RECOMP_MOUSE_SENS (applies at once) */
@@ -56,6 +57,7 @@ enum {
     VIDEO_ROW_CONTENT,
     VIDEO_ROW_TEXT,
     VIDEO_ROW_MONO,
+    VIDEO_ROW_SUBS,
     VIDEO_ROW_MOUSE,
     VIDEO_ROW_INVERT,
     VIDEO_ROW_DEADZONE,
@@ -132,5 +134,9 @@ int video_row_needs_window(int row);
 #ifdef __cplusplus
 }
 #endif
+
+/* A11Y-6b: RECOMP_SUBTITLES token <-> 0 game's choice, 1 on, 2 off. */
+const char *video_subs_token(int subs);
+int video_subs_from_token(const char *t);
 
 #endif /* VIDEO_CONFIG_H */

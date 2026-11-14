@@ -319,7 +319,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("twenty-three rows", PC_ROW_COUNT == 23);
+    expect("twenty-four rows", PC_ROW_COUNT == 24);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -519,7 +519,20 @@ static void test_a11y_rows(void)
     pulse(PC_PAD_DPAD_LEFT);
     expect("left turns mono off", pc_options_draft()->mono == 0);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("mouse speed follows mono audio", pc_options_row() == PC_ROW_MOUSE);
+    expect("subtitles follow mono audio", pc_options_row() == PC_ROW_SUBS);
+    pc_options_row_value(PC_ROW_SUBS, buf, sizeof buf);
+    expect("subtitles start at the game's choice", pc_options_draft()->subs == 0 && strcmp(buf, "Game's choice") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_SUBS, buf, sizeof buf);
+    expect("right sets subtitles on", pc_options_draft()->subs == 1 && strcmp(buf, "On") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("right again sets subtitles off", pc_options_draft()->subs == 2);
+    expect("subtitles row is named", strcmp(pc_options_row_title(PC_ROW_SUBS), "Subtitles") == 0
+                                     && PC_ROW_SUBS == VIDEO_ROW_SUBS);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("and wraps to the game's choice", pc_options_draft()->subs == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("mouse speed follows subtitles", pc_options_row() == PC_ROW_MOUSE);
     pc_options_row_value(PC_ROW_MOUSE, buf, sizeof buf);
     expect("mouse speed starts at 100%", strcmp(buf, "100%") == 0);
     pulse(PC_PAD_DPAD_RIGHT);
