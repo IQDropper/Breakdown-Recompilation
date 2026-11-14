@@ -973,6 +973,79 @@ static int debug_menu_on(void)
     return s_debug_menu;
 }
 
+/* MAP VIEWER walk (map_list_host.c, PR #54). The map viewer (update 0x1F7F0) starts the picked area as a sample-mode
+ * task (update 0x1F450) under its own parent and removes itself; retail has no way back. F8 inside such an area
+ * removes the sample task (0x17E240, as the game's own tasks do from their update) and starts a new map viewer
+ * (0x1F880) under the same parent, with the cursor on the next entry: one game run can walk every area. */
+extern void sub_0001F450_gen(void);
+extern void sub_0001F7F0_gen(void);
+extern void sub_0001F880(void);
+extern void sub_0017E240(void);
+static int s_mv_next = -1;     /* cursor for the next map viewer, -1 = leave the game's 0 */
+static int s_mv_picked = -1;   /* map viewer cursor after its last update = the entry that was loaded */
+static int s_mv_in_area;       /* a sample-mode area is running (F8 belongs to it, not to the menu hook) */
+
+static int mv_f8_edge(void)
+{
+    static int s_was;
+    unsigned long pid = 0;
+    int down = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose = down && !s_was;   /* VK_F8 */
+    s_was = down;
+    if (!rose)
+        return 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    return pid == GetCurrentProcessId();
+}
+
+void sub_0001F7F0(void)   /* map viewer update (task) */
+{
+    static uint32_t s_task;
+    uint32_t task = MEM32(g_esp + 4);
+    if (task != s_task) {
+        s_task = task;
+        s_mv_in_area = 0;
+        if (s_mv_next >= 0) {
+            MEM32(task + 0x34) = (uint32_t)s_mv_next;   /* the list clamps it to the last entry */
+            s_mv_next = -1;
+        }
+    }
+    sub_0001F7F0_gen();
+    s_mv_picked = (int)MEM32(task + 0x34);
+}
+
+void sub_0001F450(void)   /* sample mode update (task): the area picked in the map viewer */
+{
+    static uint32_t s_task;
+    uint32_t task = MEM32(g_esp + 4), save;
+    if (task != s_task) {
+        s_task = task;
+        fprintf(stderr, "[MAP-VIEWER] in map %d\n", s_mv_picked);
+        fflush(stderr);
+    }
+    s_mv_in_area = 1;
+    if (!debug_menu_on() || !mv_f8_edge()) {
+        sub_0001F450_gen();
+        return;
+    }
+    fprintf(stderr, "[MAP-VIEWER] F8: left map %d, back to the list on %d\n", s_mv_picked, s_mv_picked + 1);
+    fflush(stderr);
+    s_mv_next = s_mv_picked + 1;
+    s_mv_in_area = 0;
+    save = g_esp;
+    {
+        uint32_t parent = MEM32(task + 0x10);
+        g_esp -= 4; MEM32(g_esp) = task;
+        g_esp -= 4; MEM32(g_esp) = 0x298A40;
+        g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+        sub_0017E240();
+        g_esp = save;
+        g_esp -= 4; MEM32(g_esp) = parent;
+        g_esp -= 4; MEM32(g_esp) = 0;
+        sub_0001F880();
+    }
+    g_esp = save + 4;                   /* the original's ret */
+}
+
 /* F9: the Product debug menu (mode 0x1B900). F8: the developers' F026 menu (mode 0x1B640, table 0x227730). */
 static int s_dbgmenu_dev;
 static int debug_menu_key(void)
@@ -995,7 +1068,7 @@ static int debug_menu_key(void)
 void sub_0001B9F0(void)
 {
     uint32_t task, save;
-    if (!debug_menu_on() || !debug_menu_key()) {
+    if (!debug_menu_on() || s_mv_in_area || !debug_menu_key()) {
         sub_0001B9F0_gen();
         return;
     }

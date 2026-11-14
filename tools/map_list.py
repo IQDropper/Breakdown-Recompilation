@@ -45,6 +45,12 @@ def main():
             pos = next((ld["at"] for ld in a.get("loads", [])), None) or \
                   next((sp["at"] for sp in a.get("spawns", []) if sp.get("at")), [0.0, 0.0, 0.0])
             blocks["A"] = pos
+        # Only sections with geometry: hill has hill_A.evd but no hill_A.pak, and the game shows its disc error.
+        adir = os.path.join(lc.ROOT, "area", area)
+        if os.path.isdir(adir):
+            have = {b for b in blocks if os.path.exists(os.path.join(adir, f"{area}_{b}.pak"))}
+            if have:
+                blocks = {b: blocks[b] for b in have}
         title = TITLES.get(area, area)
         for b in sorted(blocks):
             x, y, z = blocks[b]
