@@ -1162,6 +1162,64 @@ static void pos_log(uint32_t hero, uint32_t st)
     }
     (void)py;
 }
+/* RECOMP_DAMAGE_LOG=1 (S10.12): every change of a character's life, once per frame, as
+ *   [DMG] t=<ms> id=<status id> hero|char life <before> -> <after> (<delta>) max <max>
+ * Character status blocks live in the pool at 0x2A97A0 (0x493F0: element = [[pool+0x14]] + id * [pool+8], entries
+ * [pool+4]); the
+ * life block is status + 0x5AAC (life float +4, max +8). Scanning the pool catches every source of damage (melee,
+ * guns, hazards, scripts) without hooking each one. The hero is matched by hero_status(). */
+#define DMG_MAX_IDS 128
+static void damage_log(uint32_t hero, uint32_t hero_st)
+{
+    static int on = -1;
+    static unsigned long t0;
+    static float prev[DMG_MAX_IDS];
+    static unsigned char seen[DMG_MAX_IDS];
+    static uint32_t prev_base;
+    uint32_t pool = 0x2A97A0, size, base, list, id, n;
+    if (on < 0) {
+        const char *e = getenv("RECOMP_DAMAGE_LOG");
+        on = e && e[0] == '1';
+        t0 = GetTickCount();
+    }
+    if (!on)
+        return;
+    if (!hero_st)
+        hero_st = hero_status(hero);
+    if (hero_st)
+        mem_search_name("herolife", hero_st + 0x5AB0);   /* RECOMP_MEMSEARCH: poke $herolife f 100 */
+    size = MEM32(pool + 8);
+    list = MEM32(pool + 0x14);
+    base = list ? MEM32(list) : 0;
+    if (!base || size < 0x5AC0 || size > 0x40000)
+        return;
+    if (base != prev_base) {   /* a new pool (area load): forget the old values */
+        fprintf(stderr, "[DMG] pool base 0x%08X element 0x%X header %08X %08X %08X %08X\n", (unsigned)base,
+                (unsigned)size, (unsigned)MEM32(pool), (unsigned)MEM32(pool + 4), (unsigned)MEM32(pool + 0xC),
+                (unsigned)MEM32(pool + 0x10));
+        memset(seen, 0, sizeof seen);
+        prev_base = base;
+    }
+    n = MEM32(pool + 4);   /* entries (15 in the first area; header seen 2026-11-13: 00010001 0000000F ...) */
+    if (n == 0 || n > DMG_MAX_IDS)
+        n = DMG_MAX_IDS;
+    for (id = 0; id < n; id++) {
+        uint32_t st = base + id * size;
+        float life = MEMF(st + 0x5AB0), max = MEMF(st + 0x5AB4);
+        if (!(max > 0.0f && max < 100000.0f && life >= -1.0f && life <= max + 1.0f)) {
+            seen[id] = 0;
+            continue;
+        }
+        if (seen[id] && life != prev[id]) {
+            fprintf(stderr, "[DMG] t=%lu id=%u %s life %.1f -> %.1f (%+.1f) max %.0f\n",
+                    (unsigned long)(GetTickCount() - t0), (unsigned)id, st == hero_st ? "hero" : "char",
+                    prev[id], life, life - prev[id], max);
+            fflush(stderr);
+        }
+        prev[id] = life;
+        seen[id] = 1;
+    }
+}
 static uint32_t s_hero_life_block;   /* status + 0x5AAC of the hero, refreshed by every hero update */
 static void hero_fill_life(uint32_t st)
 {
@@ -1201,6 +1259,7 @@ void sub_0003E710(void)
         if (st)
             mem_search_name("herostatus", st);
         pos_log(hero, st);
+        damage_log(hero, st);
         if (st && (move_k > 1e-3f || move_k < -1e-3f)) {
             /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
              * update; remember the stretched position so the next step is measured from it. */
