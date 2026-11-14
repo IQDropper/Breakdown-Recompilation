@@ -32,7 +32,13 @@ def main():
     for area, a in cat.items():
         if area in ("extra_back",):
             continue
+        # Start points (P2.9): a character spawn in the section first (always on a floor inside the level),
+        # else the section's first load-trigger box (often near an edge: the walk camera flew out of outdoor areas).
         blocks = {}
+        for sp in a.get("spawns", []):
+            bl = sp.get("block") or ""
+            if len(bl) == 1 and bl.isalpha() and bl not in blocks and sp.get("at") and any(sp["at"]):
+                blocks[bl] = sp["at"]
         for ld in a.get("loads", []):
             m = re.match(rf"^{re.escape(area)}_([A-Z])\.evd$", ld["file"])
             if m and m.group(1) not in blocks:
