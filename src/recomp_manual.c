@@ -282,6 +282,27 @@ void breakdown_a11y_set(int repeat_choice, int toggle_choice)
 }
 
 /* DWORD XInputGetState(HANDLE, PXINPUT_STATE): 4-byte packet number + 18-byte XINPUT_GAMEPAD (same layout) */
+/* P1.4: Back + right-stick click on a pad = F8 (the developers' F026 menu at boot; in a map-viewer area, back to
+ * the map list). Back + Start stays the game's own combo; Back alone is the PC options page (pc_options.c). */
+static unsigned long s_pad_f8_at;   /* GetTickCount() | 1, 0 = none */
+static void pad_f8_watch(uint32_t port, uint16_t buttons)
+{
+    static uint16_t prev[4];
+    const uint16_t combo = 0x0020u | 0x0080u;   /* XINPUT_GAMEPAD_BACK | XINPUT_GAMEPAD_RIGHT_THUMB */
+    if ((buttons & combo) == combo && (prev[port & 3u] & combo) != combo)
+        s_pad_f8_at = GetTickCount() | 1u;
+    prev[port & 3u] = buttons;
+}
+static int pad_f8_take(void)
+{
+    if (s_pad_f8_at && GetTickCount() - s_pad_f8_at < 1000u) {
+        s_pad_f8_at = 0;
+        return 1;
+    }
+    s_pad_f8_at = 0;
+    return 0;
+}
+
 void sub_00205439(void)
 {
     uint32_t h = MEM32(g_esp + 4), dst = MEM32(g_esp + 8), i;
@@ -295,6 +316,7 @@ void sub_00205439(void)
         a11y_pad_reset(&s_a11y_pad[port]);
         g_eax = 1167; g_esp += 12; return;   /* ERROR_DEVICE_NOT_CONNECTED */
     }
+    pad_f8_watch(port, st.wButtons);   /* P1.4 Back + RS = F8 */
     /* PC options is a host page. Start alone still reaches the guest. */
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;
@@ -1029,7 +1051,7 @@ static int mv_f8_edge(void)
     int down = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose = down && !s_was;   /* VK_F8 */
     s_was = down;
     if (!rose)
-        return 0;
+        return pad_f8_take();   /* P1.4: Back + RS on a pad */
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
     return pid == GetCurrentProcessId();
 }
@@ -1093,6 +1115,10 @@ static int debug_menu_key(void)
     int down8 = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose8 = down8 && !s_was8; /* VK_F8 */
     s_was = down;
     s_was8 = down8;
+    if (!rose && !rose8 && pad_f8_take()) {   /* P1.4: Back + RS on a pad (no foreground check needed) */
+        s_dbgmenu_dev = 1;
+        return 1;
+    }
     if (!rose && !rose8)
         return 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
