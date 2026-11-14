@@ -307,7 +307,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("twenty-one rows", PC_ROW_COUNT == 21);
+    expect("twenty-two rows", PC_ROW_COUNT == 22);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -476,7 +476,17 @@ static void test_a11y_rows(void)
     expect("right picks normal", pc_options_draft()->outfit == 1 && strcmp(buf, "Normal") == 0);
     pulse(PC_PAD_DPAD_LEFT);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("text size follows outfit", pc_options_row() == PC_ROW_TEXT);
+    expect("content follows outfit", pc_options_row() == PC_ROW_CONTENT
+           && strcmp(pc_options_row_title(PC_ROW_CONTENT), "Content") == 0);
+    pc_options_row_value(PC_ROW_CONTENT, buf, sizeof buf);
+    expect("content starts classic", pc_options_draft()->content == 0 && strcmp(buf, "Classic") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_CONTENT, buf, sizeof buf);
+    expect("right picks new content", pc_options_draft()->content == 1 && strcmp(buf, "New") == 0);
+    pulse(PC_PAD_DPAD_LEFT);
+    expect("left goes back to classic", pc_options_draft()->content == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("text size follows content", pc_options_row() == PC_ROW_TEXT);
     pc_options_row_value(PC_ROW_TEXT, buf, sizeof buf);
     expect("text size starts at 100%", strcmp(buf, "100%") == 0);
     pulse(PC_PAD_DPAD_RIGHT);

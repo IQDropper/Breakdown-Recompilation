@@ -43,6 +43,7 @@ extern "C" {
 #define PC_LOCK_DEADZONE 0x4000u
 #define PC_LOCK_KEYS   0x8000u
 #define PC_LOCK_WIDE   0x10000u
+#define PC_LOCK_CONTENT 0x20000u
 
 enum {
     PC_ROW_SCALE = 0,
@@ -57,6 +58,7 @@ enum {
     PC_ROW_REPEAT,   /* A11Y-2 hold to repeat */
     PC_ROW_TOGGLE,   /* A11Y-3 hold toggle */
     PC_ROW_OUTFIT,   /* S7.2 hero outfit */
+    PC_ROW_CONTENT,  /* S10.15 Classic / New content */
     PC_ROW_TEXT,     /* A11Y-4 text size of this page */
     PC_ROW_MOUSE,    /* A11Y-1 controls */
     PC_ROW_INVERT,

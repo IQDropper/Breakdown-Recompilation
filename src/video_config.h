@@ -31,6 +31,7 @@ struct video_settings {
     int a11y_repeat;       /* A11Y_REPEAT_*, RECOMP_A11Y_REPEAT: hold a button = 10 presses/s (applies at once) */
     int a11y_toggle;       /* A11Y_TOGGLE_*, RECOMP_A11Y_TOGGLE: a trigger latches on a press (applies at once) */
     int outfit;            /* skins.h choice, RECOMP_HERO_OUTFIT: hero outfit (next spawn) */
+    int content;           /* content_mode.h, RECOMP_CONTENT: 0 classic, 1 new content (S10.15) */
     int text_size;         /* 0 100%, 1 150%, 2 200%, RECOMP_PC_TEXT_SIZE: PC page text (applies at once) */
     int mouse_speed;       /* VIDEO_MOUSE_SPEEDS index (100% = 1200), RECOMP_MOUSE_SENS (applies at once) */
     int mouse_invert;      /* 0/1, RECOMP_MOUSE_INVERT (applies at once) */
@@ -51,6 +52,7 @@ enum {
     VIDEO_ROW_REPEAT,
     VIDEO_ROW_TOGGLE,
     VIDEO_ROW_OUTFIT,
+    VIDEO_ROW_CONTENT,
     VIDEO_ROW_TEXT,
     VIDEO_ROW_MOUSE,
     VIDEO_ROW_INVERT,

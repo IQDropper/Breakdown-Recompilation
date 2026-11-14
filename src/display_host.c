@@ -11,6 +11,7 @@
 #include "display_host.h"
 #include "a11y_input.h"
 #include "skins.h"
+#include "content_mode.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -182,6 +183,7 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
     o->a11y_repeat = a11y_repeat_from_token(env_get(get, "RECOMP_A11Y_REPEAT"));
     o->a11y_toggle = a11y_toggle_from_token(env_get(get, "RECOMP_A11Y_TOGGLE"));
     o->outfit = skins_choice_from_token(env_get(get, "RECOMP_HERO_OUTFIT"));
+    o->content = content_mode_from_token(env_get(get, "RECOMP_CONTENT"));
     s = env_get(get, "RECOMP_PC_TEXT_SIZE");   /* 100 / 150 / 200 -> 0 / 1 / 2 (video_text_size_index) */
     o->text_size = !s ? 0 : atoi(s) == 150 ? 1 : atoi(s) == 200 ? 2 : 0;
     s = env_get(get, "RECOMP_MOUSE_SENS");
@@ -236,6 +238,20 @@ static void display_load_pack(void)
     if (quiet && GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES) {
         fprintf(stderr, "[VIDEO-ROW] no %s; run tools/make_menu_labels.py for the VIDEO SETTINGS label\n", p);
         return;
+    }
+    /* S10.15 Content: New loads "<name>_new.pack" (the same pack with our hidden lines) when it sits beside the
+     * named one; Classic, or no such file, loads the named pack. tools/make_tex_pack.py builds both from one set
+     * of repaints (ops marked "egg" are only in the _new build). */
+    if (content_mode_new()) {
+        char alt[MAX_PATH];
+        size_t L = strlen(path);
+        if (L > 5 && _stricmp(path + L - 5, ".pack") == 0 && L + 4 < sizeof alt) {
+            snprintf(alt, sizeof alt, "%.*s_new.pack", (int)(L - 5), path);
+            if (GetFileAttributesA(alt) != INVALID_FILE_ATTRIBUTES) {
+                snprintf(path, sizeof path, "%s", alt);
+                fprintf(stderr, "[TEXPACK] Content: New -> %s\n", path);
+            }
+        }
     }
     n = nv2a_tex_pack_load(path, err, sizeof err);
     if (n < 0)
@@ -305,7 +321,7 @@ static void display_apply_window(unsigned int *w, unsigned int *h)
 static const char *const s_speed_keys[] = {
     "RECOMP_FPS60", "RECOMP_PB_PIPELINE", "RECOMP_PRESENT_VSYNC", "RECOMP_A11Y_REPEAT", "RECOMP_A11Y_TOGGLE",
     "RECOMP_HERO_OUTFIT", "RECOMP_PC_TEXT_SIZE", "RECOMP_MOUSE_SENS", "RECOMP_MOUSE_INVERT",
-    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP", "RECOMP_HORPLUS"
+    "RECOMP_PAD_DEADZONE", "RECOMP_KEYMAP", "RECOMP_HORPLUS", "RECOMP_CONTENT"
 };
 static int s_speed_from_launch[sizeof s_speed_keys / sizeof s_speed_keys[0]];
 
@@ -389,6 +405,8 @@ void display_host_init(void)
         opts.fullscreen = DISPLAY_BORDERLESS;
     }
     nv2a_host_opts_set(&opts);
+    content_mode_set(c.content);   /* S10.15: before the pack, which picks the classic or the new build */
+    fprintf(stderr, "[CONTENT] %s\n", c.content ? "new (our added content on)" : "classic (the original game)");
     display_load_pack();
     debug_text_host_start();
     mem_search_start();
