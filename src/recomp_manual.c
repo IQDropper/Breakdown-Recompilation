@@ -23,6 +23,7 @@
 #include "pc_options_host.h"
 #include "tuning_host.h"     /* tuning_host_pad: the tuning window's controller */
 #include "a11y_input.h"
+#include "load_timer.h"
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
@@ -407,6 +408,7 @@ void sub_00161680(void)
     if (MEM32(g_esp) == 0x0018EA4Eu && speedrun_on())
         speedrun_frame(MEM32(0x29F6E0) == 1);   /* speedrun timer: the pause flag, 0 = playing, 1 = paused */
     if (MEM32(g_esp) == 0x0018EA4Eu) {
+        load_timer_frame();   /* RECOMP_LOAD_LOG: frame times after a load (src/load_timer.c) */
         qol_frame();   /* FPS overlay + F12 screenshot (src/qol_host.c) */
         if (qol_skip_intro_on())
             intro_skip_frame();
@@ -417,7 +419,7 @@ void sub_00161680(void)
      * Real formats are literals in the XBE image. */
     if (fmt < 0x10000u || fmt >= 0x00400000u)
         text = 0;
-    if (s_game_log || text) {
+    if (s_game_log || text || load_timer_on()) {
         ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
@@ -436,6 +438,8 @@ void sub_00161680(void)
             if (n >= sizeof out) n = sizeof out - 1;
         }
         out[n] = 0;
+        if (fmt >= 0x10000u && fmt < 0x00400000u)
+            load_timer_msg(out);   /* RECOMP_LOAD_LOG: the game's own loading messages */
         if (text && MEM32(g_esp) != 0x0018EA4Eu)
             debug_text_put_from(out, MEM32(g_esp));
         if (s_game_log) {
