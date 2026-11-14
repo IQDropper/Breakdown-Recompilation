@@ -128,6 +128,8 @@ An `if` is `<condition> ; BRZC else`. A `switch` is `<value> ; MV_I1_I0 ; CMP_I1
 | Task | How | Example |
 |---|---|---|
 | **Read buttons** | `Pad_Pressed(mask)` #6 (this frame), `Pad_Held(mask)` #5, `Pad_Released(mask)` #7. Bits are the key manager's (0x2A9BA8), remapped from the pad by 0x53BA0 | Attack 1 = bit **0x800**, Attack 2 = bit **0x200** (from `SUB nomal_attack`) |
+| **Button names** | the hero's `SUB Debug` prints a name per key bit: BTN1 0x8, BTN2 0x1, BTN3 0x1000, BTN4 0x4000, BTN5 0x8000, BTN6 0x2000, BTN7 0x10, BTN8 0x40, BTN9 0x80, BTN10 0x20, BTN11 0x400, BTN12 0x100, BTN13 0x2, BTN14 0x800, BTN15 0x200, BTN16 0x4 (BTN13 = guard, BTN14 = Attack 1, BTN15 = Attack 2) | |
+| **Back / Select** | pad Back sets bit 0x20 of the pad word (0x22C80) and 0x53BA0 turns it into key bit **0x1** (BTN2), Start into 0x8 (BTN1) (likely: assumes the default button table at 0x2A8C89). Over all 2,156 scripts the only check of 0x1 (and of 0x8) is in the hero's `SUB Debug`, which only prints "BTN2" (empty in retail). **No script uses Back in play.** | |
 | **Play an animation** | `Motion_SetB(layer, anim)` #588, `Motion_SetIfNew(layer, anim)` #107, `Motion_PlayLayer(layer, anim, a, b)` #85; hands `Motion_SetHands` #147; camera `Camera_SetAnim` #584. Anim = a global id (pack kind 0) or `Data_Get(Motion_X, Char_GetType(), 0)` | Attack1: `Motion_SetB(0, gym_HE_FT_NN_BD_Rstr_NT)` (right straight) |
 | **Timing** | `Motion_GetFrame(layer)` #111, `Motion_FramePassed(layer, f)` #114, `State_Time()` #23, timers | "if frame >= 22 and <= 28" |
 | **Deal damage** | `Attack_Set(a, b, damage, reach, c, partA, partB, from, to)` #703 adds a hit window (up to 8) to char+0x4A10. Damage is written as `N * power / 10` | Attack1: 8 x power/10, frames 22-28 |
@@ -167,8 +169,9 @@ Also run on `bhb_mo_hero` (295k lines of listing), `bhb_ai_g_enemy_sx_02`, `bhb_
 
 ## 8. Open
 
-- Which pad button is which key-manager bit (0x800 = Attack 1, 0x200 = Attack 2 ...): needs the pad path
-  0x22B50 -> 0x29BEB0 -> 0x53BA0 read, or one live look. (P4.6a)
+- Which pad button is which key-manager bit (0x800 = Attack 1, 0x200 = Attack 2 ...): the BTN names are known
+  (above), and Back/Start are traced; the face buttons and triggers go through the button table at 0x2A8C89
+  (0x22C80) whose default values were not read yet. One live look also settles it. (P4.6a)
 - 920 used game commands still have no name (they have signatures in `config/aas2_natives.csv`). (P4.6b)
 - Attack_Set arguments a, b, reach, c, and the part ids (1..22): what each means. (P4.6c)
 - `Life_Stmina` row 0 says 400 life, the game showed 170 for Derrick: find who reads the table. (P4.6d)
