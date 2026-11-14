@@ -32,8 +32,9 @@ static unsigned merged(void)
 static int lock_for_row(int row)
 {
     static const unsigned bits[PC_ROW_LAST_SETTING + 1] = {
-        PC_LOCK_SCALE, PC_LOCK_WINDOW, PC_LOCK_ASPECT, PC_LOCK_FILTER, PC_LOCK_MODE,
-        PC_LOCK_FPS60, PC_LOCK_PIPE, PC_LOCK_VSYNC, PC_LOCK_REPEAT, PC_LOCK_TOGGLE
+        PC_LOCK_SCALE, PC_LOCK_WINDOW, PC_LOCK_ASPECT, PC_LOCK_WIDE, PC_LOCK_FILTER, PC_LOCK_MODE,
+        PC_LOCK_FPS60, PC_LOCK_PIPE, PC_LOCK_VSYNC, PC_LOCK_REPEAT, PC_LOCK_TOGGLE, PC_LOCK_OUTFIT,
+        PC_LOCK_TEXT, PC_LOCK_MOUSE, PC_LOCK_INVERT, PC_LOCK_DEADZONE, PC_LOCK_KEYS
     };
     if (row < 0 || row > PC_ROW_LAST_SETTING)
         return 0;
@@ -114,6 +115,28 @@ static void activate(struct pc_pad_result *r)
         revert_close(r);
         return;
     }
+    if (s_row == PC_ROW_RECOMMENDED) {
+        struct video_settings rec = s_draft;
+        video_settings_recommended(&rec);
+        if (!lock_for_row(PC_ROW_SCALE))
+            s_draft.render_scale = rec.render_scale;
+        if (!lock_for_row(PC_ROW_ASPECT))
+            s_draft.aspect = rec.aspect;
+        if (!lock_for_row(PC_ROW_WIDE))
+            s_draft.horplus = rec.horplus;
+        if (!lock_for_row(PC_ROW_FILTER))
+            s_draft.filter = rec.filter;
+        if (!lock_for_row(PC_ROW_FPS60))
+            s_draft.fps60 = rec.fps60;
+        if (!lock_for_row(PC_ROW_PIPELINE))
+            s_draft.pipeline = rec.pipeline;
+        if (!lock_for_row(PC_ROW_VSYNC))
+            s_draft.vsync = rec.vsync;
+        video_settings_clamp(&s_draft);
+        set_status("Recommended preview. Apply writes it. Wide view and Don't wait apply on the next start.");
+        r->action = PC_ACT_PREVIEW;
+        return;
+    }
     if (s_row != PC_ROW_RESET)
         return;
     video_settings_stock(&stock);
@@ -123,6 +146,8 @@ static void activate(struct pc_pad_result *r)
         s_draft.window_scale = stock.window_scale;
     if (!lock_for_row(PC_ROW_ASPECT))
         s_draft.aspect = stock.aspect;
+    if (!lock_for_row(PC_ROW_WIDE))
+        s_draft.horplus = stock.horplus;
     if (!lock_for_row(PC_ROW_FILTER))
         s_draft.filter = stock.filter;
     if (!lock_for_row(PC_ROW_MODE))
@@ -371,6 +396,7 @@ const char *pc_options_row_title(int row)
         "Internal resolution",
         "Window size",
         "Aspect",
+        "Wide view",
         "Present filter",
         "Window mode",
         "60 FPS gameplay",
@@ -385,6 +411,7 @@ const char *pc_options_row_title(int row)
         "Stick dead zone",
         "Keys",
         "Apply",
+        "Recommended",
         "Reset",
         "Revert",
     };

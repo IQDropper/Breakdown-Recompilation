@@ -152,6 +152,14 @@ static void test_roundtrip(void)
            && c.window_w == 3360 && c.window_h == 1440);
     snprintf(aspect, sizeof aspect, "%s", video_settings_aspect_name(loaded.aspect));
     expect("aspect name", strcmp(aspect, "21:9") == 0);
+    expect("hor+ off by default", loaded.horplus == 0 && c.horplus == 0
+           && strcmp(video_config_getenv("RECOMP_HORPLUS"), "off") == 0);
+    s.horplus = 1;
+    expect("save hor+", video_config_save(path, &s) == 0 && video_config_load(path) == 1);
+    expect("stored hor+ is the aspect", strcmp(video_config_getenv("RECOMP_HORPLUS"), "21:9") == 0);
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &loaded);
+    expect("roundtrip hor+", loaded.horplus == 1 && c.horplus == 1);
     remove(path);
 }
 
@@ -322,13 +330,42 @@ static void test_menu_model(void)
     expect("scale detail", strstr(video_row_detail(&s, VIDEO_ROW_SCALE), "next frame") != NULL);
     expect("window detail", strstr(video_row_detail(&s, VIDEO_ROW_WINDOW), "Resizes the window now") != NULL);
     expect("aspect detail",
-           strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "Letterbox") != NULL
-           && strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "Hor+") != NULL
-           && strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "not available") != NULL);
+           strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "Wide view") != NULL
+           && strstr(video_row_detail(&s, VIDEO_ROW_ASPECT), "not available") == NULL);
     expect("mode detail",
            strstr(video_row_detail(&s, VIDEO_ROW_MODE), "exclusive") != NULL
-           && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "letterboxed") != NULL
-           && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "Hor+") != NULL);
+           && strstr(video_row_detail(&s, VIDEO_ROW_MODE), "Wide view") != NULL);
+    /* S10.3: Wide view (Hor+) row and the Recommended preset */
+    expect("wide title", strcmp(video_row_title(VIDEO_ROW_WIDE), "Wide view") == 0);
+    expect("wide stock is bars",
+           s.horplus == 0 && strcmp(video_settings_value(&s, VIDEO_ROW_WIDE, buf, sizeof buf), "Bars") == 0
+           && strcmp(video_settings_horplus_token(&s), "off") == 0);
+    {
+        struct video_settings w = s;
+        expect("wide nudge on", video_settings_nudge(&w, VIDEO_ROW_WIDE, 1) && w.horplus == 1);
+        expect("wide at 4:3 says it needs a wide aspect",
+               strstr(video_settings_value(&w, VIDEO_ROW_WIDE, buf, sizeof buf), "needs") != NULL
+               && strcmp(video_settings_horplus_token(&w), "off") == 0);
+        w.aspect = 1;
+        expect("wide at 16:9 stores the aspect",
+               strcmp(video_settings_value(&w, VIDEO_ROW_WIDE, buf, sizeof buf), "Hor+") == 0
+               && strcmp(video_settings_horplus_token(&w), "16:9") == 0);
+        expect("wide detail says next start", strstr(video_row_detail(&w, VIDEO_ROW_WIDE), "next time") != NULL);
+        expect("wide row needs no restyle", video_row_needs_window(VIDEO_ROW_WIDE) == 0);
+    }
+    {
+        struct video_settings r = s;
+        r.window_scale = 3;
+        r.borderless = 1;
+        r.mouse_speed = 4;
+        r.a11y_repeat = A11Y_REPEAT_A;
+        video_settings_recommended(&r);
+        expect("recommended picture",
+               r.render_scale == 4 && r.aspect == 1 && r.horplus == 1 && r.filter == 1
+               && r.fps60 == 1 && r.pipeline == 1 && r.vsync == 1);
+        expect("recommended keeps window, controls and accessibility",
+               r.window_scale == 3 && r.borderless == 1 && r.mouse_speed == 4 && r.a11y_repeat == A11Y_REPEAT_A);
+    }
     expect("needs window",
            video_row_needs_window(VIDEO_ROW_SCALE) == 0
            && video_row_needs_window(VIDEO_ROW_FILTER) == 0

@@ -42,11 +42,13 @@ extern "C" {
 #define PC_LOCK_INVERT 0x2000u
 #define PC_LOCK_DEADZONE 0x4000u
 #define PC_LOCK_KEYS   0x8000u
+#define PC_LOCK_WIDE   0x10000u
 
 enum {
     PC_ROW_SCALE = 0,
     PC_ROW_WINDOW,
     PC_ROW_ASPECT,
+    PC_ROW_WIDE,     /* S10.3 Hor+ (next launch) */
     PC_ROW_FILTER,
     PC_ROW_MODE,
     PC_ROW_FPS60,
@@ -61,6 +63,7 @@ enum {
     PC_ROW_DEADZONE,
     PC_ROW_KEYS,     /* Enter opens the key list (pc_options_host.c) */
     PC_ROW_APPLY,
+    PC_ROW_RECOMMENDED,  /* S10.3 finalized preset */
     PC_ROW_RESET,
     PC_ROW_REVERT,
     PC_ROW_COUNT,

@@ -22,6 +22,7 @@ struct video_settings {
     unsigned render_scale; /* 1..4, RECOMP_RENDER_SCALE */
     unsigned window_scale; /* 1..6, RECOMP_WINDOW_SCALE */
     int aspect;            /* 0 4:3, 1 16:9, 2 16:10, 3 21:9 */
+    int horplus;           /* 0/1, RECOMP_HORPLUS: wider view at a wide aspect instead of bars (next launch) */
     int filter;            /* 0 nearest, 1 linear, 2 integer */
     int borderless;        /* 0 windowed, 1 borderless, 2 exclusive */
     int fps60;             /* 0/1, RECOMP_FPS60: gameplay at 60 FPS (applies at once) */
@@ -41,6 +42,7 @@ enum {
     VIDEO_ROW_SCALE = 0,
     VIDEO_ROW_WINDOW,
     VIDEO_ROW_ASPECT,
+    VIDEO_ROW_WIDE,
     VIDEO_ROW_FILTER,
     VIDEO_ROW_MODE,
     VIDEO_ROW_FPS60,
@@ -84,6 +86,12 @@ int video_config_beside_exe(char *out, size_t out_n);
 #endif
 
 void video_settings_stock(struct video_settings *s);
+/* The finalized "Recommended" preset (Foster, 2026-11-13; docs/SETTINGS_LAB.md): internal 4x, linear, 16:9 with
+ * Hor+, 60 FPS, don't wait for the renderer, VSync. Picture and speed rows only: window size and mode, controls,
+ * accessibility and outfit stay as they are. */
+void video_settings_recommended(struct video_settings *s);
+/* What breakdown_video.cfg stores for RECOMP_HORPLUS: the aspect ("16:9") when Hor+ is on at a wide aspect, else "off". */
+const char *video_settings_horplus_token(const struct video_settings *s);
 void video_settings_clamp(struct video_settings *s);
 void video_settings_from_choice(const struct display_choice *c, struct video_settings *s);
 
