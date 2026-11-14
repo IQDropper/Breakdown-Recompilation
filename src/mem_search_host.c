@@ -15,6 +15,8 @@
  *   save ADDR BYTES FILE raw guest memory into FILE (no spaces in the path)
  *   findstr TEXT        where TEXT sits in RAM (8-bit or UTF-16), with the bytes around it
  *   note TEXT           echo TEXT into the log (marks a step)
+ *   spawn TASK|#N [DIST] copy the character made by character task TASK (or level-file event N), DIST (60)
+ *                       units from the hero
  * Addresses are guest (Xbox) addresses in hex; *ADDR[+OFS] follows the pointer stored at
  * ADDR; A>B>C follows a chain (2A92D0>48>10 = [[2A92D0]+48]+10). Reads race the game thread; that is fine for searching.
  */
@@ -179,6 +181,19 @@ static void dump(uint32_t va, int n)
 }
 
 static struct { char name[24]; volatile uint32_t va; } s_names[16];
+static volatile uint32_t s_spawn_task;
+static volatile float s_spawn_dist;
+
+int mem_search_take_spawn(uint32_t *task, float *dist)
+{
+    uint32_t t = s_spawn_task;
+    if (!t)
+        return 0;
+    *dist = s_spawn_dist;
+    s_spawn_task = 0;
+    *task = t;
+    return 1;
+}
 
 void mem_search_name(const char *name, uint32_t va)
 {
@@ -337,6 +352,11 @@ static void run(char *line)
         }
         *gp(va) = v;
         out("poked %08X = %08X", va, v);
+    } else if (!strncmp(line, "spawn ", 6)) {
+        uint32_t va = a[0] == '#' ? (uint32_t)atoi(a + 1) : addr_of(a);
+        s_spawn_dist = b[0] ? (float)atof(b) : 60.0f;
+        s_spawn_task = va;
+        out("spawn queued: copy of task %08X, %.0f in front of the hero", va, s_spawn_dist);
     } else if (strncmp(line, "note", 4))
         out("unknown command");
 }

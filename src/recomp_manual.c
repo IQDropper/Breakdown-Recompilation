@@ -1220,6 +1220,100 @@ static void damage_log(uint32_t hero, uint32_t hero_st)
         seen[id] = 1;
     }
 }
+/* S10.12 spawn (dev): RECOMP_MEMSEARCH command "spawn TASK [DIST]". TASK is a character task made by the level
+ * files' CHAR_CREATE handler 0x413C0 (it sets +0x1C = 0x210DA8). That handler is called as
+ * 0x413C0(parent, event file, event index, event id low 12 bits, level) and keeps file/index at +0x1AC/+0x1B0,
+ * (level << 12) + id at +0x38 and level at +0x3E (0x2B080); the parent is at +0x10. Calling it again with the
+ * same arguments makes a second character from the same level-file entry (model, behaviour script, weapon). The
+ * copy is then moved DIST units from the hero along x once it has a status block. */
+extern void sub_000413C0(void);
+/* Character tasks are 0x200-aligned in the game's task heap (seen 0x1978800..0x19C6000, 2026-11-13). */
+#define SPAWN_LO 0x01900000u
+#define SPAWN_HI 0x01B00000u
+static uint32_t s_spawned;          /* the new task, until it has been moved */
+static int s_spawn_tries;
+static float s_spawn_to[3];
+static void spawn_service(uint32_t hero, uint32_t hero_st)
+{
+    uint32_t t, parent, file, idx, lvl, low, save, eax, ecx, edx, before[8], n = 0, slot;
+    float dist;
+    if (s_spawned) {
+        /* status slot 0 is the hero's: a character without its own slot yet reads as id 0, so wait for id > 0 */
+        uint32_t st = (int16_t)MEM16(s_spawned + 0x142) > 0 ? hero_status(s_spawned) : 0;
+        if (st && st != hero_status(hero)) {
+            MEMF(st + 0x00) = s_spawn_to[0];
+            MEMF(st + 0x04) = s_spawn_to[1];
+            MEMF(st + 0x08) = s_spawn_to[2];
+            fprintf(stderr, "[SPAWN] moved task %08X (status %08X) to %.1f %.1f %.1f, life %.0f/%.0f\n",
+                    (unsigned)s_spawned, (unsigned)st, s_spawn_to[0], s_spawn_to[1], s_spawn_to[2],
+                    MEMF(st + 0x5AB0), MEMF(st + 0x5AB4));
+            s_spawned = 0;
+        } else if (++s_spawn_tries > 600) {
+            fprintf(stderr, "[SPAWN] task %08X never got a status block\n", (unsigned)s_spawned);
+            s_spawned = 0;
+        }
+    }
+    if (!mem_search_take_spawn(&t, &dist))
+        return;
+    if (!hero_st)
+        hero_st = hero_status(hero);
+    if (t < 0x1000u) {   /* "#N": the character task made from level-file event N (tools/evd_dump.py numbering) */
+        uint32_t want = t;
+        t = 0;
+        for (slot = SPAWN_LO; slot < SPAWN_HI && !t; slot += 0x200u)
+            if (MEM32(slot + 0x1C) == 0x210DA8u && (MEM32(slot + 0x38) & 0xFFFu) == want)
+                t = slot;
+        if (!t) {
+            fprintf(stderr, "[SPAWN] no character task for event %u in this area\n", (unsigned)want);
+            return;
+        }
+    }
+    if (!t || MEM32(t + 0x1C) != 0x210DA8u) {
+        fprintf(stderr, "[SPAWN] %08X is not a character task (+0x1C = %08X)\n", (unsigned)t,
+                t ? (unsigned)MEM32(t + 0x1C) : 0u);
+        return;
+    }
+    parent = MEM32(t + 0x10);
+    file = MEM32(t + 0x1AC);
+    idx = MEM32(t + 0x1B0);
+    lvl = MEM16(t + 0x3E);
+    low = MEM32(t + 0x38) - (lvl << 12);
+    /* remember which slots already hold character tasks, to find the new one */
+    for (slot = SPAWN_LO; slot < SPAWN_HI && n < 8; slot += 0x200u)
+        if (MEM32(slot + 0x1C) == 0x210DA8u && MEM32(slot + 0x1AC) == file && MEM32(slot + 0x1B0) == idx)
+            before[n++] = slot;
+    save = g_esp; eax = g_eax; ecx = g_ecx; edx = g_edx;
+    g_esp -= 4; MEM32(g_esp) = lvl;
+    g_esp -= 4; MEM32(g_esp) = low;
+    g_esp -= 4; MEM32(g_esp) = idx;
+    g_esp -= 4; MEM32(g_esp) = file;
+    g_esp -= 4; MEM32(g_esp) = parent;
+    g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+    sub_000413C0();
+    fprintf(stderr, "[SPAWN] 0x413C0(parent %08X, file %08X, index %u, id %u, level %u) -> eax %08X\n",
+            (unsigned)parent, (unsigned)file, (unsigned)idx, (unsigned)low, (unsigned)lvl, (unsigned)g_eax);
+    g_esp = save; g_eax = eax; g_ecx = ecx; g_edx = edx;
+    for (slot = SPAWN_LO; slot < SPAWN_HI; slot += 0x200u) {
+        uint32_t k, old = 0;
+        if (MEM32(slot + 0x1C) != 0x210DA8u || MEM32(slot + 0x1AC) != file || MEM32(slot + 0x1B0) != idx)
+            continue;
+        for (k = 0; k < n; k++)
+            old |= before[k] == slot;
+        if (!old) {
+            s_spawned = slot;
+            break;
+        }
+    }
+    if (!s_spawned) {
+        fprintf(stderr, "[SPAWN] no new character task found\n");
+        return;
+    }
+    s_spawn_tries = 0;
+    s_spawn_to[0] = hero_st ? MEMF(hero_st + 0x00) + dist : 0.0f;
+    s_spawn_to[1] = hero_st ? MEMF(hero_st + 0x04) : 0.0f;
+    s_spawn_to[2] = hero_st ? MEMF(hero_st + 0x08) : 0.0f;
+    fprintf(stderr, "[SPAWN] new character task %08X\n", (unsigned)s_spawned);
+}
 static uint32_t s_hero_life_block;   /* status + 0x5AAC of the hero, refreshed by every hero update */
 static void hero_fill_life(uint32_t st)
 {
@@ -1260,6 +1354,7 @@ void sub_0003E710(void)
             mem_search_name("herostatus", st);
         pos_log(hero, st);
         damage_log(hero, st);
+        spawn_service(hero, st);
         if (st && (move_k > 1e-3f || move_k < -1e-3f)) {
             /* The hero's position is status +0x00 (x) / +0x08 (z). Stretch the step taken since the last
              * update; remember the stretched position so the next step is measured from it. */
