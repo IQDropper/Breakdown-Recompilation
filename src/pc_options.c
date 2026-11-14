@@ -204,6 +204,10 @@ static void repeat_axis(int *hold, int dir, int vertical, struct pc_pad_result *
     }
 }
 
+/* P1.3: polls Back may stay down and still count as a tap (about 0.7 s at 60 polls a second). */
+#define PC_BACK_TAP_POLLS 40
+static int s_back_solo, s_back_polls;
+
 static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int advance)
 {
     struct pc_pad_result r;
@@ -218,11 +222,25 @@ static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int a
     prev = s_prev;
     rose = now & ~prev;
 
-    if (!s_open && ((rose & PC_PAD_START) && (now & PC_PAD_BACK)))
-        open_page(&r);
-    else if (!s_open && ((rose & PC_PAD_BACK) && (now & PC_PAD_START)))
-        open_page(&r);
-    else if (s_open) {
+    /* P1.3 (Foster 2026-11-14): a short press of Back on its own opens the page, on release. Back + Start is the
+     * original game's own combo (held ~1.8 s: the developers' debug menu) and reaches the game untouched; Back held
+     * long, or with any other button, does nothing here. Back itself still reaches the game while it is held. */
+    if (!s_open) {
+        if (rose & PC_PAD_BACK) {
+            s_back_solo = (now & ~PC_PAD_BACK) == 0;
+            s_back_polls = 0;
+        } else if (now & PC_PAD_BACK) {
+            if (now & ~PC_PAD_BACK)
+                s_back_solo = 0;
+            if (advance)
+                s_back_polls++;
+        }
+        if ((prev & PC_PAD_BACK) && !(now & PC_PAD_BACK)) {
+            if (s_back_solo && s_back_polls <= PC_BACK_TAP_POLLS && !(now & ~PC_PAD_BACK))
+                open_page(&r);
+            s_back_solo = 0;
+        }
+    } else {
         up_edge = (rose & PC_PAD_DPAD_UP) && !(rose & PC_PAD_DPAD_DOWN);
         down_edge = (rose & PC_PAD_DPAD_DOWN) && !(rose & PC_PAD_DPAD_UP);
         left_edge = (rose & PC_PAD_DPAD_LEFT) && !(rose & PC_PAD_DPAD_RIGHT);
@@ -273,6 +291,8 @@ static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int a
 
 void pc_options_reset(void)
 {
+    s_back_solo = 0;
+    s_back_polls = 0;
     memset(s_port, 0, sizeof s_port);
     s_ui = 0;
     s_prev = 0;
