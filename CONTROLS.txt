@@ -88,3 +88,7 @@ CHANGE THE MOUSE (edit run_native.cmd, the "set RECOMP_MOUSE..." lines)
   RECOMP_MOUSE=0 ............ turn the mouse off
 
 If mouse does nothing after a toolkit reinstall, run APPLY_INPUT_PATCHES.cmd then rebuild.
+
+Developer menus (RECOMP_DEBUG_MENU=1)
+  F8 or Back + right-stick click (Backspace + Ctrl) .. developers' F026 menu at boot; in a map-viewer area: back to the map list
+  F9 or Back + Start held (the original combo) ........ Product debug menu
