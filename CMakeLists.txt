@@ -70,6 +70,7 @@ set(GAME_SOURCES
     src/qol.c
     src/qol_host.c
     src/mem_search_host.c
+    src/map_list_host.c
     src/tuning.c
     src/tuning_host.c
     src/tuning_pad.c

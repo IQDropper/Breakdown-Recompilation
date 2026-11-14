@@ -23,6 +23,7 @@
 #include "pc_options_host.h"
 #include "tuning_host.h"     /* tuning_host_pad: the tuning window's controller */
 #include "a11y_input.h"
+#include "map_list_host.h"
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
@@ -1014,6 +1015,7 @@ void sub_0001B9F0(void)
         for (i = 5; i <= 8; i++)
             MEM32(0x2418B0 + i * 8) = 0;                      /* SYSTEM LOAD / SAVE / LOAD TEST, SAVEDATA VIEWER */
         MEM32(0x2418B0 + 13 * 8) = 0x161680u;                 /* end after TGS - C */
+        map_list_install();                                   /* MAP VIEWER list (map_list_host.c) */
     }
     MEM32(task + 0x20) = s_dbgmenu_dev ? 0x1B640u : 0x1B900u;
     MEM32(task + 0x34) = 0;
