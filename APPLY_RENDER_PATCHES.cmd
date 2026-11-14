@@ -82,6 +82,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo --- patch_guest_bounds.py ---
+%PY% patch_guest_bounds.py
+if errorlevel 1 (
+  echo [error] patch_guest_bounds.py failed
+  exit /b 1
+)
+echo [ok] Renderer skips unmapped guest addresses instead of crashing ([guest-bounds]).
 echo --- patch_mono_audio.py ---
 %PY% patch_mono_audio.py
 if errorlevel 1 (

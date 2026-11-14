@@ -1035,7 +1035,7 @@ static void attach_game(HWND hwnd)
     s_game = hwnd;
     prev = SetWindowLongPtrA(hwnd, GWLP_WNDPROC, proc_to_long(game_proc));
     s_old = proc_from_long(prev);
-    fprintf(stderr, "[PC] Back+Start opens the host overlay over the 4:3 picture. F10 toggles it.\n");
+    fprintf(stderr, "[PC] Back (a short press) opens the host overlay over the 4:3 picture. F10 toggles it.\n");
 }
 
 /* A11Y-6 first launch: open this page once, with a welcome line that points at the accessibility rows, a few
@@ -1114,7 +1114,7 @@ void pc_options_host_start(void)
     fprintf(stderr,
             "[PC] owned borderless host overlay over the 4:3 picture "
             "(not drawn into the frame, not the Xbox Options screen) "
-            "when the D3D11 window (%s) exists. Back+Start opens it. F10 toggles it.\n",
+            "when the D3D11 window (%s) exists. Back (a short press) opens it. F10 toggles it.\n",
             GAME_CLASS);
     thread = CreateThread(NULL, 0, wait_for_game, NULL, 0, NULL);
     if (thread)
