@@ -389,6 +389,38 @@ static void intro_skip_frame(void)
     }
 }
 
+/* A11Y-6b: the PC options row "Subtitles" (RECOMP_SUBTITLES) drives the game's own Caption option: bit 4 of the
+ * flags word at +8 of the game's options block [[0x29F6D8]+0x58] (read by the developers' option-test page through
+ * 0x1FDC0, between Contrast 0x1FF80 and Sound output 0x20000). 0 = the game's choice, never touched; 1 on / 2 off
+ * are held every frame, so a later options load from the save cannot undo them. */
+static volatile int s_subs = 0;
+void breakdown_subtitles_set(int subs)
+{
+    s_subs = subs == 1 || subs == 2 ? subs : 0;
+}
+static void subtitles_frame(void)
+{
+    static int s_logged = -1;
+    uint32_t o, p, f, want;
+    if (!s_subs)
+        return;
+    o = MEM32(0x29F6D8u);
+    if (!o || o >= 0x04000000u)
+        return;
+    p = MEM32(o + 0x58u);
+    if (!p || p >= 0x04000000u)
+        return;
+    f = MEM32(p + 8u);
+    want = s_subs == 1 ? (f | 0x10u) : (f & ~0x10u);
+    if (want != f)
+        MEM32(p + 8u) = want;
+    if (s_logged != s_subs) {
+        s_logged = s_subs;
+        fprintf(stderr, "[A11Y] subtitles %s (the game's Caption option)\n", s_subs == 1 ? "on" : "off");
+        fflush(stderr);
+    }
+}
+
 void sub_00161680(void)
 {
     char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k, text;
@@ -407,6 +439,7 @@ void sub_00161680(void)
     if (MEM32(g_esp) == 0x0018EA4Eu && speedrun_on())
         speedrun_frame(MEM32(0x29F6E0) == 1);   /* speedrun timer: the pause flag, 0 = playing, 1 = paused */
     if (MEM32(g_esp) == 0x0018EA4Eu) {
+        subtitles_frame();    /* A11Y-6b: the game's Caption option from the PC options row */
         qol_frame();   /* FPS overlay + F12 screenshot (src/qol_host.c) */
         if (qol_skip_intro_on())
             intro_skip_frame();

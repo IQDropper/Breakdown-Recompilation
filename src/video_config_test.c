@@ -202,6 +202,18 @@ static void test_roundtrip(void)
         expect("mono title and detail", strcmp(video_row_title(VIDEO_ROW_MONO), "Mono audio") == 0
                && strstr(video_row_detail(&r, VIDEO_ROW_MONO), "both ears") != NULL);
     }
+    expect("subtitles: game's choice by default", loaded.subs == 0
+           && strcmp(video_config_getenv("RECOMP_SUBTITLES"), "game") == 0);
+    s.subs = 1;
+    expect("save subtitles on", video_config_save(path, &s) == 0 && video_config_load(path) == 1
+           && strcmp(video_config_getenv("RECOMP_SUBTITLES"), "on") == 0);
+    display_host_choose(display_getenv_layered, &c);
+    video_settings_from_choice(&c, &loaded);
+    expect("roundtrip subtitles on", loaded.subs == 1 && c.subs == 1);
+    s.subs = 2;
+    expect("save subtitles off", video_config_save(path, &s) == 0 && video_config_load(path) == 1
+           && strcmp(video_config_getenv("RECOMP_SUBTITLES"), "off") == 0);
+    expect("subtitles title", strcmp(video_row_title(VIDEO_ROW_SUBS), "Subtitles") == 0);
     remove(path);
 }
 
