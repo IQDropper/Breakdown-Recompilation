@@ -1,25 +1,28 @@
 """save_checkpoint.py - list Breakdown's checkpoints and write a copy of a save that starts at any of them.
 
-The game's checkpoint table (192 entries, story order) is read from default.xbe at 0x270988: 16 bytes each,
+The game's checkpoint table (192 entries) is read from default.xbe at 0x270988: 16 bytes each,
 (name pointer, place id, place id + 261, chapter). Names are area starts ("hon_under", "bettou", ...) or
-checkpoints ("save_cp02a_02" ...). Checkpoint i belongs to the last area name above it.
+checkpoints ("save_cp02a_02" ...). Checkpoint i belongs to the last area name above it. The checkpoint numbers are
+NOT story order inside an area (cp02a_05 comes before cp02a_02); the chapter column is.
 
-A save (UDATA/4e4d0009/<slot>/data.sav, 0x1FC50 bytes) holds the area path at 0x90 ("area/hon_under") and the
-checkpoint name at 0x120. Its signature (0x1FC30, 20 bytes) is HMAC-SHA1 over bytes 0..0x1FC30 with the
-recomp's console key (16 zero bytes, external/xboxrecomp kernel_bridge.c XboxSignatureKey).
-
-Also set: the table index (0x08, must match the name or the slot shows DAMAGED GAME), the area check value
-(0x140 = romdata/area/vsn[area id]), the section (0xB8) and the story-scene pack (0xE0, --block).
-Story flags, weapons and powers in the save stay as they were, so a jump far ahead can start with missing items.
-
-Status 2026-11-13: an edited save passes the game's checks and the jump to 'bettou' shows NOW LOADING and loads
-bettou_A, then stays on a black screen (no player). The missing piece is probably the story-scene pack or story
-flags for that checkpoint. Not usable for test slots yet.
+A save (UDATA/4e4d0009/<slot>/data.sav, 0x1FC50 bytes) is laid out in docs/formats/save_story.md. This tool sets:
+  0x08 table index (must match the name or the slot shows DAMAGED GAME), 0x90 area, 0xB8 section, 0xE0 story-scene
+  pack, 0x120 checkpoint name, 0x140 area check value (romdata/area/vsn[area id]);
+  0x59C4 the 1000 story numbers (all 0, as in every real save seen so far) and 0x6964 the 2048 story flags, from
+  tools/checkpoint_progress.json (made by tools/story_flags.py from the game's scripts);
+  0x0C / 0x0E event-state list counts = 0 and the saved-object counts 0x6A98 / 0x6AA8 / 0x6AB8 = 0, so the level
+  starts from its own defaults instead of another area's event states;
+  Derrick's position (saved-object block + 0xC, 0x94E0 in real saves) = the checkpoint's trigger box, on the floor.
+Weapons and powers stay as they were in the input save. Signature (0x1FC30, 20 bytes) = HMAC-SHA1 over 0..0x1FC30
+with the recomp's console key (16 zero bytes, external/xboxrecomp kernel_bridge.c XboxSignatureKey).
 
 Usage:
   python tools/save_checkpoint.py --list                         every checkpoint with its area and chapter
+  python tools/save_checkpoint.py --progress                     what will be written for each checkpoint
   python tools/save_checkpoint.py IN.sav OUT.sav save_cp02b_02   copy IN to OUT at that checkpoint (re-signed)
-  python tools/save_checkpoint.py --check FILE.sav               show area/checkpoint and whether the signature is good
+      --block PACK      story-scene pack instead of the derived one     --keep-flags  leave flags/numbers as in IN
+      --keep-events     leave IN's event-state and saved-object lists   --keep-pos    leave Derrick where IN had him
+  python tools/save_checkpoint.py --check FILE.sav               area/checkpoint, flags on, signature ok
 Never point OUT at your real save folder; test with RECOMP_SAVE_DIR=<copy>.
 """
 import hashlib
@@ -28,7 +31,21 @@ import os
 import struct
 import sys
 
-XBE = os.path.join(os.path.dirname(__file__), '..', 'game_files', 'default.xbe')
+def _game_files():
+    """game_files/ next to the repo; a git worktree under .claude/worktrees/ looks in the main checkout."""
+    if os.environ.get('BREAKDOWN_GAME_FILES'):
+        return os.environ['BREAKDOWN_GAME_FILES']
+    d = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    while True:
+        if os.path.exists(os.path.join(d, 'game_files', 'default.xbe')):
+            return os.path.join(d, 'game_files')
+        up = os.path.dirname(d)
+        if up == d:
+            return os.path.join(os.path.dirname(__file__), '..', 'game_files')
+        d = up
+
+
+XBE = os.path.join(_game_files(), 'default.xbe')
 TABLE_VA = 0x270988
 SIG_AT, SAVE_SIZE = 0x1FC30, 0x1FC50
 INDEX_AT = 0x08                      # u32 table index of the checkpoint (must match the name)
@@ -38,6 +55,13 @@ SIZES = {AREA_AT: 0x28, SECTION_AT: 0x28, BLOCK_AT: 0x40, CP_AT: 0x20}   # text 
 VSN_AT = 0x140                       # u32 area check value = romdata/area/vsn[area id]
 AREAS_VA = 0x2439D8                  # area table: 36-byte rows, name[16] inline, u32 id at +0x10
 KEY = b'\0' * 16
+VARS_AT, NVARS = 0x59C4, 1000        # story numbers (Global_Get/Set, script commands 760/759)
+FLAGS_AT, FLAG_BYTES = 0x6964, 0x100  # story flags, bit i&7 of byte i>>3 (Global_IsOn / flag set, commands 770/769)
+SAVE_FLAG = 2007                     # written by the save code itself (0x12AB80 != 0); kept from the input save
+EVENTS_N_AT = 0x0C                   # u16 x2: 12-byte event-state records at 0x144, 0x84-byte records at 0x4944
+OBJ_COUNTS = (0x6A98, 0x6AA8, 0x6AB8)  # saved objects put back by event id on load (0x28930 / 0x28A00 / 0x28A90)
+BLOB_AT, HERO_OFF_AT = 0x7C30, 0x6A70  # saved-object data; u32 at 0x6A70 = offset of Derrick's block in it
+PROGRESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'checkpoint_progress.json')
 
 
 def _xbe():
@@ -116,22 +140,50 @@ def section_of(area, name):
     return 'area/' + area
 
 
-def set_checkpoint(buf, name, block=''):
+def progress():
+    import json
+    with open(PROGRESS) as f:
+        return json.load(f)['checkpoints']
+
+
+def flags_of(buf):
+    return [i for i in range(FLAG_BYTES * 8) if buf[FLAGS_AT + (i >> 3)] >> (i & 7) & 1]
+
+
+def set_checkpoint(buf, name, block='', keep_flags=False, keep_events=False, keep_pos=False):
     rows = checkpoints()
     idx = next((i for i, r in enumerate(rows) if r[0] == name), None)
     if idx is None:
         raise SystemExit('unknown checkpoint %s (see --list)' % name)
     area = rows[idx][1]
+    p = progress().get(name, {})
     struct.pack_into('<I', buf, INDEX_AT, idx)
     struct.pack_into('<I', buf, VSN_AT, vsn_value(area))
-    for at, val in ((AREA_AT, 'area/' + area), (SECTION_AT, section_of(area, name)), (BLOCK_AT, block),
-                    (CP_AT, name)):
+    section = p.get('section') or section_of(area, name)
+    block = block or p.get('block', '')
+    for at, val in ((AREA_AT, 'area/' + area), (SECTION_AT, section), (BLOCK_AT, block), (CP_AT, name)):
         b, size = val.encode(), SIZES[at]
         if len(b) >= size:
             raise SystemExit('%r is too long for its %d-byte field' % (val, size))
         buf[at:at + size] = b + b'\0' * (size - len(b))
+    if not keep_flags and 'flags' in p:
+        keep = SAVE_FLAG in flags_of(buf)
+        buf[VARS_AT:VARS_AT + 4 * NVARS] = bytes(4 * NVARS)
+        buf[FLAGS_AT:FLAGS_AT + FLAG_BYTES] = bytes(FLAG_BYTES)
+        for i in p['flags'] + ([SAVE_FLAG] if keep else []):
+            buf[FLAGS_AT + (i >> 3)] |= 1 << (i & 7)
+    if not keep_events:
+        struct.pack_into('<hh', buf, EVENTS_N_AT, 0, 0)
+        for at in OBJ_COUNTS:
+            struct.pack_into('<I', buf, at, 0)
+    if not keep_pos and 'position' in p:
+        hero = BLOB_AT + struct.unpack_from('<I', buf, HERO_OFF_AT)[0]
+        if hero + 0x24 <= SIG_AT:
+            struct.pack_into('<3f', buf, hero + 0xC, *p['position'])     # Derrick (0x94E0 in real saves)
+            struct.pack_into('<3f', buf, hero + 0x18, *p['position'])    # Alex (0x94EC), next to him
     assert len(buf) == SAVE_SIZE
     sign(buf)
+    return p
 
 
 def main():
@@ -143,8 +195,18 @@ def main():
         for i, (n, ar, p, c) in enumerate(checkpoints()):
             print('%3d  chapter %2d  %-10s %s' % (i, c, ar, n))
         return 0
+    if a[0] == '--progress':
+        for n, e in progress().items():
+            print('%3d %-9s %-16s ch%-2d %-6s %-16s %-42s %-18s flags=%d' % (
+                e['index'], e['area'], n, e['chapter'], e['method'], e.get('scene', '-'), e.get('block', '-'),
+                e.get('section', '-'), len(e['flags'])))
+        return 0
     if a[0] == '--check':
-        print('area=%s checkpoint=%s signature_ok=%s' % check(bytearray(open(a[1], 'rb').read())))
+        buf = bytearray(open(a[1], 'rb').read())
+        print('area=%s checkpoint=%s signature_ok=%s' % check(buf))
+        print('scene pack=%s section=%s flags on=%s' % (
+            bytes(buf[BLOCK_AT:BLOCK_AT + 0x40]).split(b'\0')[0].decode('latin-1'),
+            bytes(buf[SECTION_AT:SECTION_AT + 0x28]).split(b'\0')[0].decode('latin-1'), flags_of(buf)))
         return 0
     src, dst, name = a[:3]
     buf = bytearray(open(src, 'rb').read())
@@ -152,9 +214,14 @@ def main():
         raise SystemExit('%s: %d bytes, expected %d' % (src, len(buf), SAVE_SIZE))
     if os.path.abspath(dst) == os.path.abspath(src):
         raise SystemExit('refusing to overwrite the input save')
-    set_checkpoint(buf, name, a[a.index('--block') + 1] if '--block' in a else '')
+    p = set_checkpoint(buf, name, a[a.index('--block') + 1] if '--block' in a else '', '--keep-flags' in a,
+                       '--keep-events' in a, '--keep-pos' in a)
     open(dst, 'wb').write(buf)
     print('wrote %s: area=%s checkpoint=%s signature_ok=%s' % ((dst,) + check(buf)))
+    print('  scene=%s pack=%s flags=%d (%s)' % (p.get('scene', '-'), p.get('block', '-'), len(p.get('flags', [])),
+                                               p.get('method', 'no progress entry')))
+    if 'position' not in p:
+        print('  no trigger box for %s: Derrick stays where the input save had him' % name)
     return 0
 
 
