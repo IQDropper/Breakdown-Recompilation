@@ -319,7 +319,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("twenty-two rows", PC_ROW_COUNT == 22);
+    expect("twenty-three rows", PC_ROW_COUNT == 23);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -508,7 +508,18 @@ static void test_a11y_rows(void)
                                      && PC_ROW_TEXT == VIDEO_ROW_TEXT);
     pulse(PC_PAD_DPAD_LEFT);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("mouse speed follows text size", pc_options_row() == PC_ROW_MOUSE);
+    expect("mono audio follows text size", pc_options_row() == PC_ROW_MONO);
+    pc_options_row_value(PC_ROW_MONO, buf, sizeof buf);
+    expect("mono audio starts off", pc_options_draft()->mono == 0 && strcmp(buf, "Off") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_MONO, buf, sizeof buf);
+    expect("right turns mono on", pc_options_draft()->mono == 1 && strcmp(buf, "On") == 0);
+    expect("mono row is named", strcmp(pc_options_row_title(PC_ROW_MONO), "Mono audio") == 0
+                                && PC_ROW_MONO == VIDEO_ROW_MONO);
+    pulse(PC_PAD_DPAD_LEFT);
+    expect("left turns mono off", pc_options_draft()->mono == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("mouse speed follows mono audio", pc_options_row() == PC_ROW_MOUSE);
     pc_options_row_value(PC_ROW_MOUSE, buf, sizeof buf);
     expect("mouse speed starts at 100%", strcmp(buf, "100%") == 0);
     pulse(PC_PAD_DPAD_RIGHT);
