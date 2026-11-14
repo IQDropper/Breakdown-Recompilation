@@ -148,12 +148,13 @@ Index 0x08, area 0x90, section 0xB8, pack 0xE0, name 0x120, vsn 0x140 (as before
   labo1, labo2, opening and ending, which have none, the area's earliest own scene script); the MI_EVENT list is
   emptied with the event lists.
 
-**Why cross-area jumps stayed black (in-game test of the first version, 2026-11-14):** jumps inside hon_under
-worked, jumps to bettou loaded the area and then never updated Derrick, with or without the new flags and event
-lists. The input save (cp02a_02) was made while Derrick ran the burger-room scene script (id 989), which only
-hon_under's pack carries. In bettou that script does not exist, so he is never rebuilt. A real cp02a_05 save holds
-810 (the chapter script, in both areas' packs); the rebuilt cp02a_05 now matches it byte for byte in that block.
-`--keep-ai` keeps the input's id (for bisecting).
+**Cross-area jumps, in-game results (2026-11-14):** the first version's bettou jump (save_cp02b_02 from a cp02a_02
+save) stayed black with Derrick never updated. A later run of the current version played, both with the chapter
+script written (810) and with `--keep-ai` (the input's 989, the burger-room scene script). The `--keep-ai` file is
+byte-identical to what the first version wrote, so **the earlier black run was not caused by the save's contents**.
+The cause is unknown: something outside data.sav (the slot's other files, the run itself) or a flaky start. Writing
+the chapter script is kept because real saves made at a checkpoint hold it (cp02a_05: 810) and it matches them;
+nothing shows it is needed. If a jump is black again, rerun the same file once before changing the writer.
 
 **Slot folders:** each slot needs its own `SaveMeta.xbx` with `Name=GAME nn` next to `data.sav`, or the load
 menu shows EMPTY. Copy the input slot's folder, replace `data.sav`, set the Name line.

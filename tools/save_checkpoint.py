@@ -13,8 +13,8 @@ A save (UDATA/4e4d0009/<slot>/data.sav, 0x1FC50 bytes) is laid out in docs/forma
   0x0C / 0x0E event-state list counts = 0 and the saved-object counts 0x6A98 / 0x6AA8 / 0x6AB8 = 0, so the level
   starts from its own defaults instead of another area's event states;
   Derrick's position (saved-object block + 0xC, 0x94E0 in real saves) = the checkpoint's trigger box, on the floor;
-  Derrick's AI script id (hero block + 0x2E, u16) = the area's chapter control script. A script that is not in the
-  new area's packs (a save made mid-scene, e.g. 989 burger room) leaves Derrick out after a cross-area jump;
+  Derrick's AI script id (hero block + 0x2E, u16) = the area's chapter control script, as in real checkpoint saves
+  (in game a jump also worked with the input's mid-scene script kept, so this is for matching real saves);
   the 0x1400-byte MI_EVENT list at 0x7C30 is emptied with the event lists.
 A slot folder also needs its SaveMeta.xbx ("Name=GAME nn"), or the load menu shows the slot as EMPTY: copy the
 input slot's folder and replace data.sav, then set the Name line.
@@ -232,9 +232,11 @@ def main():
                        '--keep-events' in a, '--keep-pos' in a, '--keep-ai' in a)
     open(dst, 'wb').write(buf)
     print('wrote %s: area=%s checkpoint=%s signature_ok=%s' % ((dst,) + check(buf)))
-    print('  scene=%s pack=%s flags=%d (%s) hero AI=%s %s' % (
+    hero = BLOB_AT + struct.unpack_from('<I', buf, HERO_OFF_AT)[0]
+    ai = struct.unpack_from('<H', buf, hero + HERO_AI)[0]          # what was really written
+    print('  scene=%s pack=%s flags=%d (%s) hero AI=%d%s' % (
         p.get('scene', '-'), p.get('block', '-'), len(p.get('flags', [])), p.get('method', 'no progress entry'),
-        p.get('hero_ai', '-'), p.get('hero_ai_name', '')))
+        ai, ' (%s)' % p.get('hero_ai_name') if ai == p.get('hero_ai') else ' (kept from IN)'))
     if 'position' not in p:
         print('  no trigger box for %s: Derrick stays where the input save had him' % name)
     return 0
