@@ -1031,7 +1031,7 @@ void sub_0001B9F0(void)
 
 /* Debug-menu mode @ 0x1B900, step +0x34: 0 = set up, 1 = closed (opens after Start+Back are held ~1.8 s),
  * 2 = open the menu (0x1B5F0 builds it from the task's table). F9 asks for step 2 directly, since our PC
- * options overlay already uses Back+Start. */
+ * options overlay used Back+Start (now a short Back press, P1.3). */
 extern void sub_0001B900_gen(void);
 
 void sub_0001B900(void)
