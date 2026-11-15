@@ -216,8 +216,10 @@ void display_host_choose(display_getenv_fn get, struct display_choice *o)
 #include <windows.h>
 
 /* Texture packs are normally loaded by the toolkit's enhancements layer, which this build does not start.
- * RECOMP_TEXTURES_PACK=<file> (beside the exe unless absolute) loads one here. With RECOMP_VIDEO_ROW=1 and no
- * pack named, menu_labels.pack (tools/make_menu_labels.py: the VIDEO SETTINGS label) is used when present. */
+ * RECOMP_TEXTURES_PACK=<file> (beside the exe unless absolute) loads one here; "none" loads nothing. With no pack
+ * named, the HD pack packs\hd.pack beside the exe is used when present (S6.11: the whole-game AI upscale; its
+ * New twin is packs\hd_new.pack). Without it, and with RECOMP_VIDEO_ROW=1, menu_labels.pack
+ * (tools/make_menu_labels.py: the VIDEO SETTINGS label) is used when present. */
 static void display_load_pack(void)
 {
     const char *p = getenv("RECOMP_TEXTURES_PACK"), *row = getenv("RECOMP_VIDEO_ROW");
@@ -226,6 +228,15 @@ static void display_load_pack(void)
     DWORD len;
     char *slash;
 
+    if (!p || !p[0]) {
+        len = GetModuleFileNameA(NULL, path, sizeof path);
+        slash = len ? strrchr(path, 0x5C) : NULL;
+        if (slash) {
+            snprintf(slash + 1, sizeof path - (size_t)(slash + 1 - path), "packs%chd.pack", 0x5C);
+            if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES)
+                p = "packs/hd.pack";   /* the path code below joins it to the exe's folder; Windows takes '/' */
+        }
+    }
     if (!p || !p[0]) {
         if (!row || row[0] != '1')
             return;
