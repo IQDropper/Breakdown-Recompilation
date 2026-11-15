@@ -10,14 +10,14 @@ import io
 
 P = r'external\xboxrecomp\src\d3d\nv2a_pb_d3d11.c'
 s = io.open(P, encoding='utf-8', newline='').read()
-if '[guest-bounds]' in s:
-    print('already patched')
-    raise SystemExit
 nl = '\r\n' if '\r\n' in s else '\n'
+BASE_DONE = '[guest-bounds]' in s
 
 
-def rep(old, new):
+def rep(old, new, stage_done=None):
     global s
+    if stage_done if stage_done is not None else BASE_DONE:
+        return
     old = old.replace('\n', nl)
     new = new.replace('\n', nl)
     assert s.count(old) == 1, 'site not found: ' + old[:60]
@@ -85,5 +85,41 @@ rep('''    if (t->color == NV2A_TEX_P8)
                                  + t->palette);
     }''')
 
-io.open(P, 'w', encoding='utf-8', newline='').write(s)
-print('patched: [guest-bounds] vertex, vertex array, texture, palette')
+# [guest-bounds-cache] P6.3b (2026-11-14): one VirtualQuery per draw cost 90-130 ms a frame in 7F (the walking
+# stutter after #60). Remember the last 16 regions found readable; guest RAM views stay mapped while the game runs.
+CACHE_DONE = '[guest-bounds-cache]' in s
+rep('''static uint64_t s_guest_bad;
+static int guest_readable(uint32_t va, size_t n, const char *what)
+{''', '''static uint64_t s_guest_bad;
+static const uint8_t *s_gr_lo[16], *s_gr_hi[16];   /* [guest-bounds-cache] confirmed readable host ranges */
+static int s_gr_next;
+static int guest_readable(uint32_t va, size_t n, const char *what)
+{''', CACHE_DONE)
+rep('''    e = p + n;
+    while (p < e) {
+        if (!VirtualQuery(p, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT
+                || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) || !mbi.Protect)
+            goto bad;
+        p = (const uint8_t *)mbi.BaseAddress + mbi.RegionSize;''', '''    e = p + n;
+    {   /* [guest-bounds-cache] a range inside a region already found readable: no VirtualQuery (it cost 90-130 ms
+         * a frame in 7F, P6.3b). Guest RAM views are mapped once and not unmapped while the game runs. */
+        int c;
+        for (c = 0; c < 16; c++)
+            if (p >= s_gr_lo[c] && e <= s_gr_hi[c])
+                return 1;
+    }
+    while (p < e) {
+        if (!VirtualQuery(p, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT
+                || (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) || !mbi.Protect)
+            goto bad;
+        s_gr_lo[s_gr_next] = (const uint8_t *)mbi.BaseAddress;
+        s_gr_hi[s_gr_next] = (const uint8_t *)mbi.BaseAddress + mbi.RegionSize;
+        s_gr_next = (s_gr_next + 1) & 15;
+        p = (const uint8_t *)mbi.BaseAddress + mbi.RegionSize;''', CACHE_DONE)
+
+if BASE_DONE and CACHE_DONE:
+    print('already patched')
+else:
+    io.open(P, 'w', encoding='utf-8', newline='').write(s)
+    print('patched:' + ('' if BASE_DONE else ' [guest-bounds] vertex, vertex array, texture, palette;')
+          + ('' if CACHE_DONE else ' [guest-bounds-cache]'))

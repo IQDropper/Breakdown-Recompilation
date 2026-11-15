@@ -130,12 +130,17 @@ static int compile(const char *what, const char *src, const char *target,
 {
     char sc_file[MAX_PATH];''')
 
-rep('''    UINT flags = D3DCOMPILE_OPTIMIZATION_LEVEL3
-               | (target[0] == 'v' && target[1] == 's' ? D3DCOMPILE_IEEE_STRICTNESS : 0);
+# A toolkit without the local [vs-strict] edit passes the level straight to s_compile: give it a flags variable
+# first, so the cache key and the compile use the same flags either way.
+_plain = '''    HRESULT hr = s_compile(src, strlen(src), what, NULL, NULL, "main", target,
+                           D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, code, &err);'''.replace('\n', nl)
+if s.count(_plain) == 1:
+    s = s.replace(_plain, '''    UINT flags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
     HRESULT hr = s_compile(src, strlen(src), what, NULL, NULL, "main", target,
-                           flags, 0, code, &err);''', '''    UINT flags = D3DCOMPILE_OPTIMIZATION_LEVEL3
-               | (target[0] == 'v' && target[1] == 's' ? D3DCOMPILE_IEEE_STRICTNESS : 0);
-    HRESULT hr;
+                           flags, 0, code, &err);'''.replace('\n', nl))
+
+rep('''    HRESULT hr = s_compile(src, strlen(src), what, NULL, NULL, "main", target,
+                           flags, 0, code, &err);''', '''    HRESULT hr;
     sc_file[0] = 0;
     if (sc_setup()) {   /* [shader-cache] */
         sc_path(sc_file, sizeof sc_file, src, target, flags);

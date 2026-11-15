@@ -88,7 +88,7 @@ if errorlevel 1 (
   echo [error] patch_guest_bounds.py failed
   exit /b 1
 )
-echo [ok] Renderer skips unmapped guest addresses instead of crashing ([guest-bounds]).
+echo [ok] Renderer skips unmapped guest addresses instead of crashing ([guest-bounds], with region cache).
 echo --- patch_mono_audio.py ---
 %PY% patch_mono_audio.py
 if errorlevel 1 (
@@ -103,6 +103,13 @@ if errorlevel 1 (
   exit /b 1
 )
 echo [ok] Compiled shaders kept on disk (RECOMP_SHADER_CACHE=off turns it off).
+echo --- patch_dxt_native.py ---
+%PY% patch_dxt_native.py
+if errorlevel 1 (
+  echo [error] patch_dxt_native.py failed
+  exit /b 1
+)
+echo [ok] DXT textures go to the GPU as BC1/BC2/BC3 ([dxt-native]; RECOMP_DXT_NATIVE=0 for A/B).
 echo [ok] Opt-in Hor+ widescreen (RECOMP_HORPLUS=16:9).
 echo [ok] D3D11 polygon offset applied. Rebuild the exe.
 echo      RECOMP_POLY_OFFSET=0 turns it off for A/B.
