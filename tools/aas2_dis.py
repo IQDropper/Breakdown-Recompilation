@@ -10,6 +10,7 @@ Usage:
   python tools/aas2_dis.py game_files/romdata --check                               read every script, report counts
   python tools/aas2_dis.py game_files/romdata --dump outdir                          every script -> outdir/<pack>__<name>.txt
   python tools/aas2_dis.py game_files/romdata/common/base.pak bhb_mo_hero --moves   attack states as a markdown table
+  python tools/aas2_dis.py --natives [word]                                         list the game commands (name, args, uses)
 """
 import csv
 import os
@@ -68,8 +69,9 @@ if os.path.exists(_names):
 
 # Arguments that name something in the same script (shown by name) or an animation id (shown by its pack name).
 SYMBOL_ARGS = {'state': 'STAT', 'sub': 'SUB ', 'table': 'DATA'}
-ANIM_ARGS = {'anim', 'animL', 'animR'}
+ANIM_ARGS = {'anim', 'animL', 'animR'}   # and every other argument name that starts with 'anim' (animFace ...)
 ANIM_NAMES = {}   # anim id -> name, filled by load_anim_names()
+SCRIPT_NAMES = {}   # script id -> name (pack kind 3), for arguments named 'script'
 
 
 def load_anim_names(root):
@@ -80,6 +82,8 @@ def load_anim_names(root):
                 for k, i, _sz, _off, name in bdpk.entries(os.path.join(r, f)):
                     if k == 0:
                         ANIM_NAMES.setdefault(i, name)
+                    elif k == 3:
+                        SCRIPT_NAMES.setdefault(i, name)
 
 
 class Chunk:
@@ -188,8 +192,10 @@ def show_val(v, argname='', syms=None):
         nm = syms.get(tag, v)
         if nm:
             return nm
-    if argname in ANIM_ARGS and v in ANIM_NAMES:
+    if (argname in ANIM_ARGS or argname.startswith('anim')) and v in ANIM_NAMES:
         return '%s(%d)' % (ANIM_NAMES[v], v)
+    if argname == 'script' and v in SCRIPT_NAMES:
+        return '%s(%d)' % (SCRIPT_NAMES[v], v)
     if argname == 'mask' and v > 0:
         return '0x%X' % v
     return str(v)
@@ -590,11 +596,31 @@ def romdata_root(path):
         p = q
 
 
+def natives_table(word=None):
+    """The game commands from config/aas2_natives.csv, most used first (optionally only names containing word)."""
+    rows = []
+    for row in csv.reader(line for line in open(_names, encoding='utf-8') if not line.startswith('#')):
+        if row and row[0].isdigit():
+            rows.append(row)
+    rows.sort(key=lambda r: -int(r[8] or 0))
+    out = []
+    for r in rows:
+        if word and word.lower() not in (r[1] + ' ' + r[3]).lower():
+            continue
+        if not word and not r[1]:
+            continue
+        out.append('#%-5s %-26s %-36s uses %-6s %-6s %s' % (r[0], r[1] or '-', r[2], r[8], r[9], r[3]))
+    return ''.join(line + '\n' for line in out)
+
+
 def main():
     a = sys.argv[1:]
     if not a:
         print(__doc__)
         return 1
+    if a[0] == '--natives':
+        sys.stdout.write(natives_table(a[1] if len(a) > 1 else None))
+        return 0
     if '--check' in a:
         _, _, bad = check(a[0])
         return 1 if bad else 0
