@@ -19,6 +19,7 @@ static double s_data_ms;         /* area: AREA DATA SET, ms after start */
  * sound registration, up to EventLoad Start), event file (up to the first Evd wait), waits (Evd In/Out
  * "Waiting" until work resumes or Load Finish). */
 static double s_mark, s_pak, s_setup, s_event, s_wait;
+static double s_part[LT_PARTS];   /* P6.2: setup parts in the current load, ms */
 static int s_step;               /* 0 none, 1 pak read, 2 setup, 3 event file, 4 waiting */
 static char s_kind[12], s_name[64];
 static double s_after_until;     /* ms clock; while now < this, collect frame stats */
@@ -55,6 +56,7 @@ static void start(const char *kind, const char *name)
     s_data_ms = 0;
     s_mark = s_t0;
     s_pak = s_setup = s_event = s_wait = 0;
+    memset(s_part, 0, sizeof s_part);
     s_step = 0;
     snprintf(s_kind, sizeof s_kind, "%s", kind);
     snprintf(s_name, sizeof s_name, "%s", name);
@@ -82,6 +84,8 @@ static void finish(void)
     step_to(0, t);
     fprintf(stderr, "[LOAD]   steps %s: pak read %.0f, setup %.0f, event file %.0f, waits %.0f, other %.0f ms\n",
             s_name, s_pak, s_setup, s_event, s_wait, ms - s_pak - s_setup - s_event - s_wait);
+    fprintf(stderr, "[LOAD]   setup parts %s: textures %.0f, sounds %.0f, models %.0f, scripts %.0f, map ids %.0f ms\n",
+            s_name, s_part[LT_TEX], s_part[LT_SOUND], s_part[LT_MODEL], s_part[LT_SCRIPT], s_part[LT_MAPIDS]);
     fflush(stderr);
     snprintf(s_after_name, sizeof s_after_name, "%s", s_name);
     s_after_until = t + 5000.0;
@@ -159,4 +163,17 @@ void load_timer_frame(void)
         fflush(stderr);
         s_after_until = 0;
     }
+}
+
+double load_timer_now(void)
+{
+    if (s_freq <= 0)
+        load_timer_on();
+    return now_ms();
+}
+
+void load_timer_part(int part, double ms)
+{
+    if (s_on > 0 && s_t0 > 0 && part >= 0 && part < LT_PARTS)
+        s_part[part] += ms;
 }
