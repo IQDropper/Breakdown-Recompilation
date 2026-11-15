@@ -15,7 +15,8 @@ What it does (details in docs/formats/skeleton_animation.md):
   * animation = one key every `step` frames; rotations go out as quaternions (Rz*Ry*Rx), linear interpolation.
   * a parent node scales by 0.1 (10 units = 1 m, Derrick is 16.6 units tall) and mirrors Z (Xbox Direct3D is
     left-handed, glTF is right-handed).
-No textures yet (plain grey); model geometry reader kept minimal (no LOD/material handling).
+No textures (plain grey); model geometry reader kept minimal (no LOD/material handling).
+For textures, materials, several models in one scene, hands and scenery use tools/model_gltf.py (docs/formats/nud.md).
 """
 import json
 import math

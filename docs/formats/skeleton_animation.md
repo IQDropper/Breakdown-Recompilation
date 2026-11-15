@@ -168,10 +168,12 @@ land close to that bone in its own frame (e.g. upper arm vertices along +X, 0–
 
 - Header +0x08 (always 4.4) and the 16 bytes at +0x30.
 - Camera track types 0xC–0xE.
-- Block mode (flag 8, 956 files) is read by the same rules as the game, but not yet looked at in a viewer.
+- Block mode (flag 8, 956 files): checked in a viewer and against the game's sampler in task P4.5
+  (`nud.md`, "Checks done"); blocks join cleanly.
 - Packed rotations (step > 5) and curve mode (flag 0x100): code read, no file uses them.
 - Which INITIAL_TRANS each character uses (A1 / A2 / CHILD) is set at runtime (character +0x14), not traced yet.
-- NUDX: textures and materials are not exported yet; the part flags 0x1000 / 0x2000 are not explained.
+- NUDX models: see `nud.md` (full layout, textures, joints 22 / 23 = hands, hand models). Export with
+  `tools/model_gltf.py` (textures + skeleton + animation); `anim_gltf.py` stays as the first, minimal version.
 
 ## Code map (default.xbe)
 
