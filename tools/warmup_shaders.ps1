@@ -20,7 +20,7 @@ if (Get-Process breakdown_recomp -ErrorAction SilentlyContinue) { Write-Output '
 $saves = Join-Path $env:TEMP 'breakdown_warmup_saves'; New-Item -ItemType Directory -Force $saves | Out-Null
 $log = Join-Path $root 'warmup_stderr.txt'
 $envs = @{ RECOMP_PB_BACKEND = 'd3d11'; RECOMP_D3D11_OCC = 'sync'; RECOMP_VBLANK = '1'; RECOMP_KEYBOARD = '1'
-           RECOMP_DEBUG_MENU = '1'; RECOMP_WARMUP = '1'; RECOMP_SAVE_DIR = $saves; RECOMP_PRESENT_FULLSCREEN = '0' }
+           RECOMP_DEBUG_MENU = '1'; RECOMP_WARMUP = '1'; RECOMP_FIRST_LAUNCH = '0'; RECOMP_SAVE_DIR = $saves; RECOMP_PRESENT_FULLSCREEN = '0' }
 $fails = 0
 $stopAt = if ($Count -gt 0) { [math]::Min($total, $Start + $Count) } else { $total }
 Write-Output "Shader warm-up: map-list entries $Start..$($total - 1) of $total, $Batch per game run."
@@ -30,10 +30,11 @@ while ($Start -lt $stopAt) {
   $env:RECOMP_WARMUP_START = "$Start"; $env:RECOMP_WARMUP_COUNT = "$count"
   Write-Output ("  entries {0}..{1} ..." -f $Start, ($Start + $count - 1))
   $p = Start-Process -FilePath $exe -WorkingDirectory $root -WindowStyle Minimized -PassThru -RedirectStandardError $log -RedirectStandardOutput (Join-Path $root 'warmup_stdout.txt')
-  $limit = (Get-Date).AddSeconds(60 + 60 * $count)
+  $limit = (Get-Date).AddSeconds(150 + 75 * $count)
   while (-not $p.HasExited -and (Get-Date) -lt $limit) { Start-Sleep -Seconds 2 }
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; Start-Sleep -Seconds 2 }
   $txt = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+  if ($txt) { Add-Content (Join-Path $root 'warmup_history.txt') ("=== entries $Start..$($Start + $count - 1)" + [Environment]::NewLine + (($txt -split "`n" | Where-Object { $_ -match '\[WARMUP\]|\[CRASH\]|MAP-VIEWER|error' }) -join [Environment]::NewLine)) }
   $loaded = [regex]::Matches($txt, '\[WARMUP\] loaded entry (\d+)') | ForEach-Object { [int]$_.Groups[1].Value }
   $next = $Start
   if ($loaded) { $next = ($loaded | Measure-Object -Maximum).Maximum + 1 }

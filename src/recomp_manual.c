@@ -1156,6 +1156,7 @@ void sub_0001F450(void)   /* sample mode update (task): the area picked in the m
         s_task = task;
         fprintf(stderr, "[MAP-VIEWER] in map %d\n", s_mv_picked);
         fflush(stderr);
+        warmup_in_map(s_mv_picked);   /* RECOMP_WARMUP: the trusted load signal */
     }
     s_mv_in_area = 1;
     if (!debug_menu_on() || !mv_f8_edge()) {

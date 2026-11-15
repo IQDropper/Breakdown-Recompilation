@@ -1064,6 +1064,11 @@ static DWORD WINAPI first_launch(LPVOID unused)
     (void)unused;
     if (e && e[0] == '0')
         return 0;
+    {   /* RECOMP_WARMUP: the shader warm-up drives the menus itself; a page on top would stop it */
+        const char *w = getenv("RECOMP_WARMUP");
+        if (w && w[0] == '1')
+            return 0;
+    }
     host_data_dir(dir, sizeof dir, NULL);   /* RECOMP_DATA_DIR when set, else %LOCALAPPDATA%\xboxrecomp */
     snprintf(path, sizeof path, "%s\\first_launch_done.txt", dir);
     if (!(e && e[0] == '1')) {
