@@ -104,3 +104,6 @@ title_d3d_*.txt
 game.toml.bak*
 *.bak*
 *.bak_*
+
+# Session reports from tools/play_report.py (they link to local screenshots and saves).
+reports/play/
