@@ -48,6 +48,14 @@ if not "%SETUP_ERR%"=="0" (
 )
 
 echo.
+echo --- Base fixes (renderer + loader: depth passes, vertex maths, render-to-texture) ---
+call APPLY_BASE_PATCHES.cmd
+set BASE_ERR=%ERRORLEVEL%
+if not "%BASE_ERR%"=="0" (
+  echo [warn] APPLY_BASE_PATCHES.cmd exited with code %BASE_ERR%: the game may draw black rooms
+)
+
+echo.
 echo --- Input patches (mouse + keyboard host bridge) ---
 call APPLY_INPUT_PATCHES.cmd
 set PATCH_ERR=%ERRORLEVEL%
@@ -85,7 +93,7 @@ echo   build-win\breakdown_recomp.exe
 echo   run_native.cmd
 echo.
 echo Controls: CONTROLS.txt  (Modern mouse punches = LT/RT by default)
-echo If you wipe external\, re-run APPLY_INPUT_PATCHES.cmd and APPLY_DISPLAY_PATCHES.cmd, then rebuild.
+echo If you wipe external\, re-run SETUP.cmd (or the APPLY_*_PATCHES.cmd files, BASE first), then rebuild.
 echo Display: docs\widescreen-hires.md  (run_native.cmd = 2x, 16:9 letterbox)
 echo.
 echo Read README.md and DISCLAIMER.md before sharing builds.

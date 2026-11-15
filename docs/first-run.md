@@ -26,7 +26,7 @@ Pasting a full path is step 7, including an already extracted folder that contai
 2. Runs `SETUP.cmd nopause`:
    - `git config --global core.longpaths true` when it can
    - `breakdown setup` (`.venv`, llvm-mingw, the pinned toolkit)
-   - `APPLY_INPUT_PATCHES.cmd` and `APPLY_DISPLAY_PATCHES.cmd`
+   - `APPLY_BASE_PATCHES.cmd` (renderer and loader fixes every install needs), then `APPLY_INPUT_PATCHES.cmd`, `APPLY_DISPLAY_PATCHES.cmd`, `APPLY_RENDER_PATCHES.cmd` and `APPLY_ANALYSIS_PATCHES.cmd`
    - `breakdown doctor`
 3. Runs `breakdown import` on the path you confirmed. Import checks the XBE title id (`0x4E4D0009`, Breakdown NA) and copies the disc into `game_files\` (`default.xbe`, `romdata\`, `stream\`, and the rest of the image). A `game_files\` that already holds a different dump is left alone until you run `breakdown import --replace` yourself.
 4. Checks that `game_files\default.xbe` is an XBE with that title id, and that `romdata` and `stream` were extracted (names are matched without case).
@@ -78,5 +78,5 @@ Logs from the smoke window: `run_smoke_stdout.txt` and `run_smoke_stderr.txt` (g
 - Install Python 3.12+ from python.org with "Add python.exe to PATH" (`breakdown.py` itself runs on 3.9+).
 - Install uv 0.5.31+ (`winget install --id=astral-sh.uv -e`). `breakdown setup` fetches the rest into this tree and checks the pinned hashes.
 - The first `breakdown all` is a long local build. Until `build-win\breakdown_recomp.exe` exists, the native smoke stays a skip. Then run `run_native.cmd`.
-- Re-run `APPLY_INPUT_PATCHES.cmd` and `APPLY_DISPLAY_PATCHES.cmd` if you delete `external\` (a later `FIRST_RUN.cmd` or `SETUP.cmd` does this too), then rebuild.
+- Re-run `SETUP.cmd` (or the `APPLY_*_PATCHES.cmd` files, `APPLY_BASE_PATCHES.cmd` first) if you delete `external\` (a later `FIRST_RUN.cmd` or `SETUP.cmd` does this too), then rebuild.
 - To swap a dump that is already in `game_files\`, run `breakdown import --replace "path\to\image.iso"` yourself.

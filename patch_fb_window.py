@@ -7,8 +7,10 @@ Found by Foster's first native play test (2026-11-03):
     (default 2, the same default the SDL host uses), is resizable, and every frame is stretched to the client
     area with HALFTONE filtering.
 Idempotent; refuses if the code moved."""
+import os, pathlib
+ROOT = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent)   # project folder; BREAKDOWN_ROOT points the patch at another copy (tests)
 import pathlib, re
-P = pathlib.Path(r'C:\Users\iron_\OneDrive\Emulation\xr\breakdown\external\xboxrecomp\src\video\fb_present.c')
+P = (ROOT / r'external\xboxrecomp\src\video\fb_present.c')
 s = P.read_text(encoding='utf-8')
 MARK = '/* fbwin: see patch_fb_window.py */'
 if MARK in s:

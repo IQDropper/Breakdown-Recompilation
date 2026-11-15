@@ -11,7 +11,7 @@ import os
 import pathlib
 
 P = pathlib.Path(os.environ.get("BREAKDOWN_D3D11_FILE")
-                 or pathlib.Path(__file__).resolve().parent / "external" / "xboxrecomp" / "src" / "d3d" / "nv2a_pb_d3d11.c")
+                 or pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent) / "external" / "xboxrecomp" / "src" / "d3d" / "nv2a_pb_d3d11.c")
 MARK = "[disp-exclusive-why]"
 
 FUNC = r'''/* {mark} name the GPUs when DXGI refuses exclusive: the monitor's GPU vs the render GPU. */

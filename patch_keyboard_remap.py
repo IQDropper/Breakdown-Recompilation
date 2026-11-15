@@ -12,7 +12,7 @@ import io
 import os
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parent
+ROOT = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent)
 K = pathlib.Path(os.environ.get("BREAKDOWN_KEYBOARD_FILE") or ROOT / "external" / "xboxrecomp" / "src" / "input" / "keyboard.c")
 H = K.with_name("keyboard.h")
 MARK = "[key-remap]"

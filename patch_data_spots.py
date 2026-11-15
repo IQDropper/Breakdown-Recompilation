@@ -15,10 +15,11 @@ This patch makes tools.recomp read those ranges (entries with "data"/"end") from
     (with a stub for 0x1B2C2E, now a real function) would stay in gen/ and clash at link time.
 tools.disasm reads the same file as a seed file and finds no "start" in it, so analysis is unchanged.
 Idempotent. Run from the game root after `breakdown setup`; then `breakdown recomp`."""
+import os, pathlib
 import pathlib
 import sys
 
-TK = pathlib.Path(__file__).resolve().parent / 'external' / 'xboxrecomp' / 'tools' / 'recomp'
+TK = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent) / 'external' / 'xboxrecomp' / 'tools' / 'recomp'
 TAG = 'patch_data_spots.py'
 
 
