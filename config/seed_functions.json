@@ -16533,5 +16533,10 @@
   "start": "0x127260",
   "source": "swallowed by sub_00127090",
   "observed": false
+ },
+ {
+  "start": "0x9fc60",
+  "source": "stub hit 2026-11-14: called (tail jmp) from 0x739A0 <- 0x4DF60, map viewer Annex; bytes before it are a jump table",
+  "observed": true
  }
 ]

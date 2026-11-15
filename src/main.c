@@ -232,6 +232,25 @@ typedef struct MCPXAPUState MCPXAPUState;
 extern MCPXAPUState *mcpx_apu_init_standalone(uint8_t *ram_ptr);
 extern MCPXAPUState *g_apu_state;
 
+/* "<tag> 0x... = module.dll+0x..." for a host code address (crash reports). */
+static void crash_print_module(const char *tag, uintptr_t addr)
+{
+    HMODULE m = NULL;
+    char path[MAX_PATH] = "?";
+    const char *name = path;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCSTR)addr, &m) && m) {
+        const char *slash;
+        GetModuleFileNameA(m, path, sizeof path);
+        slash = strrchr(path, '\\');
+        name = slash ? slash + 1 : path;
+        fprintf(stderr, "%s 0x%llX = %s+0x%llX\n", tag, (unsigned long long)addr, name,
+                (unsigned long long)(addr - (uintptr_t)m));
+    } else {
+        fprintf(stderr, "%s 0x%llX (no module)\n", tag, (unsigned long long)addr);
+    }
+}
+
 static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
 {
     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
@@ -282,14 +301,26 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
          *   fprintf(stderr, "  Game state: %u\n", state);
          */
 
-        /* Print native stack return addresses for debugging */
+        /* Where it happened: module + offset of RIP and of the code addresses on the native stack, and the thread.
+         * (The old filter kept 0x140000000..0x150000000 only, which ASLR never gives, so it printed nothing; the
+         * 2026-11-14 Shaft D renderer crash had no module at all.) */
         {
             uintptr_t *sp = (uintptr_t *)ep->ContextRecord->Rsp;
-            fprintf(stderr, "  Native stack (first 8 return addrs):\n");
-            for (int i = 0; i < 64 && sp[i]; i++) {
-                if (sp[i] >= 0x140000000ULL && sp[i] < 0x150000000ULL) {
-                    fprintf(stderr, "    [%d] 0x%llX\n", i, (unsigned long long)sp[i]);
-                }
+            int shown = 0;
+            fprintf(stderr, "  Thread %lu%s\n", (unsigned long)GetCurrentThreadId(),
+                    (g_eax | g_ecx | g_edx | g_esp | g_ebx | g_esi | g_edi) ? "" : " (not a game thread: Xbox regs are 0)");
+            crash_print_module("  RIP", (uintptr_t)ep->ContextRecord->Rip);
+            fprintf(stderr, "  Native stack (code addresses):\n");
+            for (int i = 0; i < 96 && shown < 12; i++) {
+                MEMORY_BASIC_INFORMATION mbi;
+                uintptr_t v = sp[i];
+                if (v < 0x10000 || !VirtualQuery((void *)v, &mbi, sizeof mbi) || mbi.Type != MEM_IMAGE
+                        || !(mbi.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE)))
+                    continue;
+                char tag[24];
+                snprintf(tag, sizeof tag, "    [%d]", i);
+                crash_print_module(tag, v);
+                shown++;
             }
         }
         fflush(stderr);
@@ -373,7 +404,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     /* Step 4: Set game directory for file I/O path translation */
     {
         extern void xbox_path_init(const char *game_dir, const char *save_dir);
-        xbox_path_init(YOUR_GAME_DIR, NULL);
+        /* RECOMP_DATA_DIR: the whole data folder (hard-disk partition images incl. the game's area cache,
+         * TitleData, SystemData...) instead of %LOCALAPPDATA%\xboxrecomp. Test runs use it so they never write
+         * the player's cache image: a test killed mid-write left a broken cache entry that froze a later load
+         * (park3 B, 2026-11-14). RECOMP_SAVE_DIR still moves only UDATA/TDATA. */
+        const char *data_dir = getenv("RECOMP_DATA_DIR");
+        if (data_dir && *data_dir) {
+            CreateDirectoryA(data_dir, NULL);
+            fprintf(stderr, "[DATA] data folder %s (RECOMP_DATA_DIR)\n", data_dir);
+        }
+        xbox_path_init(YOUR_GAME_DIR, data_dir && *data_dir ? data_dir : NULL);
     }
 
     /* Step 5: Initialize kernel bridge (thunk table in Xbox memory) */
