@@ -16,6 +16,7 @@
 #include "qol.h"
 #include "pc_options.h"
 #include "play_record_host.h"
+#include "display_host.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -397,6 +398,16 @@ static void place(HWND game, int repaint)
     ClientToScreen(game, &o);
     SetWindowPos(s_win, NULL, o.x, o.y, bw, bh,
                  SWP_NOZORDER | SWP_NOACTIVATE | (show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+    /* Always on, so it does not hold exclusive fullscreen off (that would cost exclusive for good): in exclusive
+     * it is simply not seen. Say so once. */
+    if (show && display_exclusive_on()) {
+        static int s_said;
+        if (!s_said) {
+            s_said = 1;
+            fprintf(stderr, "[QOL] FPS/clock overlay cannot show in exclusive fullscreen (use borderless to see it)\n");
+            fflush(stderr);
+        }
+    }
     if (show && repaint)
         InvalidateRect(s_win, NULL, FALSE);
 }

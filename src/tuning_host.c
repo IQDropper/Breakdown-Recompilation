@@ -19,6 +19,7 @@
 #include "tuning_host.h"
 #include "tuning.h"
 #include "tuning_pad.h"
+#include "display_host.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -490,6 +491,11 @@ static LRESULT CALLBACK edit_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_SHOWWINDOW: {   /* exclusive fullscreen hides this window: hold it off while shown */
+        static int s_held;
+        display_overlay_hold(&s_held, wp != 0);
+        break;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         RECT rc;

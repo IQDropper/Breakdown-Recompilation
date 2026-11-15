@@ -14,6 +14,7 @@
 #include "speedrun_host.h"
 #include "speedrun.h"
 #include "pc_options.h"
+#include "display_host.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -286,6 +287,15 @@ static void place(HWND game)
     ClientToScreen(game, &o);
     SetWindowPos(s_win, NULL, o.x, o.y, bw, bh,
                  SWP_NOZORDER | SWP_NOACTIVATE | (s_visible && !IsIconic(game) ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+    /* Always on, so it does not hold exclusive fullscreen off: in exclusive it is not seen. Say so once. */
+    if (s_visible && display_exclusive_on()) {
+        static int s_said;
+        if (!s_said) {
+            s_said = 1;
+            fprintf(stderr, "[SPEEDRUN] timer cannot show in exclusive fullscreen (use borderless to see it)\n");
+            fflush(stderr);
+        }
+    }
     if (s_visible)
         InvalidateRect(s_win, NULL, FALSE);
 }
