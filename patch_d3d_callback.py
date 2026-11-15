@@ -11,8 +11,10 @@ Fix: the executor queues (fn, ctx) on software method 6/7 (lock-free SPSC ring, 
 thread); kernel_vblank_deliver(), which already runs the title's NV2A ISR on a guest stack ~60x/s,
 drains it after the ISR, calling each fn(ctx) like kernel_run_dpc calls a DPC. Latency <= 1 vblank.
 Needs RECOMP_VBLANK=1. Idempotent; refuses if the code moved."""
+import os, pathlib
+ROOT = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent)   # project folder; BREAKDOWN_ROOT points the patch at another copy (tests)
 import pathlib, re
-K = pathlib.Path(r'C:\Users\iron_\OneDrive\Emulation\xr\breakdown\external\xboxrecomp\src\kernel')
+K = (ROOT / r'external\xboxrecomp\src\kernel')
 pb, kb = K / 'nv2a_pb_exec.c', K / 'kernel_bridge.c'
 MARK = '/* d3d_cb: see patch_d3d_callback.py */'
 s = pb.read_text(encoding='utf-8')

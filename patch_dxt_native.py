@@ -12,8 +12,17 @@ import re
 P = r'external\xboxrecomp\src\d3d\nv2a_pb_d3d11.c'
 BS = chr(92)
 s = io.open(P, encoding='utf-8', newline='').read()
+OLD_COND = '    if (!src && dxt_native_on() && !s_texdump_dir && '
+GUARD = '#ifdef TEXDUMP_CAP   /* [dxt-native] RECOMP_TEX_DUMP needs the decoded pixels (patch_tex_dump.py is optional) */\n#define DXT_NATIVE_DUMPING (s_texdump_dir != NULL)\n#else\n#define DXT_NATIVE_DUMPING 0\n#endif\n'
 if '[dxt-native]' in s:
-    print('already patched')
+    if OLD_COND in s and 'DXT_NATIVE_DUMPING' not in s:
+        # earlier version: referred to the optional texture dumper directly, so it only built with patch_tex_dump.py
+        nl_ = '\r\n' if '\r\n' in s else '\n'
+        s = s.replace(OLD_COND, GUARD.replace('\n', nl_) + '    if (!src && dxt_native_on() && !DXT_NATIVE_DUMPING && ', 1)
+        io.open(P, 'w', encoding='utf-8', newline='').write(s)
+        print('upgraded: [dxt-native] builds without the texture dumper')
+    else:
+        print('already patched')
     raise SystemExit
 assert 'static int guest_readable(' in s, 'run patch_guest_bounds.py first'
 nl = '\r\n' if '\r\n' in s else '\n'
@@ -55,7 +64,7 @@ for m_ in re.finditer(re.escape('    if (!src) {' + nl), s):
         assert m is None, 'two decode sites'
         m = m_
 assert m, 'decode site not found'
-ins = '''    if (!src && dxt_native_on() && !s_texdump_dir && !((t->width | t->height) & 3u)
+ins = (GUARD + '''    if (!src && dxt_native_on() && !DXT_NATIVE_DUMPING && !((t->width | t->height) & 3u)
             && (t->color == 0x0C || t->color == 0x0E || t->color == 0x0F)) {   /* [dxt-native] */
         int bc = t->color == 0x0C ? 2 : t->color == 0x0E ? 3 : 1;
         size_t need = 0;
@@ -68,7 +77,7 @@ ins = '''    if (!src && dxt_native_on() && !s_texdump_dir && !((t->width | t->h
             s_dxt_native++;
         }
     }
-'''.replace('\n', nl)
+''').replace('\n', nl)
 s = s[:m.start()] + ins + s[m.start():]
 
 io.open(P, 'w', encoding='utf-8', newline='').write(s)

@@ -22,7 +22,7 @@ import os
 import pathlib
 
 P = pathlib.Path(os.environ.get("BREAKDOWN_D3D11_FILE")
-                 or pathlib.Path(__file__).resolve().parent / "external" / "xboxrecomp" / "src" / "d3d" / "nv2a_pb_d3d11.c")
+                 or pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent) / "external" / "xboxrecomp" / "src" / "d3d" / "nv2a_pb_d3d11.c")
 MARK = "[d3d11-horplus]"
 
 STATE = r'''/* {mark} Hor+: s_hp = 4:3 / target aspect (1 = off). RECOMP_HORPLUS=W:H, read once. */

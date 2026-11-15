@@ -7,8 +7,10 @@ How: recomp_manual.c overrides the six XAPI calls Input_PollGamepads makes (all 
 the toolkit's host input layer (xbox_Input*: XInput / SDL pads, + keyboard with RECOMP_KEYBOARD=1).
 The recompiler sees each `void sub_XXXXXXXX(void)` definition and stops generating its own (manual_scan.py).
 Idempotent; refuses if recomp_manual.c moved."""
+import os, pathlib
+ROOT = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent)   # project folder; BREAKDOWN_ROOT points the patch at another copy (tests)
 import pathlib
-P = pathlib.Path(r'C:\Users\iron_\OneDrive\Emulation\xr\breakdown\src\recomp_manual.c')
+P = (ROOT / r'src\recomp_manual.c')
 s = P.read_text(encoding='utf-8')
 MARK = '/* == Input bridge (patch_input_bridge.py) == */'
 if MARK in s:

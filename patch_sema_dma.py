@@ -13,8 +13,10 @@ runtime maps as plain memory, so the bytes are there:
   base = (w2 & 0xFFFFF000) | (w0 >> 20)
 The RAMHT is scanned linearly for the handle (no hash needed). If nothing valid is found the old behaviour
 (base 0) stays, and both outcomes are logged once. Idempotent; refuses if the code moved."""
+import os, pathlib
+ROOT = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent)   # project folder; BREAKDOWN_ROOT points the patch at another copy (tests)
 import pathlib
-p = pathlib.Path(r'C:\Users\iron_\OneDrive\Emulation\xr\breakdown\external\xboxrecomp\src\kernel\nv2a_pb_exec.c')
+p = (ROOT / r'external\xboxrecomp\src\kernel\nv2a_pb_exec.c')
 s = p.read_text(encoding='utf-8')
 MARK = '/* sema_dma_base: see patch_sema_dma.py */'
 helper = MARK + r'''

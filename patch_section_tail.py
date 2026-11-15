@@ -6,8 +6,10 @@ before it, and the lifted body fell off its end without popping 16 bytes of args
 every caller -> the "wake up" camera code read the stack cookie as an object pointer and crashed (2026-11-03).
 Fix: get_section_data() appends the loader's zero fill, capped at 15 bytes (max x86 instruction length) so a
 straddling instruction decodes but big zero-filled data tails are not swept as code. Idempotent."""
+import os, pathlib
+ROOT = pathlib.Path(os.environ.get("BREAKDOWN_ROOT") or pathlib.Path(__file__).resolve().parent)   # project folder; BREAKDOWN_ROOT points the patch at another copy (tests)
 import pathlib
-P = pathlib.Path(r'C:\Users\iron_\OneDrive\Emulation\xr\breakdown\external\xboxrecomp\tools\disasm\loader.py')
+P = (ROOT / r'external\xboxrecomp\tools\disasm\loader.py')
 s = P.read_text(encoding='utf-8')
 old = '''        return self.raw_data[section.raw_addr:section.raw_addr + section.raw_size]'''
 new = '''        data = self.raw_data[section.raw_addr:section.raw_addr + section.raw_size]
