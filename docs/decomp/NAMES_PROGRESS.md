@@ -5,35 +5,36 @@ Made by `python tools/names_db.py` from config/function_names.csv (hand names), 
 
 | | Functions | Share |
 |---|---|---|
-| **Named** (any source) | 974 | 5.9% |
-| of which game code named by us or the earlier pass | 509 | 3.1% |
+| **Named** (any source) | 1,043 | 6.3% |
+| of which game code named by us or the earlier pass | 578 | 3.5% |
 | of which Xbox library names (XDK, D3D, sound, C runtime) | 465 | 2.8% |
-| Original source file known (kondoh/ko_*.c), not named yet | 29 | 0.2% |
-| Sorted by kind only (render, audio, objects...) | 7,385 | 44.4% |
-| Nothing known | 8,234 | 49.5% |
+| Original source file known (kondoh/ko_*.c), not named yet | 26 | 0.2% |
+| Sorted by kind only (render, audio, objects...) | 7,364 | 44.3% |
+| Nothing known | 8,189 | 49.3% |
 | **Total** | 16,622 | 100.0% |
 
 ## By system
 
 | System | Named by hand | Earlier pass | Library | Source file | Sorted only | Total |
 |---|---|---|---|---|---|---|
-| (not sorted) | 0 | 0 | 0 | 0 | 0 | 8,234 |
-| objects | 0 | 0 | 0 | 0 | 6455 | 6,455 |
-| render | 36 | 12 | 136 | 0 | 318 | 502 |
-| audio | 1 | 1 | 104 | 0 | 273 | 379 |
-| engine | 229 | 14 | 0 | 0 | 46 | 289 |
+| (not sorted) | 0 | 0 | 0 | 0 | 0 | 8,189 |
+| objects | 0 | 0 | 0 | 0 | 6447 | 6,447 |
+| render | 89 | 12 | 136 | 0 | 309 | 546 |
+| audio | 1 | 1 | 104 | 0 | 271 | 377 |
+| engine | 230 | 14 | 0 | 0 | 46 | 290 |
 | input | 6 | 1 | 0 | 0 | 158 | 165 |
 | xdk | 6 | 0 | 112 | 0 | 0 | 118 |
 | crt | 0 | 0 | 104 | 0 | 4 | 108 |
-| debug | 20 | 1 | 0 | 0 | 46 | 67 |
+| debug | 25 | 1 | 0 | 0 | 46 | 72 |
 | script | 67 | 0 | 0 | 0 | 0 | 67 |
-| ui | 6 | 0 | 0 | 0 | 44 | 50 |
+| ui | 6 | 0 | 0 | 0 | 43 | 49 |
 | video | 0 | 1 | 9 | 0 | 26 | 36 |
 | areas | 32 | 4 | 0 | 0 | 0 | 36 |
 | save | 34 | 0 | 0 | 0 | 0 | 34 |
 | sound | 19 | 0 | 0 | 0 | 0 | 19 |
 | character | 14 | 1 | 0 | 0 | 0 | 15 |
-| vehicle | 0 | 0 | 0 | 0 | 9 | 9 |
+| effects | 10 | 0 | 0 | 0 | 0 | 10 |
+| vehicle | 0 | 0 | 0 | 0 | 8 | 8 |
 | ko_math | 0 | 0 | 0 | 4 | 0 | 4 |
 | ko_ncc_0 | 0 | 0 | 0 | 4 | 0 | 4 |
 | ko_hmg | 0 | 0 | 0 | 4 | 0 | 4 |
@@ -46,6 +47,3 @@ Made by `python tools/names_db.py` from config/function_names.csv (hand names), 
 | ko_lastbattle | 0 | 0 | 0 | 2 | 0 | 2 |
 | physics | 0 | 0 | 0 | 0 | 2 | 2 |
 | ko_ncc_eff | 0 | 0 | 0 | 1 | 0 | 1 |
-| ko_sunrise | 0 | 0 | 0 | 1 | 0 | 1 |
-| ko_eff_smoke | 0 | 0 | 0 | 1 | 0 | 1 |
-| ko_eff_lockon | 0 | 0 | 0 | 1 | 0 | 1 |
