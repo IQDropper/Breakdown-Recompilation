@@ -111,3 +111,6 @@ reports/play/
 # WARMUP_SHADERS.cmd logs
 warmup_stderr.txt
 warmup_stdout.txt
+
+# Your own speedrun timer look (speedrun_theme.example.ini is the shared template).
+speedrun_theme.ini
