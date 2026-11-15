@@ -194,6 +194,7 @@ void recomp_icall_not_code_log(uint32_t va)
 #include "qol.h"
 #include "qol_host.h"
 #include "play_record_host.h"
+#include "warmup.h"
 
 void recomp_unimpl(const char *text, uint32_t va)
 {
@@ -322,6 +323,8 @@ void sub_00205439(void)
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;
     tuning_host_pad((int)port, &st.wButtons, st.bAnalog, pr.suppress_motion);   /* LS + RS: tuning window */
+    if (port == 0)
+        warmup_pad(&st.wButtons, st.bAnalog, st.thumb);   /* RECOMP_WARMUP: the warm-up presses the buttons */
     a11y_settle();
     if (pr.suppress_motion) {
         /* Page open: the filter sees nothing held (repeat stops, a latch stays), the game sees nothing. */
@@ -530,6 +533,7 @@ void sub_00161680(void)
         load_timer_frame();   /* RECOMP_LOAD_LOG: frame times after a load (src/load_timer.c) */
         qol_frame();   /* FPS overlay + F12 screenshot (src/qol_host.c) */
         play_record_frame();   /* RECOMP_PLAY_RECORD: the play recorder (src/play_record_host.c) */
+        warmup_frame();        /* RECOMP_WARMUP: shader cache warm-up (src/warmup_host.c) */
         if (qol_skip_intro_on())
             intro_skip_frame();
     }
@@ -539,7 +543,7 @@ void sub_00161680(void)
      * Real formats are literals in the XBE image. */
     if (fmt < 0x10000u || fmt >= 0x00400000u)
         text = 0;
-    if (s_game_log || text || load_timer_on() || play_record_on()) {
+    if (s_game_log || text || load_timer_on() || play_record_on() || warmup_on()) {
         ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
@@ -562,6 +566,8 @@ void sub_00161680(void)
             load_timer_msg(out);   /* RECOMP_LOAD_LOG: the game's own loading messages */
         if (fmt >= 0x10000u && fmt < 0x00400000u)
             play_record_msg(out);   /* RECOMP_PLAY_RECORD: areas and sections entered */
+        if (fmt >= 0x10000u && fmt < 0x00400000u)
+            warmup_msg(out);        /* RECOMP_WARMUP: an area finished loading */
         if (text && MEM32(g_esp) != 0x0018EA4Eu)
             debug_text_put_from(out, MEM32(g_esp));
         if (s_game_log) {
@@ -1116,6 +1122,8 @@ static int mv_f8_edge(void)
     unsigned long pid = 0;
     int down = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose = down && !s_was;   /* VK_F8 */
     s_was = down;
+    if (warmup_take_f8())
+        return 1;               /* RECOMP_WARMUP: next map-list entry */
     if (!rose)
         return pad_f8_take();   /* P1.4: Back + RS on a pad */
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
@@ -1129,6 +1137,8 @@ void sub_0001F7F0(void)   /* map viewer update (task) */
     if (task != s_task) {
         s_task = task;
         s_mv_in_area = 0;
+        if (s_mv_next < 0)
+            s_mv_next = warmup_first_entry();   /* RECOMP_WARMUP_START */
         if (s_mv_next >= 0) {
             MEM32(task + 0x34) = (uint32_t)s_mv_next;   /* the list clamps it to the last entry */
             s_mv_next = -1;
@@ -1181,6 +1191,10 @@ static int debug_menu_key(void)
     int down8 = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose8 = down8 && !s_was8; /* VK_F8 */
     s_was = down;
     s_was8 = down8;
+    if (warmup_take_menu()) {   /* RECOMP_WARMUP: the developers' F026 menu, as F8 */
+        s_dbgmenu_dev = 1;
+        return 1;
+    }
     if (!rose && !rose8 && pad_f8_take()) {   /* P1.4: Back + RS on a pad (no foreground check needed) */
         s_dbgmenu_dev = 1;
         return 1;

@@ -71,6 +71,8 @@ set(GAME_SOURCES
     src/qol_host.c
     src/play_record.c
     src/play_record_host.c
+    src/warmup.c
+    src/warmup_host.c
     src/mem_search_host.c
     src/map_list_host.c
     src/load_timer.c
