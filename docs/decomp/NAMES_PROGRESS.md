@@ -5,35 +5,35 @@ Made by `python tools/names_db.py` from config/function_names.csv (hand names), 
 
 | | Functions | Share |
 |---|---|---|
-| **Named** (any source) | 1,123 | 6.8% |
-| of which game code named by us or the earlier pass | 658 | 4.0% |
+| **Named** (any source) | 1,220 | 7.3% |
+| of which game code named by us or the earlier pass | 755 | 4.5% |
 | of which Xbox library names (XDK, D3D, sound, C runtime) | 465 | 2.8% |
 | Original source file known (kondoh/ko_*.c), not named yet | 26 | 0.2% |
-| Sorted by kind only (render, audio, objects...) | 7,352 | 44.2% |
-| Nothing known | 8,121 | 48.9% |
+| Sorted by kind only (render, audio, objects...) | 7,345 | 44.2% |
+| Nothing known | 8,031 | 48.3% |
 | **Total** | 16,622 | 100.0% |
 
 ## By system
 
 | System | Named by hand | Earlier pass | Library | Source file | Sorted only | Total |
 |---|---|---|---|---|---|---|
-| (not sorted) | 0 | 0 | 0 | 0 | 0 | 8,121 |
-| objects | 0 | 0 | 0 | 0 | 6444 | 6,444 |
+| (not sorted) | 0 | 0 | 0 | 0 | 0 | 8,031 |
+| objects | 0 | 0 | 0 | 0 | 6437 | 6,437 |
 | render | 115 | 12 | 136 | 0 | 300 | 563 |
 | audio | 1 | 1 | 104 | 0 | 271 | 377 |
 | engine | 231 | 14 | 0 | 0 | 46 | 291 |
-| input | 11 | 0 | 0 | 0 | 158 | 169 |
+| input | 12 | 0 | 0 | 0 | 158 | 170 |
 | xdk | 6 | 0 | 112 | 0 | 0 | 118 |
+| character | 108 | 1 | 0 | 0 | 0 | 109 |
 | crt | 0 | 0 | 104 | 0 | 4 | 108 |
 | debug | 26 | 1 | 0 | 0 | 46 | 73 |
 | script | 70 | 0 | 0 | 0 | 0 | 70 |
-| ui | 6 | 0 | 0 | 0 | 43 | 49 |
+| ui | 8 | 0 | 0 | 0 | 43 | 51 |
 | video | 0 | 1 | 9 | 0 | 26 | 36 |
 | areas | 32 | 4 | 0 | 0 | 0 | 36 |
 | save | 34 | 0 | 0 | 0 | 0 | 34 |
 | sound | 20 | 0 | 0 | 0 | 0 | 20 |
 | motion | 16 | 0 | 0 | 0 | 0 | 16 |
-| character | 14 | 1 | 0 | 0 | 0 | 15 |
 | char | 12 | 0 | 0 | 0 | 0 | 12 |
 | combat | 12 | 0 | 0 | 0 | 0 | 12 |
 | effects | 10 | 0 | 0 | 0 | 0 | 10 |
