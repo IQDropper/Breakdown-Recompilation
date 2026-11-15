@@ -115,7 +115,7 @@ void load_timer_msg(const char *msg)
     if (strstr(msg, "area_load area/")) {                       /* map viewer / Area_Load */
         name_after(msg, "area_load area/", nm, sizeof nm);
         start("area", nm);
-    } else if (strstr(msg, "EVENT PAK LOAD END /AreaLoadStart")) {   /* story: the area load proper starts */
+    } else if (strstr(msg, "EVENT PACK LOAD END /AreaLoadStart")) {   /* story: the area load proper starts */
         start("area", "(story)");
     } else if (strstr(msg, "AREA_NAME_SET area/") && s_t0 > 0 && strcmp(s_name, "(story)") == 0) {
         name_after(msg, "AREA_NAME_SET area/", nm, sizeof nm);
@@ -154,7 +154,11 @@ void load_timer_frame(void)
     if (s_last_frame > 0) {
         double dt = t - s_last_frame;
         if (dt > s_worst) s_worst = dt;
-        if (dt > 50.0) s_slow++;
+        if (dt > 50.0) {
+            s_slow++;
+            fprintf(stderr, "[LOAD]   slow frame %.1f ms, %.0f ms after %s loaded\n", dt,
+                    t - (s_after_until - 5000.0), s_after_name);
+        }
     }
     s_last_frame = t;
     if (t >= s_after_until) {
