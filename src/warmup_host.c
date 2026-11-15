@@ -49,7 +49,7 @@ void warmup_frame(void)
     if (s_out.finished) {
         fprintf(stderr, "[WARMUP] %s: %d entries loaded, next entry %d\n",
                 s_w.state == WU_STUCK ? "stuck (an area did not load)" : "batch done", s_w.loaded,
-                s_w.state == WU_STUCK ? s_w.entry + 1 : s_w.entry);
+                s_w.entry);   /* stuck: the launcher retries that entry once in a fresh game */
         fflush(stderr);
         ExitProcess(s_w.state == WU_STUCK ? 3 : 0);
     }
