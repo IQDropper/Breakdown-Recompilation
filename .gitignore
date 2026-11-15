@@ -107,3 +107,7 @@ game.toml.bak*
 
 # Session reports from tools/play_report.py (they link to local screenshots and saves).
 reports/play/
+
+# WARMUP_SHADERS.cmd logs
+warmup_stderr.txt
+warmup_stdout.txt

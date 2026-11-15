@@ -80,3 +80,7 @@ Logs from the smoke window: `run_smoke_stdout.txt` and `run_smoke_stderr.txt` (g
 - The first `breakdown all` is a long local build. Until `build-win\breakdown_recomp.exe` exists, the native smoke stays a skip. Then run `run_native.cmd`.
 - Re-run `SETUP.cmd` (or the `APPLY_*_PATCHES.cmd` files, `APPLY_BASE_PATCHES.cmd` first) if you delete `external\` (a later `FIRST_RUN.cmd` or `SETUP.cmd` does this too), then rebuild.
 - To swap a dump that is already in `game_files\`, run `breakdown import --replace "path\to\image.iso"` yourself.
+
+## Optional: shader warm-up
+
+Run `WARMUP_SHADERS.cmd` once after setup. The game walks itself through every area in the developers' map viewer (about an hour, window minimised, saves untouched) and fills the shader cache, so first visits to areas do not stutter (Annex A first visit: 24 shader compiles and 66 frames over 50 ms before, 0 and 13 after). Stop it any time; running it again continues where it stopped.
