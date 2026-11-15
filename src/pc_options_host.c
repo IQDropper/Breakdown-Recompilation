@@ -20,6 +20,7 @@ extern void breakdown_subtitles_set(int subs) __attribute__((weak));   /* A11Y-6
 #include "skins.h"
 #include "keymap.h"
 #include "display_host.h"
+#include "host_paths.h"
 #include "kernel/nv2a_backend_common.h"
 
 #include <stdio.h>
@@ -1057,13 +1058,13 @@ static void attach_game(HWND hwnd)
 void pc_options_host_open(void);
 static DWORD WINAPI first_launch(LPVOID unused)
 {
-    const char *e = getenv("RECOMP_FIRST_LAUNCH"), *la = getenv("LOCALAPPDATA");
+    const char *e = getenv("RECOMP_FIRST_LAUNCH");
     char dir[MAX_PATH], path[MAX_PATH];
     FILE *f;
     (void)unused;
-    if ((e && e[0] == '0') || !la || !*la)
+    if (e && e[0] == '0')
         return 0;
-    snprintf(dir, sizeof dir, "%s\\xboxrecomp", la);
+    host_data_dir(dir, sizeof dir, NULL);   /* RECOMP_DATA_DIR when set, else %LOCALAPPDATA%\xboxrecomp */
     snprintf(path, sizeof path, "%s\\first_launch_done.txt", dir);
     if (!(e && e[0] == '1')) {
         f = fopen(path, "r");

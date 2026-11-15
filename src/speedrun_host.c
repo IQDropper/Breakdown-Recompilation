@@ -9,11 +9,13 @@
  *   - keys (game window in front): F11 shows/hides the timer, Ctrl+F11 resets it (the run restarts on the
  *     next area load).
  * The timer is drawn in a click-through popup in the top right corner of the 4:3 picture (same idea as
- * src/debug_text_host.c). Splits are added to %LOCALAPPDATA%\xboxrecomp\speedrun\splits.csv.
+ * src/debug_text_host.c). Splits are added to %LOCALAPPDATA%\xboxrecomp\speedrun\splits.csv
+ * (RECOMP_DATA_DIR\speedrun when set: host_paths.h).
  */
 #include "speedrun_host.h"
 #include "speedrun.h"
 #include "pc_options.h"
+#include "host_paths.h"
 #include "display_host.h"
 
 #include <stdio.h>
@@ -65,12 +67,8 @@ static uint64_t now_ms(void)
 
 static void csv_path(void)
 {
-    const char *la = getenv("LOCALAPPDATA");
     char dir[MAX_PATH];
-    snprintf(dir, sizeof dir, "%s\\xboxrecomp", la && *la ? la : ".");
-    CreateDirectoryA(dir, NULL);
-    snprintf(dir, sizeof dir, "%s\\xboxrecomp\\speedrun", la && *la ? la : ".");
-    CreateDirectoryA(dir, NULL);
+    host_data_dir(dir, sizeof dir, "speedrun");
     snprintf(s_csv, sizeof s_csv, "%s\\splits.csv", dir);
 }
 
