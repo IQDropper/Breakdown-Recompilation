@@ -297,6 +297,48 @@ static const char *display_source(const char *key)
     return "default";
 }
 
+static SRWLOCK s_hold_lock = SRWLOCK_INIT;
+static int s_hold_count;
+
+void display_overlay_hold(int *held, int on)
+{
+    int was, now;
+    on = on ? 1 : 0;
+    AcquireSRWLockExclusive(&s_hold_lock);
+    if (!held || *held == on) {
+        ReleaseSRWLockExclusive(&s_hold_lock);
+        return;
+    }
+    *held = on;
+    was = s_hold_count > 0;
+    s_hold_count += on ? 1 : -1;
+    if (s_hold_count < 0)
+        s_hold_count = 0;
+    now = s_hold_count > 0;
+    /* Under the lock: two threads cannot reorder a hold and a release. */
+#if defined(__GNUC__) || defined(__clang__)
+    if (was != now && &breakdown_display_overlay_hold)
+#else
+    if (was != now)
+#endif
+        breakdown_display_overlay_hold(now);
+    ReleaseSRWLockExclusive(&s_hold_lock);
+    if (was != now) {
+        fprintf(stderr, now ? "[DISPLAY] overlay shown: exclusive fullscreen steps aside\n"
+                            : "[DISPLAY] no overlay shown: exclusive fullscreen may come back\n");
+        fflush(stderr);
+    }
+}
+
+int display_exclusive_on(void)
+{
+#if defined(__GNUC__) || defined(__clang__)
+    if (!&breakdown_display_exclusive_active)
+        return 0;
+#endif
+    return breakdown_display_exclusive_active();
+}
+
 static int exclusive_linked(void)
 {
 #if defined(__GNUC__) || defined(__clang__)

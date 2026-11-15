@@ -899,6 +899,12 @@ static void paint_page(HDC hdc, const RECT *rc)
 
 static LRESULT CALLBACK page_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
+    /* Exclusive fullscreen shows only the game's swap chain, so this page would be a dark screen there: hold
+     * exclusive off while it is shown (every show/hide path, the owner minimising included, sends this). */
+    if (msg == WM_SHOWWINDOW) {
+        static int s_held;
+        display_overlay_hold(&s_held, wparam != 0);
+    }
     if (msg == WM_PAINT) {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
