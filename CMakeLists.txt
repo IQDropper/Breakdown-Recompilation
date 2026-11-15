@@ -66,6 +66,7 @@ set(GAME_SOURCES
     src/debug_text_host.c
     src/a11y_input.c
     src/speedrun.c
+    src/speedrun_theme.c
     src/speedrun_host.c
     src/qol.c
     src/qol_host.c

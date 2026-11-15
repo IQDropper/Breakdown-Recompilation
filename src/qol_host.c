@@ -6,7 +6,7 @@
  *     corner of the 4:3 picture shows the average FPS and frame time over the last second, and the slowest frame.
  *     F5 shows/hides it.
  *   F12 screenshot (on unless RECOMP_SCREENSHOT=0): saves the 4:3 picture as a PNG to
- *     %LOCALAPPDATA%\xboxrecomp\screenshots\breakdown_<date>_<time>.png. Capture: PrintWindow with
+ *     %LOCALAPPDATA%\xboxrecomp\screenshots\breakdown_<date>_<time>.png (RECOMP_DATA_DIR\screenshots when set). Capture: PrintWindow with
  *     PW_RENDERFULLCONTENT (reads the D3D11 window's own picture); if that comes back black, a copy of the
  *     screen under the window. The overlay then shows "screenshot saved" for 2 seconds.
  *   Keys are polled (GetAsyncKeyState) only while the game window is in front, like the speedrun timer's F11.
@@ -16,6 +16,8 @@
 #include "qol.h"
 #include "pc_options.h"
 #include "play_record_host.h"
+#include "display_host.h"
+#include "host_paths.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,15 +100,11 @@ void qol_note(const char *text)
 
 static int shot_path(char *out, size_t n)
 {
-    const char *la = getenv("LOCALAPPDATA");
     char dir[MAX_PATH], name[64];
     time_t t = time(NULL);
     struct tm *lt = localtime(&t);
     int seq;
-    snprintf(dir, sizeof dir, "%s\\xboxrecomp", la && *la ? la : ".");
-    CreateDirectoryA(dir, NULL);
-    snprintf(dir, sizeof dir, "%s\\xboxrecomp\\screenshots", la && *la ? la : ".");
-    CreateDirectoryA(dir, NULL);
+    host_data_dir(dir, sizeof dir, "screenshots");   /* RECOMP_DATA_DIR\screenshots when set */
     for (seq = 1; seq < 100; seq++) {
         if (lt)
             qol_shot_name(lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday, lt->tm_hour, lt->tm_min, lt->tm_sec, seq,
@@ -217,7 +215,7 @@ static void screenshot_to(HWND game, const char *want)
     if (want)
         snprintf(path, sizeof path, "%s", want);
     if ((!want && !shot_path(path, sizeof path)) || !(f = fopen(path, "wb"))) {
-        fprintf(stderr, "[SHOT] could not open a file in %%LOCALAPPDATA%%\\xboxrecomp\\screenshots\n");
+        fprintf(stderr, "[SHOT] could not open a file in the screenshots folder\n");
         free(png);
         qol_note("screenshot failed");
         return;
@@ -397,6 +395,16 @@ static void place(HWND game, int repaint)
     ClientToScreen(game, &o);
     SetWindowPos(s_win, NULL, o.x, o.y, bw, bh,
                  SWP_NOZORDER | SWP_NOACTIVATE | (show ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+    /* Always on, so it does not hold exclusive fullscreen off (that would cost exclusive for good): in exclusive
+     * it is simply not seen. Say so once. */
+    if (show && display_exclusive_on()) {
+        static int s_said;
+        if (!s_said) {
+            s_said = 1;
+            fprintf(stderr, "[QOL] FPS/clock overlay cannot show in exclusive fullscreen (use borderless to see it)\n");
+            fflush(stderr);
+        }
+    }
     if (show && repaint)
         InvalidateRect(s_win, NULL, FALSE);
 }
@@ -450,7 +458,7 @@ static DWORD WINAPI qol_thread(LPVOID unused)
     SetLayeredWindowAttributes(s_win, KEY_COLOR, 200, LWA_COLORKEY | LWA_ALPHA);
     SetTimer(s_win, 1, 33, NULL);
     fprintf(stderr, "[QOL] ready:%s%s\n", s_fps_on ? " FPS overlay (F5 shows/hides)" : "",
-            s_shots_on ? " F12 screenshot to %LOCALAPPDATA%\\xboxrecomp\\screenshots" : "");
+            s_shots_on ? " F12 screenshot to the screenshots folder (RECOMP_DATA_DIR or %LOCALAPPDATA%\\xboxrecomp)" : "");
     fflush(stderr);
     while (GetMessageA(&m, NULL, 0, 0) > 0) {
         if (m.message == WM_TIMER) {

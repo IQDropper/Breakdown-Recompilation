@@ -19,6 +19,8 @@
 #include "tuning_host.h"
 #include "tuning.h"
 #include "tuning_pad.h"
+#include "display_host.h"
+#include "host_paths.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -135,7 +137,7 @@ void tuning_host_hero(uint32_t st)
 static void paths(void)
 {
     char exe[MAX_PATH], *p;
-    const char *d = getenv("RECOMP_TUNING_DIR"), *la = getenv("LOCALAPPDATA");
+    const char *d = getenv("RECOMP_TUNING_DIR");
     GetModuleFileNameA(NULL, exe, sizeof exe);
     if ((p = strrchr(exe, '\\')) != NULL)
         *p = 0;                              /* build-win */
@@ -148,7 +150,7 @@ static void paths(void)
     snprintf(s_ranges, sizeof s_ranges, "%s\\tuning_ranges.json", s_dir);
     snprintf(s_final, sizeof s_final, "%s\\tuning_final.json", s_dir);
     snprintf(s_log, sizeof s_log, "%s\\CHANGELOG.md", s_dir);
-    snprintf(s_user, sizeof s_user, "%s\\xboxrecomp\\tuning", la ? la : ".");
+    host_data_dir(s_user, sizeof s_user, "tuning");   /* presets: RECOMP_DATA_DIR\tuning when set */
 }
 
 static void now_str(char *out, size_t n, int file)
@@ -490,6 +492,11 @@ static LRESULT CALLBACK edit_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
 static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
+    case WM_SHOWWINDOW: {   /* exclusive fullscreen hides this window: hold it off while shown */
+        static int s_held;
+        display_overlay_hold(&s_held, wp != 0);
+        break;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         RECT rc;

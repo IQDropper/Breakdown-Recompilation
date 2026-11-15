@@ -1,8 +1,8 @@
 /*
  * play_record_host.c - P2.1 play recorder (RECOMP_PLAY_RECORD=1), the Windows side. Pure parts: src/play_record.c.
  *
- * One folder per session: %LOCALAPPDATA%\xboxrecomp\play_sessions\<yyyymmdd-hhmmss>\ (RECOMP_PLAY_RECORD_DIR
- * overrides the parent folder):
+ * One folder per session: %LOCALAPPDATA%\xboxrecomp\play_sessions\<yyyymmdd-hhmmss>\ (RECOMP_DATA_DIR\play_sessions
+ * when set; RECOMP_PLAY_RECORD_DIR overrides the parent folder):
  *   events.jsonl  one line per event, flushed at once so a crash keeps everything before it:
  *                 start, area (each new area/section, with the game's own name), save (a checkpoint save copied),
  *                 pos (the hero every 5 s), slow (a frame over 100 ms), fps (each minute: average, frames over
@@ -18,6 +18,7 @@
 #include "play_record_host.h"
 #include "play_record.h"
 #include "qol_host.h"
+#include "host_paths.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -230,9 +231,7 @@ static void start(void)
     if (d && *d) {
         snprintf(parent, sizeof parent, "%s", d);
     } else {
-        snprintf(parent, sizeof parent, "%s\\xboxrecomp", la && *la ? la : ".");
-        CreateDirectoryA(parent, NULL);
-        snprintf(parent, sizeof parent, "%s\\xboxrecomp\\play_sessions", la && *la ? la : ".");
+        host_data_dir(parent, sizeof parent, "play_sessions");   /* RECOMP_DATA_DIR\play_sessions when set */
     }
     CreateDirectoryA(parent, NULL);
     pr_session_name(lt ? lt->tm_year + 1900 : 0, lt ? lt->tm_mon + 1 : 0, lt ? lt->tm_mday : 0, lt ? lt->tm_hour : 0,

@@ -228,7 +228,7 @@ static LRESULT CALLBACK dt_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 /* Exclusive fullscreen shows only the game's swap chain, so this overlay window was invisible there: the debug
  * menu looked like a dark screen (player report 2026-11-15). While text is shown, ask the renderer to leave
  * exclusive (patch_overlay_hold.py); give it back 2 s after the text is gone, so a flickering print does not
- * switch modes every frame. A toolkit without the patch: nothing happens (weak symbol). */
+ * switch modes every frame. display_overlay_hold counts holders; a toolkit without the patch: nothing happens. */
 static void hold_exclusive(int used)
 {
     static int s_held;
@@ -236,19 +236,10 @@ static void hold_exclusive(int used)
     DWORD now = GetTickCount();
     if (used)
         s_last = now;
-    if (!&breakdown_display_overlay_hold)
-        return;
-    if (used && !s_held) {
-        s_held = 1;
-        breakdown_display_overlay_hold(1);
-        fprintf(stderr, "[DEBUG-TEXT] text shown: exclusive fullscreen steps aside (an overlay cannot show over it)\n");
-        fflush(stderr);
-    } else if (!used && s_held && now - s_last > 2000) {
-        s_held = 0;
-        breakdown_display_overlay_hold(0);
-        fprintf(stderr, "[DEBUG-TEXT] text gone: exclusive fullscreen may come back\n");
-        fflush(stderr);
-    }
+    if (used && !s_held)
+        display_overlay_hold(&s_held, 1);   /* shared count with the PC options page and tuning window */
+    else if (!used && s_held && now - s_last > 2000)
+        display_overlay_hold(&s_held, 0);
 }
 
 static void place(HWND game, unsigned *seen)

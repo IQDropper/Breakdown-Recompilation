@@ -70,6 +70,15 @@ void display_host_init(void);
  * getenv readers see them; the PC options page uses this to lock only real launch-script values. */
 int display_host_launch_set(const char *key);
 
+/* Host overlays are separate windows; DXGI exclusive fullscreen hides them. An on-demand overlay (PC options,
+ * tuning window, debug text) calls this with 1 when it shows and 0 when it hides: while any holds, exclusive steps
+ * aside (breakdown_display_overlay_hold). Counted, so two overlays do not release each other. *held is the
+ * caller's own flag: a repeat 1 or 0 does nothing. Any thread. */
+void display_overlay_hold(int *held, int on);
+/* 1 while DXGI exclusive fullscreen is on (0 on a toolkit without the patch). Always-on small overlays (FPS,
+ * speedrun timer) do not hold exclusive off; they use this to log once that they cannot show there. */
+int display_exclusive_on(void);
+
 /* Defined by patch_d3d11_exclusive.py. Weak on mingw-clang: an unpatched
  * toolkit leaves the address NULL and exclusive falls back to borderless.
  * A const-qualified or differently typed symbol would not match. Call it
