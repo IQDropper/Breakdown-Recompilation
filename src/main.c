@@ -33,6 +33,7 @@
 #include <windows.h>
 #include "recomp_env.h"
 #include "display_host.h"
+#include "play_record_host.h"
 #include <dbghelp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -277,6 +278,8 @@ static LONG CALLBACK veh_handler(PEXCEPTION_POINTERS ep)
         if (xbox_VehMmioFault(ep))
             return EXCEPTION_CONTINUE_EXECUTION;
 
+        play_record_crash(ep->ContextRecord->Rip, fault_addr, (uint32_t)(fault_addr - (uintptr_t)g_xbox_mem_offset),
+                          ep->ExceptionRecord->ExceptionInformation[0] != 0);   /* RECOMP_PLAY_RECORD */
         fprintf(stderr, "[CRASH] Access violation at RIP=0x%llX, fault addr=0x%llX (%s)\n",
             (unsigned long long)ep->ContextRecord->Rip,
             (unsigned long long)fault_addr,

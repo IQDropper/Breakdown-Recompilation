@@ -8,5 +8,6 @@ int qol_screenshots_on(void);   /* on unless RECOMP_SCREENSHOT=0 */
 int qol_skip_intro_on(void);    /* RECOMP_SKIP_INTRO=1 (the skip itself is in src/recomp_manual.c) */
 void qol_frame(void);           /* once per game frame (Render_SubmitFrame's DebugPrintf, from 0x18EA4E) */
 void qol_note(const char *text);   /* a short line in the overlay for about 2 seconds */
+void qol_shot_request(const char *path);   /* a PNG of the 4:3 picture to path, soon (play recorder) */
 
 #endif
