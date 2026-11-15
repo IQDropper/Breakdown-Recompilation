@@ -2,7 +2,7 @@
 
   python tools/model_gltf.py <romdata> <id[,id...]> out.gltf [--pak PATH] [--lod N] [--anim ID] [--rest]
                              [--trans 1101] [--rot 1100] [--fps 60] [--attach ID:TRACK,...]
-  python tools/model_gltf.py <romdata> --area hon_under_A out.gltf [--lod N]
+  python tools/model_gltf.py <romdata> --area hon_under_A out.gltf [--lod N] [--collision | --collision-only]
 
   Derrick:             python tools/model_gltf.py game_files/romdata 8 %TEMP%/derrick/derrick.gltf
   Derrick + rider kick python tools/model_gltf.py game_files/romdata 8 %TEMP%/derrick/kick.gltf --anim 1794
@@ -10,6 +10,9 @@
                        python tools/model_gltf.py game_files/romdata 9,14,11,15 %TEMP%/alex/alex.gltf
   A whole section's scenery (7F Main Research Center, part A):
                        python tools/model_gltf.py game_files/romdata --area hon_under_A %TEMP%/hon_under_A/area.gltf
+
+  Scenery + its collision as a see-through overlay (check collision against the visible rooms):
+                       python tools/model_gltf.py game_files/romdata --area hon_under_A %TEMP%/hon_under_A/hit.gltf --collision
 
 Several ids go into one scene (a character is a body + head + hair + ... model). Scenery ids repeat between
 areas, so pass --pak for those (or use --area).
@@ -28,6 +31,12 @@ What comes out (layout: docs/formats/nud.md):
     The hair, face and finger rigs themselves are not exported yet.
   * skinned models get the skeleton (rest offsets from INITIAL_TRANS 1101, rest turns from INITIAL_ROT 1100,
     see docs/formats/skeleton_animation.md); --anim adds one animation.
+  * --collision adds the hit data (HD51, docs/formats/collision.md) as separate meshes named '<model> [hit]':
+    semi-transparent, both sides, coloured by triangle type (solid = orange, type 2 = blue, 3 = green, 1 / 4 =
+    purple, 15 = grey) and drawn on top of nothing else, so it can be checked against the scenery in any glTF
+    viewer; the AEG edges come as red lines. --collision-only writes the collision alone. Every primitive keeps
+    the surface numbers in "extras". For --area it takes the section's collision from the area pak
+    (nud.section_collision); for model ids, each model's own hit blocks (in model space, like the model).
   * axes: 10 game units = 1 m, X mirrored (Xbox Direct3D is left-handed, glTF right-handed; mirroring X keeps
     the game's forward +Z as glTF's front). Baked into the data, so Blender gets plain unscaled objects.
 Game files are read in place; output is game art: keep it out of git (write under %TEMP% or the kit's reports).
@@ -386,6 +395,70 @@ def add_model(gl, tex, entry, data, lod=0, sk=None, skin=None, attach=None):
     return info
 
 
+# collision colours by triangle type (low 4 bits of the surface word), RGBA; alpha makes it see-through
+HIT_COLOURS = {0: (1.0, 0.45, 0.05, 0.35), 1: (0.6, 0.2, 0.9, 0.45), 2: (0.1, 0.45, 1.0, 0.45),
+               3: (0.1, 0.85, 0.3, 0.45), 4: (0.6, 0.2, 0.9, 0.45), 15: (0.5, 0.5, 0.5, 0.3)}
+
+
+def hit_material(gl, typ):
+    key = ('hit', typ)
+    if key not in gl.mat_by_key:
+        col = HIT_COLOURS.get(typ, (1.0, 0.0, 1.0, 0.45))
+        gl.g['materials'].append(dict(
+            name='hit_type%d' % typ, alphaMode='BLEND', doubleSided=True,
+            pbrMetallicRoughness=dict(baseColorFactor=list(col), metallicFactor=0.0, roughnessFactor=1.0),
+            emissiveFactor=[c * 0.5 for c in col[:3]],
+            extras=dict(collision_type=typ, meaning=nud.HIT_TYPES.get(typ, '?'))))
+        gl.mat_by_key[key] = len(gl.g['materials']) - 1
+    return gl.mat_by_key[key]
+
+
+def add_collision(gl, entry, hits):
+    """one mesh per model entry with all its HD51 blocks: a triangle primitive per triangle type, flat
+    (unshared) vertices with face normals, and a LINES primitive for the AEG edges."""
+    prims, info = [], dict(blocks=len(hits), tris=0, edges=0)
+    by_type = {}
+    for h in hits:
+        for a, b, c, w in h.tris:
+            by_type.setdefault(nud.surface(w)[0], []).append((h.points[a], h.points[b], h.points[c], w))
+    for typ, tris in sorted(by_type.items()):
+        pos, nrm = [], []
+        for a, b, c, _w in tris:
+            pa, pb, pc = cpos(a), cpos(b), cpos(c)
+            u = [pb[i] - pa[i] for i in range(3)]
+            v = [pc[i] - pa[i] for i in range(3)]
+            n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+            ln = math.sqrt(sum(x * x for x in n)) or 1.0
+            n = tuple(x / ln for x in n)
+            pos += [pa, pc, pb]                      # mirror flips winding
+            nrm += [tuple(-x for x in n)] * 3
+        mats = sorted(set(nud.surface(t[3])[1] for t in tris))
+        prims.append(dict(attributes=dict(POSITION=gl.add(pos, 'f', 5126, 'VEC3', 34962, minmax=True),
+                                          NORMAL=gl.add(nrm, 'f', 5126, 'VEC3', 34962)),
+                          material=hit_material(gl, typ),
+                          extras=dict(collision_type=typ, triangles=len(tris), materials=mats,
+                                      surface_words=sorted(set('%04x' % t[3] for t in tris)))))
+        info['tris'] += len(tris)
+    lines = [cpos(h.points[i]) for h in hits for e in h.edges for i in e[:2]]
+    if lines:
+        if ('hit', 'edge') not in gl.mat_by_key:
+            gl.g['materials'].append(dict(name='hit_edge', pbrMetallicRoughness=dict(
+                baseColorFactor=[1, 0, 0, 1], metallicFactor=0.0), emissiveFactor=[1, 0, 0]))
+            gl.mat_by_key[('hit', 'edge')] = len(gl.g['materials']) - 1
+        prims.append(dict(attributes=dict(POSITION=gl.add(lines, 'f', 5126, 'VEC3', 34962, minmax=True)),
+                          mode=1, material=gl.mat_by_key[('hit', 'edge')], extras=dict(aeg_edges=len(lines) // 2)))
+        info['edges'] = len(lines) // 2
+    if not prims:
+        return None
+    name = entry['name'] + ' [hit]'
+    gl.g['meshes'].append(dict(name=name, primitives=prims))
+    gl.g['nodes'].append(dict(name=name, mesh=len(gl.g['meshes']) - 1, extras=dict(
+        model_id=entry['id'], pak=os.path.basename(entry['pak']), collision=True,
+        hd51=['%#x' % h.offset for h in hits])))
+    gl.g['scenes'][0]['nodes'].append(len(gl.g['nodes']) - 1)
+    return info
+
+
 def model_is_skinned(entry, data, lod):
     m = nud.Model(entry, data)
     n = m.lod(lod) if m.lod_offsets[lod] >= 0 else None
@@ -400,7 +473,7 @@ def find_section_pak(romdata, section):
 
 
 def export(romdata, ids, out, pak=None, lod=0, anim_id=None, trans_id=1101, rot_id=1100, fps=60.0, area=None,
-           attach=None):
+           attach=None, collision=False, collision_only=False):
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     gl, tex = Gltf(out), nud.TexIndex(romdata)
     models = []
@@ -411,13 +484,23 @@ def export(romdata, ids, out, pak=None, lod=0, anim_id=None, trans_id=1101, rot_
         models = [(e, d[e['off']:e['end']]) for e in nud.model_entries(p) if e['scenery'] and e['lods'][lod] >= 0]
     else:
         models = [nud.find_model(romdata, i, pak) for i in ids]
+    infos = {}
+    if collision or collision_only:
+        if area:
+            hits = nud.section_collision(romdata, area)
+        else:
+            hits = [(e, nud.hit_blocks(e, open(e['pak'], 'rb').read())) for e, _ in models]
+        for e, hs in hits:
+            infos['%d %s [hit]' % (e['id'], e['name'])] = add_collision(gl, e, hs)
+        if collision_only:
+            gl.write()
+            return infos, gl
     sk = skin = None
     if any(model_is_skinned(e, d, lod) for e, d in models):
         sk = Skeleton(romdata, trans_id, rot_id)
         anim = A.load(romdata, anim_id) if anim_id else None
         skin, roots = add_skeleton(gl, sk, anim, fps)
         gl.g['scenes'][0]['nodes'] += roots
-    infos = {}
     for e, d in models:
         at = attach_track(e['name'], (attach or {}).get(e['id'])) if sk else None
         infos['%d %s' % (e['id'], e['name'])] = add_model(gl, tex, e, d, lod, sk, skin, at)
@@ -431,14 +514,16 @@ def main(a):
         return 1
     opt = lambda k, d: type(d)(a[a.index(k) + 1]) if k in a else d  # noqa: E731
     romdata = a[0]
+    hit = dict(collision='--collision' in a, collision_only='--collision-only' in a)
     if a[1] == '--area':
-        infos, gl = export(romdata, [], a[3], lod=opt('--lod', 0), area=a[2])
+        infos, gl = export(romdata, [], a[3], lod=opt('--lod', 0), area=a[2], **hit)
     else:
         ids = [int(x) for x in a[1].split(',')]
         infos, gl = export(romdata, ids, a[2], pak=opt('--pak', '') or None, lod=opt('--lod', 0),
                            anim_id=opt('--anim', 0) or None, trans_id=opt('--trans', 1101), rot_id=opt('--rot', 1100),
                            fps=opt('--fps', 60.0),
-                           attach=dict(tuple(int(x) for x in kv.split(':')) for kv in opt('--attach', '').split(',') if kv))
+                           attach=dict(tuple(int(x) for x in kv.split(':')) for kv in opt('--attach', '').split(',') if kv),
+                           **hit)
     for k, v in infos.items():
         print('%-55s %s' % (k, v))
     print('%d textures written next to %s' % (len(gl.tex_by_name), gl.path))

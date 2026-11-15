@@ -28,7 +28,7 @@ Screenshots are in the kit (`reports/P4.5_models/`), not in git (they show game 
 |---|---|
 | Characters, props, weapons | kind 1 entries in `common/base.pak`, `area/<area>/<area>.pak`, `<area>_<X>.pak` |
 | Area scenery (rooms, corridors) | kind 1 entries with entry byte 3 = 1, in the section pak (`hon_under_A.pak`) |
-| Collision of the scenery | entries with byte 3 = 1 but no LOD (all LOD slots −1), mostly in the area pak (`axis.pak`) |
+| Collision of the scenery | entries with byte 3 = 1 but no LOD (all LOD slots −1), in the area pak (`hon_under.pak`), named like the section's scenery without the section letter; layout in `collision.md` |
 | Textures | `<area>_<X>.nut` (one TIM2 with all of that section's textures), and kind 2 entries in paks (`BASE_TEXTURE_PAK` in base.pak, `nut_...`) |
 
 Counts over the whole game (`python tools/nud.py game_files/romdata --check`): 2,210 models with a shape,
@@ -55,7 +55,7 @@ entries also use:
 | +0x78 | i32 | ≥ 0 = the model has hit data (HD51), −1 = none | 0x1A5B0 |
 | +0x7C | i32 | offset of a second hit block, added to the first | `Data_GetModelHitDataB` 0x1A5F0 |
 
-The `HD51` hit data (chunks `INFO`, ...) is not decoded yet.
+The `HD51` hit data (collision) is decoded in `collision.md` (P4.5a). The block sits at **pak file offset +0x4C**.
 
 ### LOD slots
 
@@ -240,7 +240,7 @@ Character = several models: Derrick 8 (body) + 5 (hair) + 6 / 7 (arms and hands)
 
 ## Still open
 
-- Hit data (`HD51` blocks, `INFO` chunk): collision of scenery and objects.
+- Collision (`HD51`): decoded, see `collision.md`; open there: query flags, material meanings, tree split rule.
 - Exact use of LOD slot 7 (and 6); the two distance limits of `Model_PickLodByDistance`.
 - Hair, face and finger rigs: exported fixed to the head / hand, not as their own bones.
 - Where objects and scenery pieces are placed (the `.evd` event files); scenery vertices are already in area
