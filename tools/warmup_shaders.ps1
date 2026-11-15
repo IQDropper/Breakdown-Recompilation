@@ -20,7 +20,7 @@ if (Get-Process breakdown_recomp -ErrorAction SilentlyContinue) { Write-Output '
 $saves = Join-Path $env:TEMP 'breakdown_warmup_saves'; New-Item -ItemType Directory -Force $saves | Out-Null
 $log = Join-Path $root 'warmup_stderr.txt'
 $envs = @{ RECOMP_PB_BACKEND = 'd3d11'; RECOMP_D3D11_OCC = 'sync'; RECOMP_VBLANK = '1'; RECOMP_KEYBOARD = '1'
-           RECOMP_DEBUG_MENU = '1'; RECOMP_WARMUP = '1'; RECOMP_SAVE_DIR = $saves; RECOMP_PRESENT_FULLSCREEN = '0' }
+           RECOMP_DEBUG_MENU = '1'; RECOMP_WARMUP = '1'; RECOMP_FIRST_LAUNCH = '0'; RECOMP_SAVE_DIR = $saves; RECOMP_PRESENT_FULLSCREEN = '0' }
 $fails = 0
 $stopAt = if ($Count -gt 0) { [math]::Min($total, $Start + $Count) } else { $total }
 Write-Output "Shader warm-up: map-list entries $Start..$($total - 1) of $total, $Batch per game run."
