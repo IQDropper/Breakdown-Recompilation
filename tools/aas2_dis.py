@@ -73,6 +73,17 @@ ANIM_ARGS = {'anim', 'animL', 'animR'}   # and every other argument name that st
 ANIM_NAMES = {}   # anim id -> name, filled by load_anim_names()
 SCRIPT_NAMES = {}   # script id -> name (pack kind 3), for arguments named 'script'
 
+# Attack_Set body-part ids = body skeleton track numbers (docs/formats/skeleton_animation.md). The hit is a line
+# from part A to part B; B < 0 means "A and the bone above it" (0x6F580).
+BONES = {1: 'hips', 2: 'spine', 3: 'chest', 4: 'neck', 5: 'head', 6: 'L collarbone', 7: 'L upper arm',
+         8: 'L forearm', 9: 'L hand', 10: 'R collarbone', 11: 'R upper arm', 12: 'R forearm', 13: 'R hand',
+         14: 'pelvis', 15: 'L thigh', 16: 'L calf', 17: 'L foot', 18: 'L toe', 19: 'R thigh', 20: 'R calf',
+         21: 'R foot', 22: 'R toe'}
+
+
+def bone_name(v):
+    return BONES.get(v, str(v)) if isinstance(v, int) else show_val(v)
+
 
 def load_anim_names(root):
     """Animation ids are global over all packs (kind 0 entries)."""
@@ -506,7 +517,10 @@ def moves(b, row=0, pattern=MOVE_RE):
                     dmg = show_val(extra[2])
                     m = re.match(r'\(\(([\d.]+) \* CharVar_Get\(43\)\) / 10\)$', dmg)
                     dmg = (m.group(1) + 'P') if m else dmg       # P = power / 10 (char var 43, normally 10)
-                    h = '%s f%s-%s' % (dmg, show_val(extra[7]), show_val(extra[8]))
+                    part = bone_name(extra[5]) + ('' if not isinstance(extra[6], int) or extra[6] < 0
+                                                  else '-' + bone_name(extra[6]))
+                    h = '%s f%s-%s (%s, push %s)' % (dmg, show_val(extra[7]), show_val(extra[8]), part,
+                                                     show_val(extra[3]))
                     if h not in d['hits']:
                         d['hits'].append(h)
             if cmd == 'State_Change' and extra and isinstance(extra[0], int):
@@ -524,7 +538,8 @@ def moves(b, row=0, pattern=MOVE_RE):
 
 def moves_markdown(rows):
     out = ['Damage: "8P" = 8 x power / 10 (power = character variable 43, normally 10, so 8). "f20-50" = the hit is',
-           'live from animation frame 20 to 50. Several values = different branches (charge level, power-up, type).',
+           'live from animation frame 20 to 50. In brackets: the body part line that hits (its length is the reach) and',
+           'the push given to the victim. Several values = different branches (charge level, power-up, type).',
            '',
            '| # | State | Animation(s) | Damage, live frames | Entered from [button check] |',
            '|---|---|---|---|---|']
