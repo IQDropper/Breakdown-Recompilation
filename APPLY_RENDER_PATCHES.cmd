@@ -96,6 +96,13 @@ if errorlevel 1 (
   exit /b 1
 )
 echo [ok] Mono audio option (RECOMP_MONO_AUDIO / PC options).
+echo --- patch_shader_cache.py ---
+%PY% patch_shader_cache.py
+if errorlevel 1 (
+  echo [error] patch_shader_cache.py failed
+  exit /b 1
+)
+echo [ok] Compiled shaders kept on disk (RECOMP_SHADER_CACHE=off turns it off).
 echo --- patch_dxt_native.py ---
 %PY% patch_dxt_native.py
 if errorlevel 1 (
