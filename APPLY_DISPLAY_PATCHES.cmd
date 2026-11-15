@@ -41,6 +41,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo --- patch_overlay_hold.py ---
+%PY% patch_overlay_hold.py
+if errorlevel 1 (
+  echo [error] patch_overlay_hold.py failed
+  exit /b 1
+)
+
 echo [ok] D3D11 window hook and exclusive fullscreen applied.
 echo      If this upgraded an older patch, rebuild the toolkit and the exe.
 echo      A build-win configured before display_host.c drops CMakeCache.txt
