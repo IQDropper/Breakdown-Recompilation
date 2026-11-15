@@ -62,6 +62,10 @@ echo --- Render patch (D3D11 polygon offset for shadow decals) ---
 call APPLY_RENDER_PATCHES.cmd
 
 echo.
+echo --- Analysis patch (translator skips proven data, config\data_spots.json) ---
+call APPLY_ANALYSIS_PATCHES.cmd
+
+echo.
 echo --- Running: breakdown doctor ---
 call breakdown.cmd doctor
 echo.
