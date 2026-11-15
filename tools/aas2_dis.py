@@ -10,6 +10,7 @@ Usage:
   python tools/aas2_dis.py game_files/romdata --check                               read every script, report counts
   python tools/aas2_dis.py game_files/romdata --dump outdir                          every script -> outdir/<pack>__<name>.txt
   python tools/aas2_dis.py game_files/romdata/common/base.pak bhb_mo_hero --moves   attack states as a markdown table
+  python tools/aas2_dis.py --natives [word]                                         list the game commands (name, args, uses)
 """
 import csv
 import os
@@ -68,8 +69,20 @@ if os.path.exists(_names):
 
 # Arguments that name something in the same script (shown by name) or an animation id (shown by its pack name).
 SYMBOL_ARGS = {'state': 'STAT', 'sub': 'SUB ', 'table': 'DATA'}
-ANIM_ARGS = {'anim', 'animL', 'animR'}
+ANIM_ARGS = {'anim', 'animL', 'animR'}   # and every other argument name that starts with 'anim' (animFace ...)
 ANIM_NAMES = {}   # anim id -> name, filled by load_anim_names()
+SCRIPT_NAMES = {}   # script id -> name (pack kind 3), for arguments named 'script'
+
+# Attack_Set body-part ids = body skeleton track numbers (docs/formats/skeleton_animation.md). The hit is a line
+# from part A to part B; B < 0 means "A and the bone above it" (0x6F580).
+BONES = {1: 'hips', 2: 'spine', 3: 'chest', 4: 'neck', 5: 'head', 6: 'L collarbone', 7: 'L upper arm',
+         8: 'L forearm', 9: 'L hand', 10: 'R collarbone', 11: 'R upper arm', 12: 'R forearm', 13: 'R hand',
+         14: 'pelvis', 15: 'L thigh', 16: 'L calf', 17: 'L foot', 18: 'L toe', 19: 'R thigh', 20: 'R calf',
+         21: 'R foot', 22: 'R toe'}
+
+
+def bone_name(v):
+    return BONES.get(v, str(v)) if isinstance(v, int) else show_val(v)
 
 
 def load_anim_names(root):
@@ -80,6 +93,8 @@ def load_anim_names(root):
                 for k, i, _sz, _off, name in bdpk.entries(os.path.join(r, f)):
                     if k == 0:
                         ANIM_NAMES.setdefault(i, name)
+                    elif k == 3:
+                        SCRIPT_NAMES.setdefault(i, name)
 
 
 class Chunk:
@@ -188,8 +203,10 @@ def show_val(v, argname='', syms=None):
         nm = syms.get(tag, v)
         if nm:
             return nm
-    if argname in ANIM_ARGS and v in ANIM_NAMES:
+    if (argname in ANIM_ARGS or argname.startswith('anim')) and v in ANIM_NAMES:
         return '%s(%d)' % (ANIM_NAMES[v], v)
+    if argname == 'script' and v in SCRIPT_NAMES:
+        return '%s(%d)' % (SCRIPT_NAMES[v], v)
     if argname == 'mask' and v > 0:
         return '0x%X' % v
     return str(v)
@@ -500,7 +517,10 @@ def moves(b, row=0, pattern=MOVE_RE):
                     dmg = show_val(extra[2])
                     m = re.match(r'\(\(([\d.]+) \* CharVar_Get\(43\)\) / 10\)$', dmg)
                     dmg = (m.group(1) + 'P') if m else dmg       # P = power / 10 (char var 43, normally 10)
-                    h = '%s f%s-%s' % (dmg, show_val(extra[7]), show_val(extra[8]))
+                    part = bone_name(extra[5]) + ('' if not isinstance(extra[6], int) or extra[6] < 0
+                                                  else '-' + bone_name(extra[6]))
+                    h = '%s f%s-%s (%s, push %s)' % (dmg, show_val(extra[7]), show_val(extra[8]), part,
+                                                     show_val(extra[3]))
                     if h not in d['hits']:
                         d['hits'].append(h)
             if cmd == 'State_Change' and extra and isinstance(extra[0], int):
@@ -518,7 +538,8 @@ def moves(b, row=0, pattern=MOVE_RE):
 
 def moves_markdown(rows):
     out = ['Damage: "8P" = 8 x power / 10 (power = character variable 43, normally 10, so 8). "f20-50" = the hit is',
-           'live from animation frame 20 to 50. Several values = different branches (charge level, power-up, type).',
+           'live from animation frame 20 to 50. In brackets: the body part line that hits (its length is the reach) and',
+           'the push given to the victim. Several values = different branches (charge level, power-up, type).',
            '',
            '| # | State | Animation(s) | Damage, live frames | Entered from [button check] |',
            '|---|---|---|---|---|']
@@ -590,11 +611,31 @@ def romdata_root(path):
         p = q
 
 
+def natives_table(word=None):
+    """The game commands from config/aas2_natives.csv, most used first (optionally only names containing word)."""
+    rows = []
+    for row in csv.reader(line for line in open(_names, encoding='utf-8') if not line.startswith('#')):
+        if row and row[0].isdigit():
+            rows.append(row)
+    rows.sort(key=lambda r: -int(r[8] or 0))
+    out = []
+    for r in rows:
+        if word and word.lower() not in (r[1] + ' ' + r[3]).lower():
+            continue
+        if not word and not r[1]:
+            continue
+        out.append('#%-5s %-26s %-36s uses %-6s %-6s %s' % (r[0], r[1] or '-', r[2], r[8], r[9], r[3]))
+    return ''.join(line + '\n' for line in out)
+
+
 def main():
     a = sys.argv[1:]
     if not a:
         print(__doc__)
         return 1
+    if a[0] == '--natives':
+        sys.stdout.write(natives_table(a[1] if len(a) > 1 else None))
+        return 0
     if '--check' in a:
         _, _, bad = check(a[0])
         return 1 if bad else 0

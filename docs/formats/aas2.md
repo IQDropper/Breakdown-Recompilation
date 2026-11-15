@@ -4,8 +4,8 @@ Breakdown runs every character's moves, every enemy brain and most story events 
 This page explains the file layout, the interpreter in `default.xbe`, every opcode, and how a script reads buttons,
 plays animations, deals damage, branches and calls. Worked out statically (no game run) on 2026-11-14.
 
-Tools: `tools/aas2_dis.py` (disassembler, move table) and `config/aas2_natives.csv` (the 1,839 game commands,
-87 named so far). Function names: `config/function_names.csv` (section "AAS2 script interpreter").
+Tools: `tools/aas2_dis.py` (disassembler, move table) and `config/aas2_natives.csv` (the 1,839 game commands;
+438 named, covering the most-used ones). Function names: `config/function_names.csv` (section "AAS2 script interpreter").
 
 **In one paragraph:** each script is a set of **states** (a start block, a run block that runs every frame, a stop
 block) plus **subroutines** and **data tables**. The code is a small stack machine with 65 opcodes; the game's own
@@ -127,12 +127,12 @@ An `if` is `<condition> ; BRZC else`. A `switch` is `<value> ; MV_I1_I0 ; CMP_I1
 
 | Task | How | Example |
 |---|---|---|
-| **Read buttons** | `Pad_Pressed(mask)` #6 (this frame), `Pad_Held(mask)` #5, `Pad_Released(mask)` #7. Bits are the key manager's (0x2A9BA8), remapped from the pad by 0x53BA0 | Attack 1 = bit **0x800**, Attack 2 = bit **0x200** (from `SUB nomal_attack`) |
+| **Read buttons** | `Pad_Pressed(mask)` #6 (this frame), `Pad_Held(mask)` #5, `Pad_Released(mask)` #7. Bits are the key manager's (0x2A9BA8), remapped from the pad by 0x53BA0 | Attack 1 = bit **0x800** = right trigger, Attack 2 = bit **0x200** = left trigger (full list below) |
 | **Button names** | the hero's `SUB Debug` prints a name per key bit: BTN1 0x8, BTN2 0x1, BTN3 0x1000, BTN4 0x4000, BTN5 0x8000, BTN6 0x2000, BTN7 0x10, BTN8 0x40, BTN9 0x80, BTN10 0x20, BTN11 0x400, BTN12 0x100, BTN13 0x2, BTN14 0x800, BTN15 0x200, BTN16 0x4 (BTN13 = guard, BTN14 = Attack 1, BTN15 = Attack 2) | |
-| **Back / Select** | pad Back sets bit 0x20 of the pad word (0x22C80) and 0x53BA0 turns it into key bit **0x1** (BTN2), Start into 0x8 (BTN1) (likely: assumes the default button table at 0x2A8C89). Over all 2,156 scripts the only check of 0x1 (and of 0x8) is in the hero's `SUB Debug`, which only prints "BTN2" (empty in retail). **No script uses Back in play.** | |
+| **Back / Select** | Back = key bit **0x1** (BTN2), Start = **0x8** (BTN1), see the button list below. Over all 2,156 scripts the only check of 0x1 (and of 0x8) is in the hero's `SUB Debug`, which only prints "BTN2" (empty in retail). **No script uses Back in play.** | |
 | **Play an animation** | `Motion_SetB(layer, anim)` #588, `Motion_SetIfNew(layer, anim)` #107, `Motion_PlayLayer(layer, anim, a, b)` #85; hands `Motion_SetHands` #147; camera `Camera_SetAnim` #584. Anim = a global id (pack kind 0) or `Data_Get(Motion_X, Char_GetType(), 0)` | Attack1: `Motion_SetB(0, gym_HE_FT_NN_BD_Rstr_NT)` (right straight) |
 | **Timing** | `Motion_GetFrame(layer)` #111, `Motion_FramePassed(layer, f)` #114, `State_Time()` #23, timers | "if frame >= 22 and <= 28" |
-| **Deal damage** | `Attack_Set(a, b, damage, reach, c, partA, partB, from, to)` #703 adds a hit window (up to 8) to char+0x4A10. Damage is written as `N * power / 10` | Attack1: 8 x power/10, frames 22-28 |
+| **Deal damage** | `Attack_Set(type, level, damage, push, layer, boneA, boneB, from, to)` #703 adds a hit window (up to 8) to char+0x4A10; see "Attack windows" below. Damage is written as `N * power / 10` | Attack1: `Attack_Set(0, 0, 8P, 40, 1, 13, 3, 22, 28)` = punch, right hand to chest, frames 22-28 |
 | **Take damage** | the victim's own script reads `Hit_Count` #163, `Hit_Type/Level/Damage(i)` #164-166 and calls `Life_AddFrom(amount)` #1456 (0x97760 -> Life_AddWithSource 0x48DA0) | hero: `Life_AddFrom(-Hit_Damage(0) * 10 / CharVar(44))` (22 places) |
 | **Branch** | BRZ/BRNZ on I0 after a compare | |
 | **Change state** | `State_Change(n)` #19 (next frame), `State_Get` #21, `State_GetPrev` #22 | |
@@ -145,6 +145,91 @@ hit check makes a hit record on the victim (type, level, damage) -> victim's scr
 defence)`. Power and defence are character variables 43 and 44 (10 = 100 %), set by `SUB POWERUP` (power 6..30).
 `Life_AddWithSource` (0x48DA0) is called **only** by script commands, so every hit in the game goes through
 #1456/#1457/#1103/#1458 - one hook there covers all damage (tuning range "damage taken / dealt x").
+
+### Buttons: pad -> script key bits (P4.6a)
+
+Three steps, all read from the code. (1) `Input_PollGamepads` (0x18C5A0) reads XInput: the 16-bit word holds the
+digital buttons (0x1 up, 0x2 down, 0x4 left, 0x8 right, 0x10 Start, 0x20 Back, 0x40 / 0x80 left / right stick
+click) and sets 0x100 A, 0x200 B, 0x400 X, 0x800 Y, 0x1000 Black, 0x2000 White, 0x4000 left trigger, 0x8000 right
+trigger when the analog value is over 30. (2) `Pad_ApplyLayout` (0x22C80) moves each bit through the player's
+button layout (16-byte rows at 0x241958, picked by bits 5-7 of a saved option word, 0x22A10; the triggers need over
+140 here). (3) `Key_RemapPadBits` (0x53BA0) turns pad bits into the script key bits. Result:
+
+| Button | Key bit in layouts 0 / 1 / 2 / 3 / 4 | Hero script use |
+|---|---|---|
+| Right trigger | 0x800 / 0x800 / 0x800 / 0x8000 / 0x800 | **Attack 1** (BTN14) |
+| Left trigger | 0x200 / 0x200 / 0x200 / 0x1000 / 0x200 | **Attack 2** (BTN15) |
+| A | 0x8000 / 0x8000 / 0x2000 / 0x200 / 0x2000 | BTN5 |
+| B | 0x4000 / 0x4000 / 0x400 / 0x800 / 0x4000 | BTN4 |
+| X | 0x2000 / 0x2000 / 0x8000 / 0x2000 / 0x8000 | BTN6 |
+| Y | 0x1000 / 0x400 / 0x1000 / 0x400 / 0x1000 | BTN3 |
+| Black | 0x400 / 0x1000 / 0x4000 / 0x4000 / 0x400 | BTN11 |
+| White | 0x4 (all) | BTN16 |
+| Left stick click | 0x2 (all) | BTN13 (the guard checks use 0x2) |
+| Right stick click | 0x100 (all) | BTN12 |
+| D-pad up / down / left / right | 0x10 / 0x40 / 0x80 / 0x20 (all) | BTN7 / BTN8 / BTN9 / BTN10 |
+| Start / Back | 0x8 / 0x1 (all) | BTN1 / BTN2 |
+
+Which layout is the default setting was not traced (it is a saved option). The attack buttons are on the triggers
+in 4 of the 5 layouts; layout 3 moves them to B (Attack 1) and A (Attack 2). Key bits above 0xFFFF (0x200000 ...
+0x40000000, used by the hero for moves) are not pad buttons; they come from the key manager (0x54420), most likely
+stick directions (open).
+
+### Attack windows and hits (P4.6c)
+
+`Attack_Set` (#703 -> 0x9AFD0 -> `AttackList_Add` 0x6F420) stores up to 8 windows of 0x40 bytes at char+0x4A14
+(count at +0x4A12). A new window with the same two bones replaces the old one.
+
+| Argument | Stored | Meaning |
+|---|---|---|
+| type | +0x00 | hit type, copied to the victim's hit record (`Hit_Type`). Used: 0 (most punches and kicks), 9, 10, 11, 16 |
+| level | +0x02 | strength 0..3, copied to the hit record (`Hit_Level`); the victim picks a small or big reaction from it |
+| damage | +0x04 | copied to the hit record (`Hit_Damage`); written `N x power / 10` |
+| push | +0x08 | float, copied to the hit record (read by #167); the victim's script feeds it to `Move_Push` (#181) as knock-back |
+| layer | +0x0C | motion layer whose frame is checked (0 or 1) |
+| boneA, boneB | +0x0E / +0x10 | two of the attacker's own bones (body track numbers from `skeleton_animation.md`: 3 chest, 5 head, 9 / 13 left / right hand, 17 / 21 left / right foot, 18 / 22 toes ...). The hit is the line between them, swept from last frame's pose to this frame's. boneB < 0 = boneA and the bone above it (0x6F580) |
+| from, to | +0x38 / +0x3C | live animation frames (inclusive) |
+
+The check (`Attack_CheckHits` 0x6FB40, run for each character from 0x5B020) tests every live line against the
+level's characters (collision queries 0x19420 / 0x18E60), remembers who was already hit (up to 8 per window,
+0x6EB50) and writes the victim's hit record with `HitRecord_Set` (0x19910): +0 type, +2 level, +4 damage, +8 push,
++0xC attacker, +0x20 contact point, +0x30 direction. When every window has passed its last frame, the list is
+cleared.
+
+**Damage formula with real numbers.** Dealt = `N x power / 10`, power = character variable 43 (10 normally; the
+hero's `SUB POWERUP` sets 6..30). Taken = `dealt x 10 / defence`, defence = variable 44 (10 for everyone in the
+scripts). Whole numbers, rounded down. Right straight: 8 x 10 / 10 = 8 dealt, 8 x 10 / 10 = 8 life lost. With power
+13: 8 x 13 / 10 = 10. Rising kick (48P) at power 30: 144.
+
+### Life and stamina: why 400 in the table and 170 in the game (P4.6d)
+
+The `Life_Stmina` DATA table (row 0 = 400 / 400 / 500 / 500) is **never read**: no script calls `Data_Get` on table
+0 and the game code does not look it up by name. It is left-over data.
+
+The real values come from C code. `Life_InitMax` (0x48B40) sets max life and stamina of the life block
+(char+0x5AAC: +2 type, +4 life, +8 max life, +0xC stamina, +0x10 max stamina, +0x22 life level) from the character
+type, then multiplies life by a difficulty factor (`Life_DifficultyScale` 0x48AD0: byte 0x29C5EE, tables 0x244B58 /
+0x244B78 / 0x244B98).
+
+| Type | Max life (stamina) |
+|---|---|
+| 0 Derrick | by life level (block +0x22, set from the spawn / save data by 0x48E10): **0 -> 170** (0), 1 -> 250 (0), 2-3 -> 250 (150), 4-6 -> 400 (300), 7+ -> 600 (600) |
+| 1, 14 | 400 |
+| 2 | 75 |
+| 3 | 300 |
+| 4, 9 | 60 |
+| 6 | 1000 |
+| 7 | 25 |
+| 8, 11 | 120 |
+| 10 | 40 |
+| 12, 15, 16 | 100 |
+| others | 1 |
+
+Difficulty factor by the byte at 0x29C5EE (0..7) - Derrick: 1.6, 1.2, **1.0**, 0.667, 1.2, 1.0, 0.667, 0.5;
+type 1: 1, 1, 1, 0.5, 1, 1, 0.5, 0.5; most enemies: 0.667, 1, 1, 1.3, 0.75, 1, 1.3, 1.5; type 5: always 1.
+`Char_ApplySpawnLife` (0x504F0) then applies the spawn record (life level, saved life) and, for types 0 and 1 with
+a save loaded, scales by 0.9 / 0.8 / 0.7 by that same byte. So Derrick at the start (life level 0, factor 1.0) has
+**170**, as seen in the game; life upgrades raise it to 250, 400 and 600.
 
 ## 6. Who runs what
 
@@ -162,16 +247,14 @@ defence)`. Power and defence are character variables 43 and 44 (10 = 100 %), set
 
 ```
 scripts 2156, failed 0, states 11992, subs 6613, code blocks 24317, instructions 2204031
-opcodes used 46 of 65; game commands used 1009 of 1839 (highest #1835); named 87
+opcodes used 46 of 65; game commands used 1009 of 1839 (highest #1835); named 438
 ```
 Also run on `bhb_mo_hero` (295k lines of listing), `bhb_ai_g_enemy_sx_02`, `bhb_ai_g_enemy_at_01` and
 `bhb_ai_s02a03_010_sykj_SX` (hon_under) without errors. Listings are not committed (game data).
 
 ## 8. Open
 
-- Which pad button is which key-manager bit (0x800 = Attack 1, 0x200 = Attack 2 ...): the BTN names are known
-  (above), and Back/Start are traced; the face buttons and triggers go through the button table at 0x2A8C89
-  (0x22C80) whose default values were not read yet. One live look also settles it. (P4.6a)
-- 920 used game commands still have no name (they have signatures in `config/aas2_natives.csv`). (P4.6b)
-- Attack_Set arguments a, b, reach, c, and the part ids (1..22): what each means. (P4.6c)
-- `Life_Stmina` row 0 says 400 life, the game showed 170 for Derrick: find who reads the table. (P4.6d)
+- Which button layout (0..4) is the default setting, and where the key bits above 0xFFFF come from (0x54420). (P4.6e)
+- 575 used game commands still have no name; about 85 named ones are only "maybe" (`--natives` lists them). (P4.6f)
+- The difficulty byte 0x29C5EE: confirm which value is Easy / Normal / Hard (who writes it). (P4.6g)
+- Attack hit types 9, 10, 11, 16 and what the victim's script does with each. (P4.6h)
