@@ -111,3 +111,4 @@ reports/play/
 # WARMUP_SHADERS.cmd logs
 warmup_stderr.txt
 warmup_stdout.txt
+warmup_history.txt

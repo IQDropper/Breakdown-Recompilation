@@ -34,6 +34,7 @@ while ($Start -lt $stopAt) {
   while (-not $p.HasExited -and (Get-Date) -lt $limit) { Start-Sleep -Seconds 2 }
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; Start-Sleep -Seconds 2 }
   $txt = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+  if ($txt) { Add-Content (Join-Path $root 'warmup_history.txt') ("=== entries $Start..$($Start + $count - 1)" + [Environment]::NewLine + (($txt -split "`n" | Where-Object { $_ -match '\[WARMUP\]|\[CRASH\]|MAP-VIEWER|error' }) -join [Environment]::NewLine)) }
   $loaded = [regex]::Matches($txt, '\[WARMUP\] loaded entry (\d+)') | ForEach-Object { [int]$_.Groups[1].Value }
   $next = $Start
   if ($loaded) { $next = ($loaded | Measure-Object -Maximum).Maximum + 1 }
