@@ -445,6 +445,68 @@ static void subtitles_frame(void)
     }
 }
 
+/* P6.2: time the data manager's setup parts (RECOMP_LOAD_LOG). Each wrapper only measures and calls the original. */
+extern void sub_0001A870_gen(void);
+extern void sub_0001B1F0_gen(void);
+extern void sub_0001AA10_gen(void);
+extern void sub_0001ACE0_gen(void);
+extern void sub_0001B3A0_gen(void);
+void sub_0001A870(void)   /* Data_SetupTextures */
+{
+    double t;
+    if (!load_timer_on()) {
+        sub_0001A870_gen();
+        return;
+    }
+    t = load_timer_now();
+    sub_0001A870_gen();
+    load_timer_part(LT_TEX, load_timer_now() - t);
+}
+void sub_0001B1F0(void)   /* Data_SetupSounds */
+{
+    double t;
+    if (!load_timer_on()) {
+        sub_0001B1F0_gen();
+        return;
+    }
+    t = load_timer_now();
+    sub_0001B1F0_gen();
+    load_timer_part(LT_SOUND, load_timer_now() - t);
+}
+void sub_0001AA10(void)   /* Data_SetupModelBuffers */
+{
+    double t;
+    if (!load_timer_on()) {
+        sub_0001AA10_gen();
+        return;
+    }
+    t = load_timer_now();
+    sub_0001AA10_gen();
+    load_timer_part(LT_MODEL, load_timer_now() - t);
+}
+void sub_0001ACE0(void)   /* Data_SetupScripts */
+{
+    double t;
+    if (!load_timer_on()) {
+        sub_0001ACE0_gen();
+        return;
+    }
+    t = load_timer_now();
+    sub_0001ACE0_gen();
+    load_timer_part(LT_SCRIPT, load_timer_now() - t);
+}
+void sub_0001B3A0(void)   /* Data_MapIds (contains the four above) */
+{
+    double t;
+    if (!load_timer_on()) {
+        sub_0001B3A0_gen();
+        return;
+    }
+    t = load_timer_now();
+    sub_0001B3A0_gen();
+    load_timer_part(LT_MAPIDS, load_timer_now() - t);
+}
+
 void sub_00161680(void)
 {
     char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k, text;
