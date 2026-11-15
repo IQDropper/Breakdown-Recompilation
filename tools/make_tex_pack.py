@@ -6,6 +6,7 @@
    (an upscaled 4x image is fine). Formats read: .tga (32/24-bit, uncompressed), .png (8-bit RGBA/RGB/grey,
    non-interlaced), .dds (A8R8G8B8 or DXT5/BC3, with its mipmaps).
 3. python tools/make_tex_pack.py <images folder> <out.pack> [--include other.pack ...] [--no-mips] [--kind art|font|text]
+   [--jobs N]  (N processes make the mipmaps; the pack is written one texture at a time, so any size fits)
    Then run the game with RECOMP_TEXTURES_PACK=<out.pack> (absolute, or relative to the exe's folder).
 
 Alpha is kept. Mipmaps are made with a 2x2 box filter (DDS keeps its own). --include copies the entries of
@@ -141,42 +142,81 @@ def mip_chain(w, h, rgba):
     return len(levels), b"".join(levels)
 
 
+def read_pack_index(path):
+    """Entries of an existing XRTP pack without loading the payloads: (hash, w, h, levels, flags, offset, size)."""
+    with open(path, "rb") as f:
+        head = f.read(32)
+        if head[:4] != b"XRTP":
+            raise ValueError("%s is not a texture pack" % path)
+        _ver, count, _scale, index = struct.unpack_from("<IIIQ", head, 4)
+        f.seek(index)
+        raw = f.read(32 * count)
+        f.seek(0, 2)
+        total = f.tell()
+    rows = [struct.unpack_from("<QIIIIQ", raw, 32 * i) for i in range(count)]
+    starts = sorted(set(r[5] for r in rows)) + [total]
+    nxt = {starts[i]: starts[i + 1] for i in range(len(starts) - 1)}
+    return [(hsh, w, h, lv, fl, off, nxt[off] - off) for hsh, w, h, lv, fl, off in rows]
+
+
 def read_pack(path):
-    """Entries of an existing XRTP pack: (hash, w, h, levels, flags, payload)."""
-    d = open(path, "rb").read()
-    if d[:4] != b"XRTP":
-        raise ValueError("%s is not a texture pack" % path)
-    ver, count, _scale, index = struct.unpack_from("<IIIQ", d, 4)
-    offs = []
-    for i in range(count):
-        hsh, w, h, lv, fl, off = struct.unpack_from("<QIIIIQ", d, index + 32 * i)
-        offs.append((hsh, w, h, lv, fl, off))
+    """Entries of an existing XRTP pack: (hash, w, h, levels, flags, payload). Loads every payload."""
     out = []
-    for i, (hsh, w, h, lv, fl, off) in enumerate(offs):
-        end = offs[i + 1][5] if i + 1 < len(offs) else len(d)
-        ends = sorted(o[5] for o in offs if o[5] > off)
-        end = ends[0] if ends else len(d)
-        out.append((hsh, w, h, lv, fl, d[off:end]))
+    with open(path, "rb") as f:
+        for hsh, w, h, lv, fl, off, size in read_pack_index(path):
+            f.seek(off)
+            out.append((hsh, w, h, lv, fl, f.read(size)))
     return out
 
 
+def load_image(job):
+    """(path, kind, mips) -> (w, h, levels, flags, payload) for one replacement image."""
+    path, kind, mips = job
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".dds":
+        w, h, lv, payload, bc3 = read_dds(path)
+        return w, h, lv, kind | (FLAG_BC3 if bc3 else 0), payload
+    w, h, rgba = read_tga(path) if ext == ".tga" else read_png(path)
+    if mips:
+        lv, payload = mip_chain(w, h, rgba)
+    else:
+        lv, payload = 1, to_bgra(rgba)
+    return w, h, lv, kind, payload
+
+
 def write_pack(path, entries):
-    entries = sorted(entries, key=lambda e: e[0])
+    """entries: (hash, w, h, levels, flags, payload) tuples, all in memory (small packs)."""
+    def gen():
+        for e in sorted(entries, key=lambda e: e[0]):
+            yield e
+    write_pack_stream(path, len(entries), gen())
+
+
+def write_pack_stream(path, count, entries):
+    """Write a pack one payload at a time. entries yields (hash, w, h, levels, flags, payload) in hash order;
+    count is how many it yields. Only the index is held in memory."""
     hdr = 32
-    off = hdr + 32 * len(entries)
-    index, blobs = b"", []
-    pos = off
-    for hsh, w, h, lv, fl, payload in entries:
-        index += struct.pack("<QIIIIQ", hsh, w, h, lv, fl, pos)
-        blobs.append(payload)
-        pos += len(payload)
-    head = b"XRTP" + struct.pack("<IIIQII", 2, len(entries), 1, hdr, 1, 0)
+    pos = hdr + 32 * count
+    index = []
     with open(path, "wb") as f:
-        f.write(head + index + b"".join(blobs))
+        f.seek(pos)
+        last = -1
+        for hsh, w, h, lv, fl, payload in entries:
+            if hsh <= last:
+                raise ValueError("entries must come in increasing hash order")
+            last = hsh
+            index.append(struct.pack("<QIIIIQ", hsh, w, h, lv, fl, pos))
+            f.write(payload)
+            pos += len(payload)
+        if len(index) != count:
+            raise ValueError("expected %d entries, got %d" % (count, len(index)))
+        f.seek(0)
+        f.write(b"XRTP" + struct.pack("<IIIQII", 2, count, 1, hdr, 1, 0))
+        f.write(b"".join(index))
 
 
 def main(argv):
-    args, includes, mips, kind = [], [], True, 0
+    args, includes, mips, kind, jobs = [], [], True, 0, 1
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -189,6 +229,9 @@ def main(argv):
         elif a == "--kind":
             kind = KINDS[argv[i + 1]]
             i += 1
+        elif a == "--jobs":
+            jobs = max(1, int(argv[i + 1]))
+            i += 1
         else:
             args.append(a)
         i += 1
@@ -196,35 +239,48 @@ def main(argv):
         print(__doc__)
         return 2
     src, out = args
-    entries = {}
+    # hash -> where its payload comes from; later sources replace earlier ones (images replace includes).
+    plan = {}
     for inc in includes:
-        for e in read_pack(inc):
-            entries[e[0]] = e
+        for hsh, w, h, lv, fl, off, size in read_pack_index(inc):
+            plan[hsh] = ("pack", inc, (hsh, w, h, lv, fl, off, size))
         print("included %s" % inc)
     for name in sorted(os.listdir(src)):
         m = HASH_RE.match(name)
         ext = os.path.splitext(name)[1].lower()
         if not m or ext not in (".tga", ".png", ".dds"):
             continue
-        hsh = int(m.group(1), 16)
-        path = os.path.join(src, name)
-        if ext == ".dds":
-            w, h, lv, payload, bc3 = read_dds(path)
-            fl = kind | (FLAG_BC3 if bc3 else 0)
-        else:
-            w, h, rgba = read_tga(path) if ext == ".tga" else read_png(path)
-            if mips:
-                lv, payload = mip_chain(w, h, rgba)
-            else:
-                lv, payload = 1, to_bgra(rgba)
-            fl = kind
-        entries[hsh] = (hsh, w, h, lv, fl, payload)
-        print("%016X  %4dx%-4d  %2d level(s)  %s" % (hsh, w, h, lv, name))
-    if not entries:
+        plan[int(m.group(1), 16)] = ("img", os.path.join(src, name), None)
+    if not plan:
         print("[error] no images named <hash16>... in %s" % src)
         return 1
-    write_pack(out, list(entries.values()))
-    print("wrote %s: %d entries. Run with RECOMP_TEXTURES_PACK=%s" % (out, len(entries), os.path.abspath(out)))
+    order = sorted(plan)
+    img_jobs = [(plan[h][1], kind, mips) for h in order if plan[h][0] == "img"]
+    files = {}
+
+    def produce(images):
+        for hsh in order:
+            what, where, row = plan[hsh]
+            if what == "pack":
+                f = files.get(where) or files.setdefault(where, open(where, "rb"))
+                f.seek(row[5])
+                yield (hsh,) + row[1:5] + (f.read(row[6]),)
+            else:
+                w, h, lv, fl, payload = next(images)
+                print("%016X  %4dx%-4d  %2d level(s)  %s" % (hsh, w, h, lv, os.path.basename(where)))
+                yield (hsh, w, h, lv, fl, payload)
+
+    try:
+        if jobs > 1 and len(img_jobs) > 1:
+            import multiprocessing
+            with multiprocessing.Pool(jobs) as pool:
+                write_pack_stream(out, len(order), produce(pool.imap(load_image, img_jobs, chunksize=1)))
+        else:
+            write_pack_stream(out, len(order), produce(map(load_image, img_jobs)))
+    finally:
+        for f in files.values():
+            f.close()
+    print("wrote %s: %d entries. Run with RECOMP_TEXTURES_PACK=%s" % (out, len(order), os.path.abspath(out)))
     return 0
 
 
