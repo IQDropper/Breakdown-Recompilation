@@ -16538,5 +16538,10 @@
   "start": "0x9fc60",
   "source": "stub hit 2026-11-14: called (tail jmp) from 0x739A0 <- 0x4DF60, map viewer Annex; bytes before it are a jump table",
   "observed": true
+ },
+ {
+  "start": "0x1b2c2e",
+  "source": "P3.3 2026-11-14: real code, CRT x87 exit (fstp st0; fldz; ret) jumped to from 0x1B2A24 and 0x1B2A5A; was an unresolved stub that did only a bare ret",
+  "observed": false
  }
 ]

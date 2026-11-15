@@ -1,0 +1,132 @@
+[
+ {
+  "note": "P3.3: byte ranges inside code sections that are DATA (switch tables, codec tables, strings), proven one by one. patch_data_spots.py makes the translator skip these bytes: a function that starts inside one is dropped, an instruction inside one is not translated. Each range was decoded as code before and produced the 19 'unresolved' stubs listed per entry. Only entries with \"data\" are read; tools.disasm reads this file as a seed file and finds no \"start\" in it."
+ },
+ {
+  "data": "0x36034",
+  "end": "0x36100",
+  "owner": "0x35AF0",
+  "what": "two switch jump tables (at 0x36034 and 0x36044, dwords pointing back into 0x35B00-0x36020) and a byte index table (0x360CC) after the function's last ret, then int3 padding",
+  "read_by": "0x35B3C jmp [eax*4+0x36034]; 0x35B72 jmp [eax*4+0x36044]; 0x35B6A movzx eax, byte [eax+0x360CC]",
+  "stubs": [
+   "0x36103",
+   "0x270363F2"
+  ]
+ },
+ {
+  "data": "0xD7878",
+  "end": "0xD7890",
+  "owner": "0xD7750",
+  "what": "switch jump table (5 dwords 0x000D77xx) after the ret at 0xD7875, then int3 padding",
+  "read_by": "0xD7773 jmp [eax*4+0xD7878]",
+  "stubs": [
+   "0xD7894"
+  ]
+ },
+ {
+  "data": "0xE7944",
+  "end": "0xE7960",
+  "owner": "0xE7870",
+  "what": "switch jump table (4 dwords 0x000E78xx/0x000E79xx) after the tail jmp at 0xE793E, then int3 padding",
+  "read_by": "0xE78AA jmp [eax*4+0xE7944]",
+  "stubs": [
+   "0xE7961"
+  ]
+ },
+ {
+  "data": "0xE7B88",
+  "end": "0xE7BA0",
+  "owner": "0xE7A60",
+  "what": "switch jump table (5 dwords 0x000E7Axx/0x000E7Bxx) after the ret at 0xE7B85, then int3 padding",
+  "read_by": "0xE7A83 jmp [eax*4+0xE7B88]",
+  "stubs": [
+   "0xE7BA5"
+  ]
+ },
+ {
+  "data": "0xFE220",
+  "end": "0xFE230",
+  "owner": "0xFE1A0",
+  "what": "switch jump table (4 dwords 0x000FE1C2/0x000FE1EF) after the ret at 0xFE21C",
+  "read_by": "0xFE1BB jmp [eax*4+0xFE220]",
+  "stubs": [
+   "0xFE23A",
+   "0xFE23E"
+  ]
+ },
+ {
+  "data": "0x127244",
+  "end": "0x127260",
+  "owner": "0x127090",
+  "what": "switch jump table (6 dwords 0x001271xx) after the jmp at 0x127241, then int3 padding",
+  "read_by": "0x127145 jmp [edi*4+0x127244]",
+  "stubs": [
+   "0x127261",
+   "0x127269"
+  ]
+ },
+ {
+  "data": "0x1B0FD8",
+  "end": "0x1B0FE8",
+  "owner": "0x1B0FBC (an arm of the CRT memcpy)",
+  "what": "memcpy's 4-entry jump table for the 0-3 trailing bytes (dwords 0x001B0FE8, 0x001B0FF0, 0x001B1000, 0x001B1014); real code (the arms) follows at 0x1B0FE8 and stays",
+  "read_by": "0x1B0EAB, 0x1B0ED8, 0x1B0F06, 0x1B0F30, 0x1B0F62, 0x1B0FCF jmp [reg*4+0x1B0FD8]",
+  "stubs": [
+   "0xF01B2AEC"
+  ]
+ },
+ {
+  "data": "0x1E47F0",
+  "end": "0x1E5C2B",
+  "owner": "none: 'functions' 0x1E47F0 and 0x1E4870 (XMV section) were seeds from a pointer table (@0x203BD0, @0x203BCC)",
+  "what": "XMV video codec tables: three 8x8 scan orders (each 64 bytes is a shuffle of 0..63: 00 01 02 08 03 ..., 00 01 08 10 09 02 ...), then 16-bit code tables",
+  "read_by": "XMV code passes their addresses as data: 0x1DE7B7 push 0x1E4870; 0x1DE04B/0x1DEE1C 0x1E4A60; 0x1DE052 0x1E50F8; 0x1DE05B 0x1E5640; 0x1DE0F2 0x1E48F8",
+  "stubs": [
+   "0x0825480F",
+   "0x08254D55",
+   "0xB822142E"
+  ]
+ },
+ {
+  "data": "0x1FE3D0",
+  "end": "0x200F03",
+  "owner": "none: 27 'functions' here were guesses (15 seeds from pointer tables in XPP/DOLBY data, e.g. 0x1FE3D0 @0x203A58, 0x2000BA @0x457B10, 0x2000D0 @0x45A260, plus 12 split off them); nothing calls or jumps here from outside",
+  "what": "XMV video codec tables, one continuous run of 16-bit values (0A 00 02 00 ..., 55 00 66 00 76 00 88 00 ...): in every 256-byte block over 90% of the high bytes are below 0x20",
+  "read_by": "XMV code takes table addresses as data: 0x1C03E3/0x1CBD9D 0x200260; 0x1C8041 0x200A30; 0x1CBDA8 0x200AA0; 0x1CBD8D 0x200AC0; 0x1C29B6 0x200B80; 0x19546A 0x200C20",
+  "stubs": [
+   "0xE822D321",
+   "0xA321F804"
+  ]
+ },
+ {
+  "data": "0x202914",
+  "end": "0x202EC3",
+  "owner": "none: 'functions' 0x202914 and 0x202A41 (XMV) were seeds from pointer tables (@0x459AC4 and @0x45600C, the DOLBY section)",
+  "what": "XMV codec table of 16-bit values (04 00 04 00 ... 44 00 ..., 00 23 00 23 ..., 76 00 87 00 ...)",
+  "read_by": "only the data pointer at 0x45600C; no code jumps or calls here",
+  "stubs": [
+   "0x582117C3"
+  ]
+ },
+ {
+  "data": "0x203E38",
+  "end": "0x203E90",
+  "owner": "none: 'function' 0x203E38 (XPP) was split off the seeded 0x203DF4",
+  "what": "XPP (USB/memory unit driver) data structures: zero words and self pointers (0x00203E38, 0x00203E48, 0x00203E50, 0x00203E88)",
+  "read_by": "0x2054F5 mov edi, 0x203E80; 0x205625/0x205643/0x205706 push 0x203E80",
+  "stubs": [
+   "0x203DFC"
+  ]
+ },
+ {
+  "data": "0x20BB48",
+  "end": "0x20BB88",
+  "owner": "none: 'function' 0x20BB48 (end of XPP) was found by the int3-boundary rule",
+  "what": "strings \"\\Device\\MU_0\", \"\\Device\\MU_%x\" and \"951F0EF630DC46d9_CORRUPT_SECTOR\" (memory unit names); zero bytes follow in .rdata. Earlier notes called 0x20BBB6/0x20BBC6 tail code of 0x20BB48: it is not, both are zero bytes",
+  "read_by": "0x203F65 push 0x20BB48; 0x20514B 0x20BB58; 0x205943/0x205C0E 0x20BB68",
+  "stubs": [
+   "0x20BBB6",
+   "0x20BBC6"
+  ]
+ }
+]

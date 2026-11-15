@@ -40,8 +40,10 @@ llvm_mingw = "20260922"
 game_name = "breakdown"
 gen = "src/recomp/gen"
 out = "analysis"
-# Function starts the disassembler missed (ICALL failures at runtime).
-seeds = ["config/seed_functions.json"]
+# Function starts the disassembler missed (ICALL failures at runtime), and
+# data_spots.json: byte ranges proven to be data, which the translator skips
+# (patch_data_spots.py; tools.disasm finds no "start" in it).
+seeds = ["config/seed_functions.json", "config/data_spots.json"]
 # The toolkit's icall_feedback database belongs to another game: off.
 icall_seeds = false
 exclude_manual = "src/recomp_manual.c"
