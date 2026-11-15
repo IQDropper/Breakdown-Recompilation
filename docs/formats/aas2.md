@@ -5,7 +5,7 @@ This page explains the file layout, the interpreter in `default.xbe`, every opco
 plays animations, deals damage, branches and calls. Worked out statically (no game run) on 2026-11-14.
 
 Tools: `tools/aas2_dis.py` (disassembler, move table) and `config/aas2_natives.csv` (the 1,839 game commands;
-438 named, covering the most-used ones). Function names: `config/function_names.csv` (section "AAS2 script interpreter").
+all 1,009 commands the scripts use are named, with a confidence and a reason per name). Function names: `config/function_names.csv` (section "AAS2 script interpreter").
 
 **In one paragraph:** each script is a set of **states** (a start block, a run block that runs every frame, a stop
 block) plus **subroutines** and **data tables**. The code is a small stack machine with 65 opcodes; the game's own
@@ -231,6 +231,37 @@ type 1: 1, 1, 1, 0.5, 1, 1, 0.5, 0.5; most enemies: 0.667, 1, 1, 1.3, 0.75, 1, 1
 a save loaded, scales by 0.9 / 0.8 / 0.7 by that same byte. So Derrick at the start (life level 0, factor 1.0) has
 **170**, as seen in the game; life upgrades raise it to 250, 400 and 600.
 
+### Naming every command (P4.6f)
+
+All 1,009 commands that scripts call now have a name (before: 434). Each was named from its handler's code (what it
+reads and writes, which engine functions it calls) and from how the scripts call it (arguments, nearby debug
+strings, where the result goes). The `confidence` column says how sure: **sure** 172, **likely** 328, **maybe** 501,
+**guess** 8. The handlers are in `config/function_names.csv` as `Script_<Command>`.
+
+What came out of it:
+
+- **Sounds.** `Char_PlaySound(kind)` #627 (1,858 calls) and `Char_PlaySoundEx(kind, variant, bone)` #704 both go to
+  0x74F70 on char+0x5B30: kind 0..15, the sound picked per character type from tables at 0x24A220.. and passed
+  through `Sound_RemapByArea`. #704 was called `Target_Set` before (a guess).
+- **Life block** (char+0x5AAC): +4 life, +8 max life, +0xC stamina, +0x10 max stamina, +0x1C flags. So the old
+  `AI_GetPosInt` #431 is really `AI_Life`. `Life_SetFlag1` #40 / `Life_SetFlags12` #1486 set flags 1 and 2.
+  `AI_LifeLock` #727, `Char_LifeLock` #1579 and `Char_LifeLockOf` #1719 share the same lock handlers.
+- **Difficulty**: `Difficulty_Get` #1724 and #1660 return the byte at 0x29C5EE (see P4.6g).
+- **Data tables**: `Data_GetFloat(table, row, col)` #355 (was `Effect_Command`) reads a float DATA table, e.g. table
+  392 by `Char_GetType()`. #354 / #356 are the 2- and 3-index forms.
+- **Near lists**: three object lists the AI filters and sorts: 0x380FF8 (characters, `Near_*`), 0x381290
+  (`Near2_*`) and 0x381528 (`Near3_*`). `Near_FirstId` #1455 (was `Event_GetCurrent`) returns the first entry.
+- **Lock-on** (char+0x4F54): `Lock_HasTarget` #185 (was `Char_HasLight`), `Lock_Start` #182, `Lock_Cancel` #184,
+  `Lock_GetTargetId` #410; debug strings 'LockOnF', 'lock cansel'.
+- **Captions / voice** (char+0x4F98): `Caption_Play` #532, `Caption_PlayData` #1797, `Caption_StopChar` #1128.
+- **Pad**: raw axes `Pad_Axis0/1` #1559 / #1560; vibration `Pad_Vibrate*` #1498-#1500, #1545, #1546 (strength -1..1,
+  8..240 frames); `Option_LookSpeed` #1764 is a pad setting the hero uses to scale look speed.
+- **Screen and sound**: `Fade_In` #925, `Fade_Out2` #1517, `Fade_OutColor` #1518, `Volume_FadeIn/Out` #1770 / #1771
+  ('MASTER_VOL' task), `Movie_Play(name)` #1254 ('ED_01', 'alex_death'...), `Stream_PlayName` #932.
+- **Slow motion**: `Hero_SlowMotion(scale, recover, frames)` #1754 sets the game time scale for Derrick's hits.
+- **Empty in retail**: #82, #106, #151, #157, #820, #851, #897, #1032, #1061, #1091 call the empty debug print
+  (0x161680, a bare `ret`); they are named `Nop_<n>`.
+
 ## 6. Who runs what
 
 - `bhb_mo_hero` (773 KB, 603 states, 156 subs, 398 data tables) is the move set of **every fighting character**:
@@ -247,7 +278,7 @@ a save loaded, scales by 0.9 / 0.8 / 0.7 by that same byte. So Derrick at the st
 
 ```
 scripts 2156, failed 0, states 11992, subs 6613, code blocks 24317, instructions 2204031
-opcodes used 46 of 65; game commands used 1009 of 1839 (highest #1835); named 438
+opcodes used 46 of 65; game commands used 1009 of 1839 (highest #1835); named 1013
 ```
 Also run on `bhb_mo_hero` (295k lines of listing), `bhb_ai_g_enemy_sx_02`, `bhb_ai_g_enemy_at_01` and
 `bhb_ai_s02a03_010_sykj_SX` (hon_under) without errors. Listings are not committed (game data).
@@ -255,6 +286,7 @@ Also run on `bhb_mo_hero` (295k lines of listing), `bhb_ai_g_enemy_sx_02`, `bhb_
 ## 8. Open
 
 - Which button layout (0..4) is the default setting, and where the key bits above 0xFFFF come from (0x54420). (P4.6e)
-- 575 used game commands still have no name; about 85 named ones are only "maybe" (`--natives` lists them). (P4.6f)
+- About 500 command names are only "maybe" (read from the code once). Confirm the most used ones in play, starting
+  with the AI sense/hit-record readers (#1591, #1642, #1646, AI_SensedValue*) and the weapon-box slot fields. (P4.6f rest)
 - The difficulty byte 0x29C5EE: confirm which value is Easy / Normal / Hard (who writes it). (P4.6g)
 - Attack hit types 9, 10, 11, 16 and what the victim's script does with each. (P4.6h)

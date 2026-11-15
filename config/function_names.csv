@@ -1,5 +1,5 @@
 address,name,system,confidence,evidence
-# Hand names from our own research. confidence: sure (behaviour seen or code read end to end) / likely (one strong clue).
+# Hand names from our own research. confidence: sure (behaviour seen or code read end to end) / likely (one strong clue) / maybe (read from the code once, meaning not yet confirmed in play).
 # Rows here win over every other source. Keep one name per address; prefix = system (Data_, Hero_, Char_, ...).
 0x1A2D0,Data_FindEntry,engine,sure,"(kind, id) -> pak entry header; kit reports/research/flash-scare.md"
 0x1A330,Data_GetPointer,engine,sure,"(kind, id) -> data pointer (base + entry+0x10); flash-scare.md, RECOMP_ANIM_LOG wrapper"
@@ -640,6 +640,572 @@ address,name,system,confidence,evidence
 0x9FAE0,Sound_RemapByArea,sound,likely,"swaps some sound effect ids for area-specific ones (area byte 0x29C5F5)"
 0x157320,Rumble_Stop,input,likely,"stops a rumble pattern on a controller (all if -1)"
 0x50190,Char_SetMotScript,script,likely,"gives a character a new motion script (name must start with bhb_mo / mo_), keeps the old one"
+# Game-command handlers named in P4.6f (config/aas2_natives.csv; the "calls" column). Script_<Command> = the C function behind a script command.
+0x7C1C0,Script_AISetView2F4,script,maybe,game command AI_SetView2F4 (#429): AI brain +0x14 block +0x2F4 (0x79950)
+0x7C200,Script_AISetLifeValue26,script,maybe,game command AI_SetLifeValue26 (#427): AI's character life block +0x26 = v (0x49050)
+0x7C300,Script_AILifeUpdated,script,likely,game command AI_LifeUpdated (#1100): life of the AI's character after 0x48AB0 updates it (char+0x5AB0)
+0x7C330,Script_AILife,script,sure,game command AI_Life (#431): life of the AI's character as a whole number (char+0x5AB0); was AI_GetPosInt
+0x7C350,Script_AILifeMax,script,likely,game command AI_LifeMax (#432): max life of the AI's character (char+0x5AB4)
+0x7C390,Script_AIStaminaAdd,script,likely,"game command AI_StaminaAdd (#1101): adds n to the AI character's stamina, returns stamina (Stamina_Add 0x48FE0)"
+0x7C3D0,Script_AIStamina,script,likely,"game command AI_Stamina (#1102): stamina of the AI's character (char+0x5AB8, after 0x48AC0)"
+0x7C400,Script_AIStaminaRaw,script,likely,game command AI_StaminaRaw (#434): stamina of the AI's character (char+0x5AB8)
+0x7C420,Script_AIStaminaMax,script,likely,game command AI_StaminaMax (#435): max stamina of the AI's character (char+0x5ABC)
+0x7C460,Script_AICharPowerMode,script,likely,game command AI_CharPowerMode (#1621): power mode (+0x5ACE) of the AI's character
+0x7C480,Script_AICharMotionId,script,likely,game command AI_CharMotionId (#1221): AI's character current motion id of part 0/1 (+0x4F2 / +0x652; debug 'HE motion ID')
+0x7C680,Script_CharSetPosOf,script,sure,game command Char_SetPosOf (#833): puts character id at x y z (0x49AB0)
+0x7C6A0,Script_CharSetYawOf,script,sure,game command Char_SetYawOf (#834): turns character id to a yaw (Char_SetRotation)
+0x7C6E0,Script_AISetObjPos,script,maybe,game command AI_SetObjPos (#1805): AI's object position (0x3AED0)
+0x7C710,Script_AISetObjYaw,script,maybe,game command AI_SetObjYaw (#1806): AI's object +0x1B8 angle (0x3AF70)
+0x7C740,Script_AIPointFromHome,script,maybe,game command AI_PointFromHome (#1544): AI point slot = the AI object's home point (0x3AF00); was AI_PointSetObj
+0x7C770,Script_AIHomeRadius,script,maybe,game command AI_HomeRadius (#1561): float +0x1BC of the AI's object (0x3AF30); 0 = territory not set (debug 'Not set territory range!!'); was AI_GetObjF1BC
+0x7C780,Script_AIObjYaw1B8,script,maybe,game command AI_ObjYaw1B8 (#1567): AI's object +0x1B8 angle in degrees (0x3AF50)
+0x7C7B0,Script_AIDistFromHome,script,maybe,game command AI_DistFromHome (#1568): distance from the AI's character to its object's home point (0x3AF00 / 0x3BEA0); scripts compare it with AI_HomeRadius
+0x7CA40,Script_AILastAttackerKind,script,likely,"game command AI_LastAttackerKind (#1024): kind of the AI character's last attacker: 1 character, 4, 2/3 by 0x167560, 100 other, 0 none (0x7C9C0)"
+0x7CA60,Script_CharLastAttackerKindOf,script,likely,game command Char_LastAttackerKindOf (#1025): same as AI_LastAttackerKind for character id (0x7C9C0)
+0x7CB20,Script_CharHitInfoOf,script,maybe,game command Char_HitInfoOf (#1018): hit list (char+0x4D80/+0x4D88) value of character id
+0x7CB60,Script_AIGetPitchTo,script,maybe,game command AI_GetPitchTo (#438): pitch of the AI's character (0xA6DF0) in degrees
+0x7CC30,Script_CharLastAttackerOf,script,likely,"game command Char_LastAttackerOf (#1021): id of the last attacker of character id (hit list char+0x4D80), -1 if none"
+0x7CD00,Script_AIWallFlag10,script,maybe,game command AI_WallFlag10 (#1332): AI's character wall-contact bits (+0x5C4C..+0x5C54) test with 0x10 (0x7CC80)
+0x7D020,Script_CharLifeOfId,script,likely,game command Char_LifeOfId (#1104): life of character id (char+0x5AB0 after 0x48AB0)
+0x7D080,Script_LifeMaxOf,script,likely,game command LifeMax_Of (#448): max life of character id (life block +8 = char+0x5AB4)
+0x7D230,Script_CharLifeTypeOf,script,maybe,"game command Char_LifeTypeOf (#443): life block +0 (char+0x5AAC word) of character id, -1 if none (debug 'ko:')"
+0x7D2B0,Script_CharYawById,script,likely,game command Char_YawById (#764): yaw of character id in degrees (0x7C080)
+0x7D300,Script_AIGet10,script,maybe,game command AI_Get10 (#1138): AI brain +0x10 (int)
+0x7D490,Script_CharModeById,script,likely,game command Char_ModeById (#1489): char+0x5FC0 of character id (same field as Char_GetMode)
+0x7D4B0,Script_CharValue7D4B0,script,maybe,game command Char_Value7D4B0 (#1802): value n of character id (0x7D4B0)
+0x7D510,Script_CharPointerOf,script,maybe,"game command Char_PointerOf (#608): AI-list pointer n (0..39, +0x4C) of character id's brain (0x5F1D0); checks the object is a character"
+0x7D660,Script_HeightBetween,script,maybe,game command Height_Between (#838): height difference between characters a and b
+0x7D7A0,Script_AIPitchToChar,script,likely,game command AI_PitchToChar (#842): pitch from the AI's character to character id (0x6D4A0)
+0x7D8C0,Script_CharLifeLockOf,script,likely,game command Char_LifeLockOf (#1719): life lock on character id (same handlers as AI_LifeLock: 0x48A20 / 0x48A00 / 0x48A10)
+0x7D970,Script_CharValue7D310,script,maybe,game command Char_Value7D310 (#1721): value of character id from 0x7D310
+0x7D9B0,Script_AIGetLevel430,script,likely,game command AI_GetLevel430 (#859): brain+0x430 (same field as AI_SetLevel430)
+0x7D9C0,Script_AILevelOf,script,likely,game command AI_LevelOf (#860): brain+0x430 of character id
+0x7DB10,Script_NearFindChar,script,maybe,game command Near_FindChar (#1198): searches living characters near object id (0x79EE0)
+0x7DBA0,Script_HeliState,script,maybe,"game command Heli_State (#1068): helicopter state (0x16D230 / 0x16D280), -1 if none"
+0x7DBC0,Script_HeliSetPoint,script,maybe,game command Heli_SetPoint (#1069): helicopter target = AI point slot (0x16D2B0)
+0x7DBF0,Script_HeliSetPoint2,script,maybe,game command Heli_SetPoint2 (#1135): helicopter target from AI point slot (0x16D300)
+0x7DC50,Script_NearCollectAll,script,likely,game command Near_CollectAll (#1773): near list (0x380FF8) of every living character (0xA7420 with no self)
+0x7DC90,Script_NearSetValue,script,maybe,game command Near_SetValue (#1279): near list (0x380FF8) value (0xA7250)
+0x7DCF0,Script_NearTrim,script,maybe,game command Near_Trim (#1581): keeps the first n entries of the near list (0xA7310)
+0x7DD40,Script_NearPickFirst2D8,script,maybe,game command Near_PickFirst2D8 (#1283): first entry of the near list (0x380FF8) -> AI's +0x2D4/+0x2D8 (object + id); 0 if list empty
+0x7DD80,Script_NearPickFirst2E4,script,maybe,game command Near_PickFirst2E4 (#1284): first entry of the near list (0x380FF8) -> AI's +0x2E4/+0x2E8 (look target object + id); 0 if empty
+0x7DE00,Script_NearIdAt,script,likely,game command Near_IdAt (#1779): object id at entry i of the near list
+0x7DE30,Script_NearFirstId,script,sure,"game command Near_FirstId (#1455): id of the first entry in the near list (0x380FF8), -1 if empty (debug labels S_NEAR / S_ONE); was Event_GetCurrent"
+0x7DE60,Script_NearIndexOf,script,likely,game command Near_IndexOf (#1780): index of object id in the near list (0xA6EB0)
+0x7DEC0,Script_NearCollectCone,script,likely,game command Near_CollectCone (#1286): fills the near list (0x380FF8) with objects around id inside distance and angle limits (0xA7720)
+0x7DF10,Script_NearCollectCone2,script,maybe,game command Near_CollectCone2 (#1328): fills the near list around the AI's character (0xA77B0)
+0x7DFA0,Script_NearCollectConeSelf,script,likely,game command Near_CollectConeSelf (#1289): fills the near list around the AI's character inside limits (0xA7840)
+0x7DFF0,Script_NearCollectConeOf,script,likely,game command Near_CollectConeOf (#1290): fills the near list around object id inside limits (0xA7840)
+0x7E0E0,Script_NearFilterSelf2,script,maybe,game command Near_FilterSelf2 (#1293): filters the near list against the AI's object (0xA7990)
+0x7E200,Script_NearFilterSelf,script,maybe,game command Near_FilterSelf (#1299): filters the near list (0x380FF8) against the AI's object (0xA7A90)
+0x7E230,Script_NearFilterById,script,maybe,game command Near_FilterById (#1300): filters the near list (0x380FF8) against object id (0xA7A90)
+0x7E660,Script_NearFilterType,script,maybe,game command Near_FilterType (#1309): filters the near list by character type (0xA8240)
+0x7E680,Script_NearFilterNotType,script,maybe,game command Near_FilterNotType (#1310): filters the near list by character type (0xA82A0)
+0x7E6A0,Script_NearScoreType,script,maybe,game command Near_ScoreType (#1311): adds score for character type in the near list (0xA8300)
+0x7E730,Script_NearRemove2,script,maybe,game command Near_Remove2 (#1314): removes object id from the near list (0xA8400)
+0x7EA70,Script_NearFilterKind,script,maybe,game command Near_FilterKind (#1338): filters the near list (0x380FF8) by n (0xA8B70)
+0x7EAB0,Script_NearFilterLevel,script,maybe,game command Near_FilterLevel (#1340): filters the near list by brain level +0x430 (0xA8BF0)
+0x7ECC0,Script_Near3Sort,script,likely,game command Near3_Sort (#1357): sorts the third near list (0x381528) (0xA7160)
+0x7ECD0,Script_Near3Shuffle,script,likely,game command Near3_Shuffle (#1358): shuffles the third near list (0xA71C0 uses Rand)
+0x7ED80,Script_Near3Count,script,sure,game command Near3_Count (#1362): number of entries in the third near list (0x381528)
+0x7EDF0,Script_AIPointFromNear3,script,likely,game command AI_PointFromNear3 (#1446): AI point slot = position of the first object in the third near list
+0x7EE40,Script_AIPointFromNear3b,script,maybe,game command AI_PointFromNear3b (#1447): AI point slot from the first object in the third near list (variant)
+0x7EE90,Script_Near3FirstOwnerId,script,likely,"game command Near3_FirstOwnerId (#1448): id of the owner (+0x1B4) of the first object in the third near list, -1 if none; fed to AI_SetTarget"
+0x7EF30,Script_Near3CollectCone,script,likely,game command Near3_CollectCone (#1364): fills the third near list (0x381528) with objects around the AI's character inside distance/angle limits (0xA9280)
+0x7EF70,Script_Near3CollectConeOf,script,likely,game command Near3_CollectConeOf (#1365): fills the third near list around object id (0xA9280)
+0x7F1F0,Script_Near3FilterSelf,script,maybe,game command Near3_FilterSelf (#1374): filters the third near list against the AI's object (0xA9420)
+0x7F220,Script_Near3FilterById,script,maybe,game command Near3_FilterById (#1375): filters the third near list against object id (0xA9420)
+0x7F2E0,Script_Near3FilterById2,script,maybe,game command Near3_FilterById2 (#1379): filters the third near list against object id (0xA9530)
+0x7F770,Script_Near3FilterKind,script,maybe,game command Near3_FilterKind (#1396): filters the third near list (0x381528) by n (0xA9970)
+0x7FE30,Script_Near2FirstValue1D2,script,maybe,"game command Near2_FirstValue1D2 (#1714): +0x1D2 of the first object in the second near list, -1 if empty"
+0x7FF90,Script_Near2CollectConeSelf,script,maybe,game command Near2_CollectConeSelf (#1683): fills the second near list around the AI's object (0xAA0B0)
+0x80280,Script_Near2FilterDist,script,maybe,game command Near2_FilterDist (#1695): filters the second near list (0x381290) by distance from the AI's character (0xAA350)
+0x802E0,Script_Near2FilterKind,script,maybe,game command Near2_FilterKind (#1697): filters the second near list (0x381290) by n (0xAA430)
+0x80520,Script_AIPointSet,script,sure,game command AI_PointSet (#1070): AI point slot 0..7 (brain+0x402*4) = x y z (0x536B0)
+0x805B0,Script_AIPointCopy,script,likely,game command AI_PointCopy (#1073): copies AI point slot src to dst
+0x80600,Script_AIPointFromTargetBone,script,likely,game command AI_PointFromTargetBone (#1587): AI point slot = position of bone n of the AI's target (0x4AF30 bone matrix)
+0x80780,Script_AIPointFromTarget2,script,maybe,game command AI_PointFromTarget2 (#1074): AI point slot from the AI's target (variant)
+0x807E0,Script_AIPointFromSelf2,script,maybe,game command AI_PointFromSelf2 (#1076): AI point slot = AI's own position (variant)
+0x80B40,Script_AIPointAdd,script,sure,game command AI_PointAdd (#1168): adds x y z to AI point slot
+0x80FD0,Script_AIPointFromTargetAim,script,maybe,game command AI_PointFromTargetAim (#1835): AI point slot = aim point on the target (0xA1100)
+0x81040,Script_AIPointDistBetween2,script,likely,game command AI_PointDistBetween2 (#1081): distance between AI point slots a and b
+0x81310,Script_AIPointDistToChar,script,likely,game command AI_PointDistToChar (#1087): distance from AI point slot to character id
+0x813A0,Script_AIPointDistToObj,script,maybe,game command AI_PointDistToObj (#1092): distance from AI point slot to the AI's object (+0x100C)
+0x814B0,Script_AIPointPitch,script,likely,game command AI_PointPitch (#1093): pitch from the AI's character to point slot (0xA6D00)
+0x81520,Script_AIPointYawToChar,script,likely,game command AI_PointYawToChar (#1094): yaw from AI point slot to character id (0xA6D00)
+0x81600,Script_AIPointYawBetween,script,likely,game command AI_PointYawBetween (#1563): yaw from AI point slot a to b
+0x81760,Script_AIPointYawSelf,script,likely,game command AI_PointYawSelf (#1565): yaw from the AI's character to point slot
+0x818A0,Script_AIObjValue3C6B0,script,maybe,game command AI_ObjValue3C6B0 (#1179): AI's object value (0x3C6B0)
+0x818C0,Script_AIObjValue3C700,script,maybe,game command AI_ObjValue3C700 (#1180): AI's object value (0x3C700)
+0x81900,Script_AICharKind3C920,script,maybe,game command AI_CharKind3C920 (#810): value about the AI's own character object (0x3C920)
+0x81980,Script_ObjValue3C6B0,script,maybe,game command Obj_Value3C6B0 (#1185): object id value (0x3C6B0)
+0x819A0,Script_ObjValue3C700,script,maybe,"game command Obj_Value3C700 (#1186): object id value (0x3C700) (Hero_GetId, 104)"
+0x819E0,Script_ObjKind3C920,script,maybe,game command Obj_Kind3C920 (#1188): value of object id from 0x3C920 (-1 if none; debug 'NG Gun..')
+0x81A60,Script_AICharIsLocked,script,maybe,game command AI_CharIsLocked (#423): AI's character lock-on block (char+0x4F54) has a live target (0x47CE0; debug 'Lock...')
+0x81B90,Script_LockTargetOf,script,maybe,game command Lock_TargetOf (#1231): lock-on target of character id (0x48280)
+0x81C70,Script_AIHasItem,script,likely,game command AI_HasItem (#1195): 1 if the AI's character has item id (0x3CA70 -> 0x52060)
+0x81C90,Script_ObjHasItem,script,likely,game command Obj_HasItem (#1196): 1 if object id has item (0x3CA70)
+0x81CE0,Script_AICharValue611,script,maybe,game command AI_CharValue611 (#611): AI's character value i
+0x81D80,Script_AIGrabChar,script,maybe,game command AI_GrabChar (#1731): AI's character grabs object id (0x4D5A0) unless +0x16C = 1
+0x81DC0,Script_AIGrabRelease,script,maybe,game command AI_GrabRelease (#1732): AI's character releases its grab (0x4D610)
+0x81E80,Script_AIGrabTarget,script,maybe,"game command AI_GrabTarget (#1728): AI's character grabs its target (0x4D900, char+0x5AEC..)"
+0x82000,Script_AISetCharValue5B00,script,maybe,game command AI_SetCharValue5B00 (#1739): AI's character +0x5B00 (0x4DAC0)
+0x82020,Script_AISetCharSpeed5B04,script,maybe,game command AI_SetCharSpeed5B04 (#1740): AI's character +0x5B04 (0x4DAD0)
+0x82080,Script_AILockReset,script,likely,"game command AI_LockReset (#1725): AI's character lock-on cancel and reset (0x48180, 0x48300)"
+0x820B0,Script_CharLockReset,script,likely,game command Char_LockReset (#1726): lock-on cancel and reset for character id
+0x820E0,Script_AIGet41E,script,maybe,game command AI_Get41E (#1542): AI brain +0x14 block +0x41E (0x78FE0)
+0x82100,Script_ObjExists2,script,likely,game command Obj_Exists2 (#462): 1 if a named object exists (0x54BE0)
+0x82200,Script_AILinkObj,script,maybe,"game command AI_LinkObj (#1013): adds a named object with value n to the AI character's link slots (0x60C50, 8 slots)"
+0x82240,Script_AILinkEffect,script,maybe,game command AI_LinkEffect (#1014): adds a named effect object to the AI character's link slots ('leeffect_navi_warp')
+0x82290,Script_AILinkObjByName,script,maybe,"game command AI_LinkObjByName (#1015): adds a named object (other list, 0x54C00) to the AI character's link slots"
+0x822D0,Script_AILinkObjByName2,script,maybe,game command AI_LinkObjByName2 (#1016): adds a named object to the AI character's link slots (variant)
+0x82320,Script_AIHeroHitMode,script,maybe,game command AI_HeroHitMode (#1037): hit block mode on the AI's character if it is Derrick (type 0) (0x61E40)
+0x82350,Script_AIHitReset63300,script,maybe,game command AI_HitReset63300 (#1252): AI's character hit block reset (0x63300) for types 0..1
+0x82380,Script_AIHitReset63320,script,maybe,game command AI_HitReset63320 (#1253): AI's character hit block reset (0x63320) for types 0..1
+0x823B0,Script_AISetHit63330,script,maybe,game command AI_SetHit63330 (#1510): AI's character hit-block value (0x63330)
+0x82440,Script_AIHitSetMode,script,likely,"game command AI_HitSetMode (#1350): hit block mode of the AI's character (same as Hit_SetMode: 1 = 120, 2 = 100)"
+0x82470,Script_AIHitIsRecovering,script,maybe,game command AI_HitIsRecovering (#1351): hit block check (0x62410) on the AI's character
+0x82490,Script_FadeIn,script,sure,game command Fade_In (#925): fades the screen in over frames (/60 s) (Fade_In 0x2BDA0)
+0x82510,Script_FadeOut2,script,likely,game command Fade_Out2 (#1517): fades the screen out over frames (Fade_In 0x2BDA0 with mode 1)
+0x82540,Script_FadeOutColor,script,sure,"game command Fade_OutColor (#1518): fades the screen out to a colour (Fade_SetColor, Fade_Out)"
+0x82590,Script_HeroHitColor,script,maybe,game command Hero_HitColor (#929): Derrick's hit block (char+0x6030) values +0xC/+0xE (0x624C0)
+0x825C0,Script_GameValue13530,script,maybe,game command Game_Value13530 (#930): 0x13530() (debug 'Boke LV...')
+0x82610,Script_GameSetFlag146F0,script,maybe,game command Game_SetFlag146F0 (#804): 0x146F0(n)
+0x82620,Script_HeroLookSetParams,script,likely,"game command Hero_LookSetParams (#918): nine look/head controller values for Derrick (0x5D7D0, same as Look_SetParams)"
+0x826B0,Script_HeroLookCmd5D850,script,maybe,game command Hero_LookCmd5D850 (#919): Derrick's look controller command (0x5D850)
+0x82820,Script_HeroLookCmd5D9B0,script,maybe,game command Hero_LookCmd5D9B0 (#921): Derrick's look controller command (0x5D9B0)
+0x82880,Script_HeroRumbleSet,script,maybe,game command Hero_RumbleSet (#1737): Derrick's pad rumble preset n (0x157020)
+0x828B0,Script_HeroRumbleSet2,script,maybe,game command Hero_RumbleSet2 (#1744): Derrick's pad rumble preset n (0x157060)
+0x828E0,Script_AISetOutfit,script,sure,game command AI_SetOutfit (#808): outfit n on the AI's character (Outfit_Set 0x4CC30)
+0x82900,Script_AIGetOutfit,script,likely,game command AI_GetOutfit (#809): outfit of the AI's character (0x4CC60)
+0x82920,Script_CharSetOutfitOf,script,sure,game command Char_SetOutfitOf (#819): outfit n on character id (Outfit_Set 0x4CC30)
+0x829A0,Script_VolumeFadeOut,script,likely,"game command Volume_FadeOut (#1770, #1768): master volume fade out over frames ('MASTER_VOL' task, 0x20D30 mode 1)"
+0x829C0,Script_VolumeFadeIn,script,likely,"game command Volume_FadeIn (#1771, #1769): master volume fade in over frames ('MASTER_VOL' task, 0x20D30 mode 0)"
+0x82A50,Script_ObjSetHeliMode,script,maybe,game command Obj_SetHeliMode (#886): named object command (0x16D240; used on the attack helicopter)
+0x82A90,Script_HeroHoldItemValue3,script,maybe,"game command Hero_HoldItemValue3 (#1117, #1116): value from the item Derrick holds (0x16CF70)"
+0x82B10,Script_HeroHoldItemValue2,script,maybe,"game command Hero_HoldItemValue2 (#1144, #1142): float from the item Derrick holds (0x16CCC0)"
+0x82B50,Script_HeroHoldItemValue4,script,maybe,game command Hero_HoldItemValue4 (#1145): value from the item Derrick holds (0x16CFA0)
+0x82B90,Script_AIRideSync,script,maybe,"game command AI_RideSync (#993): AI's character snaps to its ride object (0x16CDA0, Char_SetPos 0x49AB0)"
+0x82CA0,Script_AIIsOnTrolley,script,maybe,game command AI_IsOnTrolley (#1159): 1 if the AI's character rides an object of kind 0x102 (0x3CB60)
+0x82D00,Script_TrolleySpeed,script,maybe,game command Trolley_Speed (#1161): trolley/vehicle speed (0x16D0F0)
+0x82D20,Script_TrolleySetPoint,script,maybe,game command Trolley_SetPoint (#1137): trolley target from AI point slot (0x16D050)
+0x82D50,Script_TrolleyValue,script,maybe,game command Trolley_Value (#1628): trolley value (0x16D160)
+0x82DB0,Script_TrolleyCmd,script,maybe,game command Trolley_Cmd (#1259): trolley/vehicle command n (0x16D130; g_alex_sx_trolley)
+0x82E50,Script_HeroValue12AB80,script,maybe,game command Hero_Value12AB80 (#1256): value from 0x12AB80 for Derrick's object
+0x82E70,Script_HeroCmd12C480,script,maybe,game command Hero_Cmd12C480 (#1257): command n for Derrick's object (0x12C480)
+0x82EC0,Script_GameIs27F90,script,maybe,game command Game_Is27F90 (#953): 1 if 0x27F90 returns 1 (game state +0x284)
+0x82ED0,Script_MissionWait,script,likely,game command Mission_Wait (#1636): starts an 'MT_MISSION_WAIT' task with entry n of table 0x2706E4 (0x112560)
+0x82EE0,Script_MoviePlay,script,sure,"game command Movie_Play (#1254): plays a movie file (Movie_PlayXmv via 0x11D50): 'ED_01', 'alex_death'...; 1 if it started"
+0x82F00,Script_GameFlag29C61C,script,maybe,game command Game_Flag29C61C (#1255): 1 if the game flag at 0x29C61C is set (0x11660)
+0x82F10,Script_CharCountFlag5066,script,maybe,game command Char_CountFlag5066 (#1062): counts living characters with +0x5066 set
+0x82F50,Script_AreaSetValue,script,maybe,"game command Area_SetValue (#1155): 0x3A100(a, b) (s08a08 scripts: 914/915/916)"
+0x82F60,Script_AreaCmd3A140,script,maybe,game command Area_Cmd3A140 (#1156): 0x3A140()
+0x82F70,Script_AreaValue3A130,script,maybe,game command Area_Value3A130 (#1787): 0x3A130() (debug 'ForceDrop>')
+0x83240,Script_LightShotCheck,script,maybe,game command Light_ShotCheck (#1233): checks a shot against a named light/object (0x830B0; debug 'Res Shot Check')
+0x83280,Script_PointShotCheck,script,maybe,game command Point_ShotCheck (#1235): same shot check against a point (0x830B0)
+0x83330,Script_AIMarkObjFlag1,script,maybe,game command AI_MarkObjFlag1 (#1461): sets flag 1 on the AI's object (+0x1A4) unless the character is dead
+0x83340,Script_ObjSetFlag1,script,maybe,game command Obj_SetFlag1 (#1462): sets flag 1 on object id (+0x1A4) unless dead (0x3C400)
+0x83360,Script_AISetObjFlag1C8,script,maybe,game command AI_SetObjFlag1C8 (#1463): AI's object +0x1C8 unless dead (0x3C340)
+0x833A0,Script_AISetObjTimer1C0,script,maybe,game command AI_SetObjTimer1C0 (#1515): AI's object +0x1C0 = frames unless dead (0x3C390)
+0x833C0,Script_ObjSetTimer1C0,script,maybe,game command Obj_SetTimer1C0 (#1516): object id +0x1C0 = frames (0x3C390)
+0x83400,Script_HeroSetObjFlags140,script,maybe,game command Hero_SetObjFlags140 (#1473): Derrick's object +0x140 bits (0x3D5B0)
+0x83420,Script_HeroClearObjFlags140,script,maybe,game command Hero_ClearObjFlags140 (#1474): Derrick's object +0x140 flags (0x3D5E0)
+0x83430,Script_HeroDist140,script,maybe,game command Hero_Dist140 (#1749): float +0x140 of Derrick's object (0x3D610)
+0x83450,Script_MotionSetCmdAI,script,maybe,"game command MotionSet_CmdAI (#1623): AI's character motion set command n (1..3, 0x4BC50)"
+0x834A0,Script_MotionSetStateAI,script,maybe,game command MotionSet_StateAI (#1625): AI's character motion set state (0x4BCB0)
+0x83510,Script_HeroIsHolding,script,likely,"game command Hero_IsHolding (#1786, #1793): 1 if Derrick holds an object (char+0x54F4)"
+0x83630,Script_CharGetSpeedOf,script,maybe,game command Char_GetSpeedOf (#1823): float from character id +0x120/+0x128
+0x83690,Script_HeroValue12A650,script,maybe,game command Hero_Value12A650 (#1637): value n from 0x12A650 for Derrick's object
+0x836C0,Script_AIPlaySound,script,likely,"game command AI_PlaySound (#1096): plays a character sound of kind n on the AI's character (0x74F70, like Char_PlaySound)"
+0x83700,Script_AIObjFlag190,script,maybe,game command AI_ObjFlag190 (#1130): AI's object +0x190 sub-block value (0x563C0)
+0x83720,Script_AISetObjValue,script,maybe,game command AI_SetObjValue (#1658): AI's object value (0x3D690)
+0x83740,Script_ObjFlag190,script,maybe,"game command Obj_Flag190 (#1718, #1657): object id +0x190 sub-block value (0x563C0)"
+0x83760,Script_AIObjCmd190,script,maybe,game command AI_ObjCmd190 (#1131): AI's object +0x190 sub-block command (0x563B0)
+0x83780,Script_AISetObjFlag190,script,maybe,game command AI_SetObjFlag190 (#1132): AI's object +0x190 sub-block value = 1 (0x563E0)
+0x837A0,Script_AIClearObjFlag190,script,maybe,game command AI_ClearObjFlag190 (#1133): AI's object +0x190 sub-block value cleared (0x563E0)
+0x837C0,Script_AIObjValue194,script,maybe,game command AI_ObjValue194 (#1134): AI's object +0x194
+0x837D0,Script_GameIsSlowMotion,script,maybe,game command Game_IsSlowMotion (#1678): 1 if the game time-scale counter 0x2A9ED8 is running (0x56500)
+0x837E0,Script_HeroWBCmd,script,maybe,game command Hero_WBCmd (#1465): Derrick's weapon box command (0x529A0)
+0x83870,Script_HeroWBCmd51D10,script,maybe,game command Hero_WBCmd51D10 (#1782): Derrick's weapon box command (0x51D10)
+0x838A0,Script_HeroLifeCmd48E80,script,maybe,game command Hero_LifeCmd48E80 (#1468): Derrick's life block command (0x48E80)
+0x83980,Script_AIFlag2,script,maybe,game command AI_Flag2 (#667): AI brain flag bit 2 (byte +0; debug 'Hack...')
+0x839C0,Script_AISetSlotF94,script,maybe,game command AI_SetSlotF94 (#1758): AI brain table +0xF94 slot 0..9 = v
+0x83B00,Script_AIRandomEvent,script,maybe,game command AI_RandomEvent (#1205): AI brain +0x3E4 slot (0..9) random timer (0x6B6E0)
+0x87C20,Script_Atan2Deg,script,sure,"game command Atan2Deg (#1613): atan2(y, x) in degrees"
+0x87CA0,Script_InAngleRange,script,likely,game command InAngleRange (#3): 1 if an angle (deg) is between min and max (wraps at 360)
+0x87D50,Script_PadSetting1,script,maybe,game command Pad_Setting1 (#1762): pad pool value (0x54810)
+0x87D70,Script_OptionLookSpeed,script,maybe,"game command Option_LookSpeed (#1764): pad setting +2 (0x20870, default 2); hero scales look speed by it (look sensitivity)"
+0x88540,Script_PadStickAngleR3,script,maybe,game command Pad_StickAngleR3 (#252): right-stick angle (0x545E0 + 0x87AA0)
+0x88620,Script_PadStickTiltR2,script,maybe,game command Pad_StickTiltR2 (#249): right-stick tilt (0x545E0 + 0x87A20)
+0x88CA0,Script_PadStickTiltRaw,script,likely,game command Pad_StickTiltRaw (#1535): stick tilt from the raw axes (0x544B0 + 0x87A20 dead zone 0.3)
+0x89020,Script_PadAxis0,script,likely,"game command Pad_Axis0 (#1559): raw stick axis 0 of the active pad (pad pool 0x2A9BA8, index 0x244C1C) x 0.0045, clamped -1..1"
+0x89070,Script_PadAxis1,script,likely,"game command Pad_Axis1 (#1560): raw stick axis 1 of the active pad x 0.0045, clamped -1..1"
+0x89110,Script_PadAxis3,script,likely,"game command Pad_Axis3 (#1558): raw stick axis of the active pad x 0.0045, clamped -1..1"
+0x89160,Script_PadStick10,script,maybe,game command Pad_Stick10 (#10): stick value (0x87DE0)
+0x891F0,Script_PadStick15,script,maybe,game command Pad_Stick15 (#15): stick value (0x88410)
+0x893B0,Script_PadVibrate2,script,likely,"game command Pad_Vibrate2 (#1545): pad vibration, motor set 2 (0x89200)"
+0x893D0,Script_PadVibrate3,script,likely,"game command Pad_Vibrate3 (#1546): pad vibration, motor set 2 variant (0x89200)"
+0x89430,Script_PadVibrate4,script,likely,"game command Pad_Vibrate4 (#1498): pad vibration (0x89200 mode 0, motor set 2)"
+0x89450,Script_PadVibrate,script,likely,"game command Pad_Vibrate (#1499): pad vibration: strength -1..1 (x220), frames 8..240 (0x89200, motor set 3)"
+0x89470,Script_PadVibrate5,script,likely,"game command Pad_Vibrate5 (#1500): pad vibration (0x89200 mode 0, motor set 0)"
+0x894B0,Script_SoundPlaySE,script,likely,"game command Sound_PlaySE (#18, #1193): plays a sound effect (id remapped per area by 0x9FAE0) through the sound bank (0x23FF0)"
+0x894D0,Script_SoundStop23700,script,maybe,game command Sound_Stop23700 (#1194): 0x23700(id)
+0x894E0,Script_SoundFadeStream,script,maybe,game command Sound_FadeStream (#1511): fades a sound stream over frames (0x23770)
+0x89500,Script_StreamPlayDefault,script,sure,game command Stream_PlayDefault (#628): plays a named stream unless slow motion (Stream_PlayDefault 0x1D7F0)
+0x89520,Script_StreamPlayName,script,sure,"game command Stream_PlayName (#932): plays a named sound stream ('ds_se8130', 'ds_bg2108'); returns a handle (Stream_Play 0x1D810)"
+0x89540,Script_StreamStateOf,script,likely,game command Stream_StateOf (#935): state of a stream slot by handle (0x1D0A0 -> 0xAA4F0)
+0x89570,Script_StreamStopHandle,script,likely,game command Stream_StopHandle (#933): stops a stream by handle (0x1D130 / 0x1D220 when slow motion)
+0x96E30,Script_TimerGetSlot,script,maybe,game command Timer_GetSlot (#34): script timer slot i (0..14) value (char+0x5F04 table)
+0x96E60,Script_TimerClear,script,maybe,"game command Timer_Clear (#35): clears script timer i (0..14, char+0x5F04 table)"
+0x97030,Script_CharSet5FBC,script,maybe,game command Char_Set5FBC (#659): char+0x5FBC = v
+0x97070,Script_DistToChar,script,likely,game command Dist_ToChar (#1120): distance from this character to character id
+0x970B0,Script_CharAngleToChar,script,maybe,game command Char_AngleToChar (#1121): angle/value from this character to character id
+0x97120,Script_HeightToChar,script,likely,game command Height_ToChar (#1122): height of character id minus this character's height
+0x97150,Script_PitchToChar,script,maybe,game command Pitch_ToChar (#1123): pitch from this character to character id (0xA6D00)
+0x97210,Script_YawToChar,script,likely,game command Yaw_ToChar (#1125): yaw from this character to character id (0xA6D00)
+0x97360,Script_CharSetFlag5C408,script,likely,game command Char_SetFlag5C40_8 (#1778): char+0x5C40 flag 8 on/off
+0x973D0,Script_CharGet5D78,script,maybe,game command Char_Get5D78 (#469): char+0x5D78 (word)
+0x973E0,Script_CharGet5B2C,script,maybe,game command Char_Get5B2C (#470): char+0x5B2C (word); checked == 0 after KamaeShiftSUB (debug 'StandUp?')
+0x973F0,Script_MoveLocked,script,likely,"game command Move_Locked (#776): char+0x5D14 (mover lock, see Move_AddSpeed)"
+0x97400,Script_CharWallHit,script,likely,game command Char_WallHit (#534): this character's wall-contact flag (char+0x5C4C; same field as AI_WallHit)
+0x97450,Script_CharWallYaw,script,maybe,game command Char_WallYaw (#536): yaw of the wall this character touches (char+0x5C4C)
+0x974D0,Script_CharHas5D44,script,maybe,game command Char_Has5D44 (#1487): 1 if char+0x5D44 > 0
+0x97530,Script_ObjSet16C,script,maybe,game command Obj_Set16C (#1113): this character's +0x16C = n (0..1)
+0x97580,Script_LifeSetFlags12,script,likely,"game command Life_SetFlags12 (#1486): life block (char+0x5AAC) +0x1C flag 1, and flag 2 when n = 1 (0x48F20 via 0x503D0); debug 'FallDie'"
+0x975A0,Script_LifeSetFlag1,script,likely,game command Life_SetFlag1 (#40): life block (char+0x5AAC) +0x1C flag 1 on (0x48F20 with 0 via 0x503D0); flag 2 too with 1 (see #1486)
+0x97610,Script_LifeToggleFlag8,script,maybe,game command Life_ToggleFlag8 (#1192): life block (char+0x5AAC) +0x1C flag 8 toggle
+0x97670,Script_CharSetFlag1C40,script,maybe,game command Char_SetFlag1C_40 (#1766): sets/clears flag 0x40 in char +0x1C/+0x1E
+0x978E0,Script_LifeSetLevelMax,script,sure,game command Life_SetLevelMax (#526): sets the life level (Life_SetLevel 0x48E10) and recomputes max life (Life_InitMax 0x48B40)
+0x97950,Script_CharLifeLock,script,likely,"game command Char_LifeLock (#1579): life lock on this character (0x48AA0 / 0x48A80 / 0x48A90, like AI_LifeLock)"
+0x979F0,Script_LookSetParams2,script,likely,"game command Look_SetParams2 (#623): nine look/head controller values for this character (0x5D7D0, same as Look_SetParams)"
+0x97DB0,Script_CharSet5AE8,script,maybe,game command Char_Set5AE8 (#284): char+0x5AE8 = f (0 if <= 0)
+0x97F00,Script_CharHeadLookAt,script,maybe,"game command Char_HeadLookAt (#620): head looks at a point (char+0x7950, 0x5DDD0)"
+0x97F60,Script_CharSetHeadTurn,script,maybe,"game command Char_SetHeadTurn (#622): head/neck turn (char+0x7950, 0x5DE30)"
+0x97FB0,Script_CharHeadSpeed,script,maybe,game command Char_HeadSpeed (#1529): head turn (char+0x7950) speed (0x5DEC0)
+0x97FD0,Script_CharHeadAngle,script,maybe,game command Char_HeadAngle (#1530): head turn (char+0x7950) angle (0x5DEF0)
+0x98000,Script_CharHeadLookAt3,script,maybe,"game command Char_HeadLookAt3 (#1598): head looks at a point (char+0x7950, 0x5DF10)"
+0x980D0,Script_CharHeadLookAt2,script,maybe,"game command Char_HeadLookAt2 (#1602): head look at (char+0x7950, 0x5DFF0)"
+0x981E0,Script_CharHeadReset,script,maybe,game command Char_HeadReset (#1531): head/neck turn (char+0x7950) reset (0x5E160)
+0x98260,Script_MoveGetDist,script,likely,game command Move_GetDist (#92): distance moved (char +0x108/+0x110; debug 'GetMoveDist')
+0x98300,Script_CharGet10C,script,maybe,game command Char_Get10C (#500): char+0x10C float (debug 'MY')
+0x98390,Script_CharSetFallHeight,script,maybe,game command Char_SetFallHeight (#1030): char+0x5DAC = f (fall distance start; see Char_FallHeight)
+0x983A0,Script_CharFallStart,script,likely,game command Char_FallStart (#1027): char+0x5DAC (debug 'FHeight')
+0x983B0,Script_CharFallHeight,script,likely,"game command Char_FallHeight (#1028): char+0x5DB0 (fall distance; debug 'FallDie', used for fall damage)"
+0x985E0,Script_CharSet348,script,maybe,game command Char_Set348 (#487): char+0x348 = f
+0x98630,Script_CharSet344,script,maybe,game command Char_Set344 (#488): char+0x344 = f
+0x98680,Script_CharSet350,script,maybe,game command Char_Set350 (#489): char+0x350 = f
+0x986D0,Script_CharSet34C,script,maybe,game command Char_Set34C (#490): char+0x34C = f
+0x98790,Script_CharSet328,script,maybe,game command Char_Set328 (#57): char+0x328 = f
+0x987A0,Script_MoveSetSpeed2DC,script,maybe,game command Move_SetSpeed2DC (#58): mover (char+0x2DC) first value = f
+0x987B0,Script_MoveSetDir,script,likely,game command Move_SetDir (#59): mover (char+0x2DC) +0xA0 = direction as 16-bit angle; fed from Pad_StickAngle
+0x987E0,Script_MoveSetAccel,script,maybe,game command Move_SetAccel (#60): mover +0x98 = v (sign forced); 0.15 / 0.618 next to Move_SetSpeedAbs
+0x98820,Script_MoveSetDecel,script,maybe,game command Move_SetDecel (#62): mover +0x9C = v (sign forced); 0 / 1e7
+0x989E0,Script_CharSet499A,script,maybe,game command Char_Set499A (#96): char+0x499A = v (word)
+0x98A20,Script_CharSet49A4,script,maybe,game command Char_Set49A4 (#98): char+0x49A4 = f
+0x98A70,Script_CharRideOn,script,maybe,"game command Char_RideOn (#414): rides/attaches to character id (0x4F960, char+0x5FE6/+0x5FE8)"
+0x98B20,Script_MotionSetLayerMode,script,likely,game command Motion_SetLayerMode (#102): animation layer (char+0x4D0) mode (Motion_LayerSetMode 0x58E80)
+0x98B60,Script_CharSet4960,script,maybe,game command Char_Set4960 (#105): char+0x4960 = f
+0x98CD0,Script_MotionLayerAnimId,script,maybe,"game command Motion_LayerAnimId (#875): animation layer id (char+0x4D0, 0x58F70)"
+0x98F10,Script_MotionLayerCheck,script,maybe,game command Motion_LayerCheck (#86): animation layer (char+0x4D0 + layer*0x160 +0x20) check against v (0x84E20)
+0x99030,Script_MotionLayerCheck2,script,maybe,game command Motion_LayerCheck2 (#441): animation layer check (0x84DC0)
+0x99060,Script_MotionLayerCheck3,script,maybe,game command Motion_LayerCheck3 (#876): animation layer check (0x84DF0)
+0x990B0,Script_MotionLayerReset,script,maybe,game command Motion_LayerReset (#120): resets animation layer values (0x57400)
+0x99190,Script_MotionSetBlendFrames,script,maybe,game command Motion_SetBlendFrames (#124): blend controller (char+0xD50) frames (0x57120)
+0x991D0,Script_MotionBlendReset,script,maybe,game command Motion_BlendReset (#1211): blend controller (char+0xD50) reset (0x852E0; pistol shot debug)
+0x992A0,Script_CharGet4936,script,maybe,game command Char_Get4936 (#1008): char+0x4936 (word)
+0x993D0,Script_CharSet4954,script,maybe,game command Char_Set4954 (#756): char+0x4954 value (0x841D0)
+0x99430,Script_LookSetPitchSpeed,script,maybe,game command Look_SetPitchSpeed (#1219): look controller (char+0x3A0) +0xC/+0xE (0x5D430)
+0x99450,Script_LookReset1220,script,maybe,game command Look_Reset1220 (#1220): look controller (char+0x3A0) reset (0x5D470; pistol shot debug)
+0x99490,Script_LookGetEyePitch,script,maybe,game command Look_GetEyePitch (#285): look controller (char+0x3A0) +0x14 as degrees (debug 'EyePitch')
+0x994B0,Script_LookGetPitchB,script,maybe,game command Look_GetPitchB (#286): look controller (char+0x3A0) +0x18 as degrees (debug 'NPC Pitch Reset')
+0x994D0,Script_LookSetPitch,script,likely,game command Look_SetPitch (#79): look controller (char+0x3A0) pitch (0x5D500; debug 'NPC Pitch Reset')
+0x99500,Script_LookSetPitchB,script,maybe,game command Look_SetPitchB (#287): look controller (char+0x3A0) +0x18 (0x5D520)
+0x99610,Script_LookSet100,script,maybe,game command Look_Set100 (#294): look controller (char+0x3A0) +0x100
+0x99640,Script_LookSet104,script,maybe,game command Look_Set104 (#295): look controller (char+0x3A0) +0x104
+0x996A0,Script_LookSetYawMin,script,maybe,game command Look_SetYawMin (#297): look controller (char+0x3A0) +0x108 limit
+0x996D0,Script_LookSetYawMax,script,maybe,game command Look_SetYawMax (#298): look controller (char+0x3A0) +0x10C limit
+0x997B0,Script_LookGetEyeYaw,script,likely,game command Look_GetEyeYaw (#299): look controller (char+0x3A0) +0x24 as degrees (debug 'EyeYaw')
+0x99810,Script_LookSetYaw,script,maybe,game command Look_SetYaw (#301): look controller (char+0x3A0) yaw (0x5D570)
+0x99840,Script_LookSetYaw28,script,maybe,game command Look_SetYaw28 (#302): look controller (char+0x3A0) +0x28
+0x99950,Script_LookSetE8,script,maybe,game command Look_SetE8 (#310): look controller (char+0x3A0) +0xE8
+0x999B0,Script_LookSetYawSpeed,script,maybe,game command Look_SetYawSpeed (#312): look controller +0xE4 = angle
+0x999E0,Script_LookSetF0,script,maybe,game command Look_SetF0 (#313): look controller (char+0x3A0) +0xF0 limit
+0x99A10,Script_LookSetF4,script,maybe,game command Look_SetF4 (#314): look controller (char+0x3A0) +0xF4 limit
+0x9A810,Script_CharGet4842,script,maybe,game command Char_Get4842 (#980): char+0x4842 (word)
+0x9AD60,Script_MotionSetFrames2,script,maybe,"game command Motion_SetFrames2 (#148): frame values of two animation parts (+0x265C / +0x2E1C, 0x593B0)"
+0x9AE20,Script_MotionLayerStop0,script,maybe,"game command Motion_LayerStop0 (#1214): stops animation layer 0 (char+0x4D0, 0x59410)"
+0x9AEC0,Script_MotionLayerStop01,script,maybe,game command Motion_LayerStop01 (#1218): stops animation layers 0 and 1
+0x9AEF0,Script_MotionAllEnded,script,likely,"game command Motion_AllEnded (#150): 1 when both animation layers and slots reached the end (Motion_LayerIsEnd, MotSlot_IsEnd)"
+0x9AF80,Script_AttackSetEx,script,likely,"game command Attack_SetEx (#973): attack window, longer form (AttackList_Add)"
+0x9B040,Script_AttackSetWall0,script,maybe,"game command Attack_SetWall0 (#515): wall-attack values, mode 0 (0x6F500)"
+0x9B080,Script_AttackSetWall,script,maybe,game command Attack_SetWall (#805): wall-attack values (char+0x4A10 +0x308..+0x320; 0x6F500)
+0x9B0C0,Script_AttackSetWall2,script,maybe,"game command Attack_SetWall2 (#1060): wall-attack values, mode 2 (0x6F500)"
+0x9B100,Script_AttackStopWall,script,maybe,game command Attack_StopWall (#516): clears the wall-attack values (char+0x4A10 +0x314/+0x320; debug 'Wall_Attack')
+0x9B1E0,Script_WBSetSlot40,script,maybe,game command WB_SetSlot40 (#702): weapon box slot +0x40 = f
+0x9B2F0,Script_WBSetSlotFlag2,script,maybe,game command WB_SetSlotFlag2 (#680): weapon box slot +0xC bit 2
+0x9B320,Script_WBSetSlot44,script,maybe,game command WB_SetSlot44 (#681): weapon box slot +0x44 = v (word)
+0x9B350,Script_WBSetSlotAngle,script,maybe,game command WB_SetSlotAngle (#778): weapon box slot +0x18 = 16-bit angle
+0x9B3C0,Script_WBSetSlotFlag1,script,maybe,game command WB_SetSlotFlag1 (#1783): weapon box slot +0xC bit 1
+0x9B3F0,Script_WBAddClip,script,likely,"game command WB_AddClip (#580): weapon box slot +0xA += n, capped at +8 (0x50C00)"
+0x9B480,Script_WBSlotAmmoNow,script,likely,game command WB_SlotAmmoNow (#592): weapon box slot +0 (ammo now)
+0x9B510,Script_WBSlotItem,script,likely,"game command WB_SlotItem (#595): weapon box slot -> item id (+6), 0 if empty"
+0x9B560,Script_WBClearBoxFlag,script,likely,game command WB_ClearBoxFlag (#586): weapon box +0x4F8 = 0 (pair of Weapon_SetBoxFlag)
+0x9B580,Script_WBReload,script,likely,game command WB_Reload (#587): weapon box reload (0x52520 + 0x52570; debug 'HandGun Reload')
+0x9B5D0,Script_WBValue525C0,script,maybe,game command WB_Value525C0 (#583): weapon box value (0x525C0)
+0x9B620,Script_WBSetCurrent,script,maybe,game command WB_SetCurrent (#561): weapon box: makes slot current (0x52120)
+0x9B640,Script_WBCmd52140,script,maybe,game command WB_Cmd52140 (#1784): weapon box command (0x52140)
+0x9B660,Script_WBFindItem,script,likely,game command WB_FindItem (#562): weapon box slot of item id (0x52410)
+0x9B6C0,Script_WBFire,script,maybe,game command WB_Fire (#1767): weapon box fire (0x521F0; laser T'lan scripts)
+0x9B700,Script_WBCheck,script,likely,game command WB_Check (#565): weapon box check (0x52250; debug 'aasChrWBCheck 0')
+0x9B7A0,Script_WBSlotHasAmmo,script,maybe,"game command WB_SlotHasAmmo (#568): weapon box slot value (+0x102, 0x52320); fed to aasChrWBAddBlt"
+0x9B7C0,Script_WBSlotValue100,script,maybe,"game command WB_SlotValue100 (#569): weapon box slot value (+0x100, 0x52370)"
+0x9B880,Script_WBSlotCommand,script,maybe,game command WB_SlotCommand (#573): weapon box slot command (0x54E70); used with Weapon_GetCurrent before grenade sleep
+0x9B8B0,Script_WBHasItemOwner,script,maybe,game command WB_HasItemOwner (#682): weapon box check for item id (0x52070)
+0x9B900,Script_WBValue52350,script,maybe,game command WB_Value52350 (#684): weapon box value (0x52350)
+0x9B940,Script_GrenadeAddCount,script,maybe,game command Grenade_AddCount (#686): char+0x59FC count += n (0x50C00)
+0x9B970,Script_GrenadeState,script,maybe,game command Grenade_State (#688): char+0x5A06 (debug 'Grenade throw HERO end')
+0x9B980,Script_WBGrenadeReady,script,maybe,game command WB_GrenadeReady (#689): weapon box +0x502 flag set (0x52500 with 1)
+0x9BA10,Script_WBThrowGrenade,script,maybe,game command WB_ThrowGrenade (#692): weapon box: grenade throw command (0x54F70; debug 'Grenade throw HERO')
+0x9BA60,Script_GrenadeSetParams,script,maybe,game command Grenade_SetParams (#694): char+0x5A18 grenade values
+0x9BA90,Script_GrenadeSetRange,script,maybe,"game command Grenade_SetRange (#695): char+0x59FC +0x28/+0x2C (150, 5)"
+0x9BAB0,Script_GrenadeSetSpread,script,maybe,"game command Grenade_SetSpread (#696): char+0x59FC +0x30/+0x34 (0.5, 50)"
+0x9BAD0,Script_GrenadeSetThrow,script,maybe,game command Grenade_SetThrow (#697): char+0x59FC +0x38/+0x3C (grenade throw values; debug 'B_GRENADE_')
+0x9BAF0,Script_GrenadeSetCount,script,maybe,game command Grenade_SetCount (#698): char+0x59FC +8/+0xA (word)
+0x9BB10,Script_CharSetAimPitch,script,maybe,game command Char_SetAimPitch (#780): char+0x5A14 = 16-bit angle (grenade throw pitch)
+0x9BB30,Script_GrenadeSetMode,script,maybe,game command Grenade_SetMode (#781): char+0x59FC +0xE = n (0..5; debug 'buki end')
+0x9C5B0,Script_CharYawOfBone,script,maybe,game command Char_YawOfBone (#634): yaw of a bone/point of this character (0x50990)
+0x9C870,Script_MovePushDir,script,maybe,game command Move_PushDir (#180): pushes the mover (char+0x2DC) along a yaw (0x6DF60)
+0x9C8C0,Script_CharSet354,script,maybe,game command Char_Set354 (#626): char+0x354 = f
+0x9CA50,Script_ObjBoneCmd,script,maybe,game command Obj_BoneCmd (#1634): this character's object bone n (0..23) command (0x63BE0)
+0x9CBE0,Script_HeroSlowMotion,script,likely,game command Hero_SlowMotion (#1754): slow motion for Derrick only: hit block +0x200..+0x208 and the game time scale (0x134B0)
+0x9CC20,Script_HitLightColor,script,likely,game command Hit_LightColor (#530): hit-block light colour (0x62030 creates a light on the character)
+0x9CC50,Script_HitClear62100,script,maybe,game command Hit_Clear62100 (#531): hit block (char+0x6030) reset (0x62100)
+0x9CC70,Script_HitSetPower,script,maybe,game command Hit_SetPower (#1157): hit block (char+0x6030) power level n (0x62570; fed from Char_GetPowerMode)
+0x9CC90,Script_HitSetPowerB,script,maybe,game command Hit_SetPowerB (#1158): hit block (char+0x6030) power level (0x625B0)
+0x9CCB0,Script_HitClear38,script,maybe,game command Hit_Clear38 (#590): hit block (char+0x6030) +0x38 cleared (0x626B0)
+0x9CCD0,Script_HitSetValue28,script,maybe,game command Hit_SetValue28 (#1629): hit block (char+0x6030) values +0x28/+0x34/+0x38 (0x625F0)
+0x9CD10,Script_HitSetValue38,script,maybe,game command Hit_SetValue38 (#1631): hit block (char+0x6030) +0x38 (0x62680) (120 / 110)
+0x9CD70,Script_HitSetBuffer,script,maybe,"game command Hit_SetBuffer (#1626): sets hit-block buffer 0/1 values (char+0x6030, 0x637E0)"
+0x9CDA0,Script_HitFreeBuffer,script,maybe,game command Hit_FreeBuffer (#1627): frees hit-block buffer 0 (+0xC0) or 1 (+0x160) and clears its flag
+0x9CDC0,Script_HitBoneEffect2,script,maybe,"game command Hit_BoneEffect2 (#1250): hit block effect (0x63910, Burns)"
+0x9CDF0,Script_HitBoneEffect,script,maybe,"game command Hit_BoneEffect (#1251): hit block (char+0x6030) effect at a bone (0x63960, Burns fight)"
+0x9CE40,Script_HitIsRecovering,script,maybe,game command Hit_IsRecovering (#787): hit block (char+0x6030) speed/recover check (0x62410)
+0x9CEB0,Script_ObjCmd170350,script,maybe,game command Obj_Cmd170350 (#1607): this character's object command (0x170350)
+0x9CED0,Script_ObjCmdAF680,script,maybe,game command Obj_CmdAF680 (#751): this character's object command (0xAF680)
+0x9CEF0,Script_PadRumbleById,script,likely,game command Pad_RumbleById (#948): rumble effect n for this character's pad (0x157750) if it is a player
+0x9CF50,Script_PadRumblePlay,script,likely,"game command Pad_RumblePlay (#949, #1209): starts rumble pattern n on Derrick's controller (0x157750)"
+0x9CF80,Script_HeroRumbleStop,script,likely,"game command Hero_RumbleStop (#1210, #1026): stops rumble effect n on Derrick's pad (Rumble_Stop 0x157320)"
+0x9CFB0,Script_LockStart,script,likely,"game command Lock_Start (#182): starts lock-on search (char+0x4F54, 0x48030; debug 'LockOnF')"
+0x9CFD0,Script_LockFind0,script,likely,game command Lock_Find0 (#183): lock-on search mode 0 (0x485C0; debug 'LockOn 001')
+0x9CFF0,Script_LockFind1,script,likely,game command Lock_Find1 (#1541): lock-on search mode 1 (0x485C0)
+0x9D010,Script_LockCancel,script,likely,"game command Lock_Cancel (#184): cancels this character's lock-on (char+0x4F54, 0x48180; debug 'lock cansel')"
+0x9D030,Script_LockHasTarget,script,likely,"game command Lock_HasTarget (#185): 1 if this character's lock-on block (char+0x4F54) has a live target (0x47CE0); debug labels 'LockOnF', 'LOCKTEST'; was Char_HasLight"
+0x9D050,Script_LockSetHoming,script,maybe,game command Lock_SetHoming (#638): lock-on block (char+0x4F54) +0x2C (debug 'HOMINGTIME')
+0x9D090,Script_LockSetRange,script,maybe,game command Lock_SetRange (#639): lock-on block (char+0x4F54) +0x1C = f (600 / 35 / 45)
+0x9D0A0,Script_LockSetAngle,script,maybe,game command Lock_SetAngle (#640): lock-on angle char+0x4F84 (half angle)
+0x9D0D0,Script_LockSet4F74,script,maybe,game command Lock_Set4F74 (#641): char+0x4F74 = f (lock-on)
+0x9D160,Script_LockGetTargetPitch,script,maybe,game command Lock_GetTargetPitch (#783): pitch to the lock-on target's point (0x4B6D0)
+0x9D260,Script_CharGet4F88,script,maybe,game command Char_Get4F88 (#1750): char+0x4F88 (word)
+0x9D270,Script_HeroGet4F88,script,maybe,game command Hero_Get4F88 (#1781): Derrick's char+0x4F88
+0x9D290,Script_CharGet4F94Deg,script,maybe,game command Char_Get4F94Deg (#1751): char+0x4F94 angle in degrees
+0x9D2D0,Script_CharGet4F8C,script,maybe,game command Char_Get4F8C (#1753): char+0x4F8C float
+0x9D300,Script_CharSet5FCC,script,maybe,game command Char_Set5FCC (#279): char+0x5FCC = f (hero; 0 / 0.3 / power-scaled)
+0x9D310,Script_CharSet5FD0,script,maybe,game command Char_Set5FD0 (#280): char+0x5FD0 = f
+0x9D320,Script_CharSet5FD4,script,maybe,game command Char_Set5FD4 (#281): char+0x5FD4 = f (0.9)
+0x9D330,Script_CharSet5FD8,script,maybe,game command Char_Set5FD8 (#282): char+0x5FD8 = f (1)
+0x9D340,Script_LockGetTargetId,script,likely,"game command Lock_GetTargetId (#410): id of this character's lock-on target (char+0x4F54), -1 if none"
+0x9D380,Script_LockValue48320,script,maybe,game command Lock_Value48320 (#537): lock-on block (char+0x4F54) value (0x48320)
+0x9D3A0,Script_LockClear48360,script,maybe,game command Lock_Clear48360 (#538): lock-on block (char+0x4F54) clear (0x48360)
+0x9D400,Script_WBSelectSlot,script,maybe,game command WB_SelectSlot (#472): weapon box: selects slot (0x51E50)
+0x9D420,Script_WeaponHas,script,likely,game command Weapon_Has (#484): weapon box has item id: slot or -1 (0x52060)
+0x9D4E0,Script_WBFirstFree,script,maybe,game command WB_FirstFree (#477): weapon box: first/selected slot (0x51F00); fed to Weapon_Command2
+0x9D5F0,Script_WBThrowGrenadeSlot,script,maybe,game command WB_ThrowGrenadeSlot (#647): weapon box command on slot (0x52020 + 0x54F70)
+0x9D650,Script_WeaponHandValue,script,maybe,"game command Weapon_HandValue (#193): value from the held item (char+0x54F0, 0x6E600); hero compares with 150"
+0x9D670,Script_WeaponHandAimYaw,script,maybe,game command Weapon_HandAimYaw (#705): aim value from the held item (0x6E850)
+0x9D6F0,Script_WeaponHandAimPitch,script,maybe,game command Weapon_HandAimPitch (#707): aim value from the held item (0x6E850)
+0x9D930,Script_WeaponHeldSpeed,script,maybe,"game command Weapon_HeldSpeed (#744): held object (char+0x54F4) +0x94, 0 if none"
+0x9D970,Script_LockHasTarget2,script,maybe,"game command Lock_HasTarget2 (#190): lock-on (char+0x4F54) live-target check, variant (0x47CE0 / 0x48240)"
+0x9D9D0,Script_WeaponHandValueC,script,maybe,game command Weapon_HandValueC (#192): held item (char+0x54F0) +0xC (0x6E650)
+0x9D9F0,Script_WeaponHandAim,script,maybe,game command Weapon_HandAim (#191): held item aim check (0x6E660)
+0x9DA30,Script_WeaponHandAim2,script,maybe,game command Weapon_HandAim2 (#1610): held item aim check (0x6E660)
+0x9DA70,Script_WeaponHandEnd,script,maybe,game command Weapon_HandEnd (#283): held item (char+0x54F0) end/release (0x6E770)
+0x9DA90,Script_CharRideCmd,script,maybe,game command Char_RideCmd (#653): ride command (0x4FA40)
+0x9DAA0,Script_CharRideClear,script,maybe,"game command Char_RideClear (#765): clears ride value (0x4FA50, char+0x5FE4)"
+0x9DAB0,Script_CharRideEnd,script,maybe,"game command Char_RideEnd (#766): ends riding/attach (0x4FA60, char+0x5C42/+0x5FE4)"
+0x9DB00,Script_WeaponHandValueB,script,maybe,game command Weapon_HandValueB (#752): held item (char+0x54F0) value (0x6E7B0)
+0x9DB60,Script_WeaponHandSet,script,maybe,game command Weapon_HandSet (#753): held item (char+0x54F0) command n (0x6E810)
+0x9DBC0,Script_HeroHeldItemValue,script,maybe,"game command Hero_HeldItemValue (#1796): value from the item Derrick holds (char+0x54F4, 0x6E600)"
+0x9DBF0,Script_WeaponHeldValueC,script,maybe,"game command Weapon_HeldValueC (#846): value from the held item (kind 0x100, 0x16CC40)"
+0x9DC20,Script_WeaponHeldValueD,script,maybe,"game command Weapon_HeldValueD (#847): value from the held item (kind 0x100, 0x16CC80)"
+0x9DC50,Script_WeaponHeldValueA,script,maybe,"game command Weapon_HeldValueA (#799): value from the held item (kind 0x100, 0x16CA20)"
+0x9DC80,Script_WeaponHeldValueB,script,maybe,"game command Weapon_HeldValueB (#800): value from the held item (kind 0x100, 0x16CB40)"
+0x9DCE0,Script_WeaponHandCmd100,script,maybe,game command Weapon_HandCmd100 (#1107): held item (kind 0x100) command n (0x16CD00)
+0x9DD40,Script_HeroHoldItemState,script,maybe,"game command Hero_HoldItemState (#978, #1108, #1110): state of the item Derrick holds (char+0x54F4, kind 0x100; 0x16CD30); 0 if none"
+0x9DDC0,Script_HeroRideHeld,script,maybe,game command Hero_RideHeld (#977): Derrick rides the object he holds (0x4F9F0)
+0x9DE00,Script_CharRideObj,script,maybe,"game command Char_RideObj (#983): puts this character on/into a named object (0x4F9F0, char+0x5FEC..); used for the helicopter cabin"
+0x9DE70,Script_CharCmd4A2D0,script,maybe,game command Char_Cmd4A2D0 (#1800): this character + 0x16D040 object (0x4A2D0)
+0x9DE90,Script_CharPlayNamedMotion,script,likely,"game command Char_PlayNamedMotion (#651): plays a named action on this character (0x4C1D0; 'chair_down', 'chair_up')"
+0x9DEC0,Script_CharPlayNamedMotion2,script,likely,game command Char_PlayNamedMotion2 (#1261): like Char_PlayNamedMotion with mode 1 ('s10_heli')
+0x9DEF0,Script_CharStopNamedMotion,script,maybe,"game command Char_StopNamedMotion (#922): stops the named action (0x4C240, char+0x7940)"
+0x9DF00,Script_HeroHoldItemValue,script,maybe,"game command Hero_HoldItemValue (#974, #976): float from the item Derrick holds (0x16CD60)"
+0x9DF40,Script_CharSetRayLine,script,maybe,"game command Char_SetRayLine (#199): line check between two points on this character (char+0x348 block, 0x76CD0)"
+0x9DF90,Script_CharRayReset,script,maybe,"game command Char_RayReset (#200): clears the line-check block (char+0x5150, 0x771A0)"
+0x9DFF0,Script_CharEdgeCheck2,script,maybe,game command Char_EdgeCheck2 (#327): ledge check (0x76EC0)
+0x9E050,Script_CharEdgeCheck3,script,maybe,game command Char_EdgeCheck3 (#335): ledge check (0x76EC0; debug 'AEDGE_debug_HANG_CLIMB')
+0x9E090,Script_CharEdgeCheck4,script,maybe,game command Char_EdgeCheck4 (#336): ledge check (0x76EC0)
+0x9E0E0,Script_CharEdgeCheck5,script,maybe,game command Char_EdgeCheck5 (#337): ledge check (0x76EC0)
+0x9E120,Script_CharEdgeCheck,script,maybe,game command Char_EdgeCheck (#676): ledge/edge check around this character (0x76EC0)
+0x9E190,Script_CharRayTarget,script,maybe,game command Char_RayTarget (#328): line-check block (char+0x5150) target id (0x77030)
+0x9E270,Script_CharRayHit,script,maybe,game command Char_RayHit (#979): 1 if the line-check block (char+0x5150) hit something (+0x348)
+0x9E290,Script_CharRayHitValue,script,maybe,game command Char_RayHitValue (#342): line-check block (char+0x5150) result (0x77080)
+0x9E370,Script_CharGet5A58,script,maybe,game command Char_Get5A58 (#412): char+0x5A58 (int); stored into a local in talk cutscenes
+0x9E380,Script_CharTrackIndexOf,script,maybe,"game command Char_TrackIndexOf (#415): index of id in this character's track list (char+0x5A58, 0x73360)"
+0x9E3C0,Script_CharTrackAt,script,maybe,game command Char_TrackAt (#417): track list entry i (char+0x5A58)
+0x9E3E0,Script_CharSet7944,script,maybe,game command Char_Set7944 (#599): char+0x7944[i] = v (i = 0 only) and marks it set
+0x9E430,Script_CharBrainF88,script,maybe,game command Char_Brain_F88 (#601): value of this character's brain +0xF88 (like Char_GetF88)
+0x9E460,Script_CharGet7944Of,script,maybe,game command Char_Get7944Of (#613): char+0x7944[i] of character id (see Char_Set7944)
+0x9E530,Script_CharGet7948,script,maybe,game command Char_Get7948 (#617): char+0x7948 of character id
+0x9E600,Script_CharFlag799C,script,maybe,game command Char_Flag799C (#649): char+0x799C bit 1 (debug 'TEST kougekilock01')
+0x9E610,Script_CharFlag799C2,script,maybe,game command Char_Flag799C_2 (#1785): char+0x799C bit 2
+0x9E650,Script_CharValue49700,script,maybe,game command Char_Value49700 (#872): value from 0x49700 (char +0x170/+0x18E)
+0x9E6C0,Script_CharSetObjDist,script,maybe,game command Char_SetObjDist (#898): this character's object value (0x3D690)
+0x9E700,Script_CharCancelSonicMove,script,maybe,game command Char_CancelSonicMove (#900): cancels the object move (0x3D700; debug 'Sonic-move canceled')
+0x9E720,Script_CharSetObjValue,script,maybe,game command Char_SetObjValue (#1659): this character's object value (0x3D6B0)
+0x9E740,Script_CharObjFlag194,script,maybe,game command Char_ObjFlag194 (#1788): 1 if this character's object +0x194 is set
+0x9E760,Script_MotionSetGet,script,maybe,game command MotionSet_Get (#968): cutscene motion set value n (0x4BC20)
+0x9E7B0,Script_MotionSetStop2,script,maybe,game command MotionSet_Stop2 (#970): cutscene motion set stop (0x4BC80)
+0x9E7C0,Script_MotionSetState,script,maybe,game command MotionSet_State (#971): cutscene motion set state (0x4BCB0)
+0x9E8D0,Script_Obj4GetId,script,likely,"game command Obj4_GetId (#1118, #1119): id of the fourth main object (0x2A92D8), -1 if none"
+0x9E8E0,Script_Obj6GetId,script,likely,"game command Obj6_GetId (#1149): id of the object in main slot 0x2A92DC, -1 if none (0x3A320)"
+0x9E8F0,Script_Obj5GetId,script,likely,"game command Obj5_GetId (#1150, #1147): id of the object in main slot 0x2A92E4, -1 if none (0x3A340)"
+0x9E910,Script_CaptionPlay,script,likely,"game command Caption_Play (#532): plays caption/voice line id on this character (caption block char+0x4F98, 0x61830)"
+0x9E940,Script_CaptionPlayB,script,maybe,game command Caption_PlayB (#1001): caption block (char+0x4F98) play (0x61890)
+0x9E960,Script_CaptionPlayData,script,likely,"game command Caption_PlayData (#1797): plays a caption line taken from a DATA table (char+0x4F98, 0x61830)"
+0x9E9C0,Script_CaptionPlayPair,script,maybe,"game command Caption_PlayPair (#543): plays a pair of caption lines (char+0x4F98, 0x618F0) in talk scenes"
+0x9E9F0,Script_CaptionPlayC,script,maybe,game command Caption_PlayC (#1002): caption block (char+0x4F98) play (0x61920)
+0x9EA20,Script_CharSetLinkId,script,maybe,game command Char_SetLinkId (#558): char+0x506C = object id (talk partner)
+0x9EA30,Script_CharSet5070,script,maybe,game command Char_Set5070 (#559): char+0x5070 = f (talk distance; 100000 / 150)
+0x9EA40,Script_CharSetTalkYaw,script,maybe,game command Char_SetTalkYaw (#1177): char+0x5074 = angle (talk scenes)
+0x9EA60,Script_CaptionState,script,maybe,game command Caption_State (#557): caption block (char+0x4F98) +0xCE (state)
+0x9EA80,Script_CaptionStopChar,script,likely,"game command Caption_StopChar (#1128): stops this character's caption/voice (char+0x4F98, Caption_Stop via 0x61100)"
+0x9EAA0,Script_CaptionPlayN,script,maybe,game command Caption_PlayN (#1129): caption block (char+0x4F98) command n (0x61210)
+0x9EAF0,Script_MotionSetFaceHands,script,likely,"game command Motion_SetFaceHands (#209): sets char+0x499A then face and hand animations (calls #596, #597, #598)"
+0x9EB80,Script_MotionPlaySetB,script,likely,"game command Motion_PlaySetB (#879): motion set on this character (0x60A50), 8 values"
+0x9EC40,Script_MotionSetPlayOn9,script,likely,"game command MotionSet_PlayOn9 (#881): motion set on character id (0x60AA0), 9 values"
+0x9ED20,Script_MotionSetPlayOn,script,likely,game command MotionSet_PlayOn (#1052): motion set (face/hands/body...) on character id (0x60AA0); like Motion_PlaySet for another character
+0x9EDE0,Script_MotionPlaySetC,script,likely,"game command Motion_PlaySetC (#951): motion set on this character (0x60A50), 10 values"
+0x9EEE0,Script_MotionSetStopAll,script,likely,"game command MotionSet_StopAll (#1756): stops the cutscene motion set (char+0x5B8C) and its voice (0x60B90, 0x60860)"
+0x9EF70,Script_MotionSetReset,script,maybe,game command MotionSet_Reset (#1207): cutscene motion set reset (0x60CD0)
+0x9EF90,Script_MotionSetSetPos,script,likely,game command MotionSet_SetPos (#1208): cutscene motion set (char+0x5B8C) position +0x40/+0x44/+0x48
+0x9EFE0,Script_MotionSetSetFrame,script,maybe,game command MotionSet_SetFrame (#991): cutscene motion set +0x18 (0x60BE0)
+0x9F020,Script_MotionSetCmd,script,maybe,"game command MotionSet_Cmd (#1063): cutscene motion set command n (0x4BCE0) for character types 1, 14-16"
+0x9F050,Script_MotionSetSetDist,script,maybe,game command MotionSet_SetDist (#1064): cutscene motion set value (0x4BD10) (100000 / 150 / 30)
+0x9F070,Script_MotionSetSet5B88b,script,maybe,game command MotionSet_Set5B88b (#1755): cutscene motion set value (0x4BD40) (10)
+0x9F090,Script_MotionSetSetAngle,script,maybe,game command MotionSet_SetAngle (#1065): cutscene motion set angle (0x4BD70)
+0x9F0E0,Script_MotionSetIsDoneOf,script,maybe,game command MotionSet_IsDoneOf (#1054): motion set state of character id (0x60C10)
+0x9F120,Script_StateChangeRandom3,script,likely,game command State_ChangeRandom3 (#210): changes to one of three states at random
+0x9F220,Script_MotionLayerEvent,script,maybe,game command Motion_LayerEvent (#213): animation layer event (0x735C0)
+0x9F400,Script_SoundPlayAtPos,script,likely,"game command Sound_PlayAtPos (#883): plays sound id at a point (Sound_RemapByArea, 0x23980)"
+0x9F470,Script_SoundPlayAtChar,script,likely,"game command Sound_PlayAtChar (#884): plays sound at character id (Sound_RemapByArea, 0x238E0)"
+0x9F4E0,Script_StreamRelease,script,maybe,game command Stream_Release (#1512): 0x2E5B0(handle)
+0x9F510,Script_StreamPlayAtChar,script,likely,game command Stream_PlayAtChar (#631): plays a named stream at this character (0x1D330) unless slow motion
+0x9F580,Script_StreamIsDone,script,maybe,"game command Stream_IsDone (#938): 1 if a stream finished (0xAA540, 0x2E6F0)"
+0x9F610,Script_StreamPlayAtPos,script,likely,game command Stream_PlayAtPos (#940): plays a named stream at a point (0x1D3B0)
+0x9F700,Script_CharPlaySound,script,likely,"game command Char_PlaySound (#627): plays a character sound of kind 0..15 (0x74F70 on char+0x5B30; sound picked per character type from tables 0x24A220.., Sound_RemapByArea); 11/12 = swing/hit"
+0x9F730,Script_CharPlaySoundEx,script,likely,game command Char_PlaySoundEx (#704): same as Char_PlaySound with a variant 0..2 and a bone (<24) to play from (0x74F70); was Target_Set
+0xABC50,Script_DataGetF2,script,likely,game command Data_GetF2 (#354): float from a DATA table of this script (0x5F490)
+0xABC70,Script_DataGetFloat,script,likely,"game command Data_GetFloat (#355): float from a DATA table of this script (0x5F490 mode 2, 'IFDT'/'DATA'); e.g. table 392 row Char_GetType(); was Effect_Command"
+0xABCA0,Script_DataGetF3,script,likely,game command Data_GetF3 (#356): float from a three-index DATA table (0x5F490)
+0xAC0C0,Script_DifficultyGet,script,sure,"game command Difficulty_Get (#1724, #1660): difficulty byte 0x29C5EE (jmp 0x20410)"
+0xAC0D0,Script_AISet4,script,maybe,game command AI_Set4 (#1523): AI brain +4 = v (0..1)
+0xAC130,Script_AIGet8,script,maybe,game command AI_Get8 (#1526): AI brain +8 (int)
+0xAC140,Script_GameSetNextScene,script,maybe,game command Game_SetNextScene (#746): game state: next scene n (state 0xB -> 0xC; 14/15 -> state 0x17) (0x1BFE0)
+0xAC240,Script_AIObjValue3D070,script,maybe,game command AI_ObjValue3D070 (#1476): AI's object value (0x3D070)
+0xAC2A0,Script_AICharMotScript,script,likely,game command AI_CharMotScript (#459): AI's character motion-script id (+0x6004 via 0x3D150); passed to AI_SetMotScript
+0xAC3F0,Script_CharSetPathParamOf,script,likely,"game command Char_SetPathParamOf (#824): sets path value n of character id's brain (0x52A20 for itself, else 0x3D3F0); pairs with Char_SetPathOf"
+0xAC510,Script_CharSetPathOf,script,likely,game command Char_SetPathOf (#828): sets path name n of character id's brain (0x52A80)
+0xAC5A0,Script_AITerritoryRange,script,likely,"game command AI_TerritoryRange (#830): AI territory range i (0..3, brain+0xE44); 0 = not set (debug 'Not set territory range!!')"
+0xAC6A0,Script_AISetFlag5C404,script,likely,game command AI_SetFlag5C40_4 (#1163): AI's character char+0x5C40 flag 4 on
+0xAC800,Script_AIYawToObjPart,script,maybe,game command AI_YawToObjPart (#545): yaw from the AI's character to a point of object id (0x77460)
+0xACB00,Script_NearFindCone1,script,maybe,game command Near_FindCone1 (#1265): search around the AI's character (0x78B00) returns a count/id
+0xACBC0,Script_NearFindCone3,script,maybe,game command Near_FindCone3 (#1270): search around the AI's character (0x78B80)
+0xACCE0,Script_NearFindCone2,script,maybe,game command Near_FindCone2 (#1268): search around the AI's character (0x78CC0)
+0xACED0,Script_AIMoveSetFlag,script,maybe,game command AI_MoveSetFlag (#1617): AI mover (brain+0x5D0) flag (0xA3760)
+0xACF90,Script_AIMoveDir,script,maybe,game command AI_MoveDir (#788): AI mover heads along pitch/yaw (0xA2F70)
+0xAD000,Script_AIMoveDirYaw,script,maybe,game command AI_MoveDirYaw (#789): AI mover heads along a yaw (0xA2F70)
+0xAD090,Script_AISetMove174,script,maybe,game command AI_SetMove174 (#811): AI mover (brain+0x5D0) +0x174 = v (word); set right after AI_SetMoveMode
+0xAD110,Script_AIMoveSet130,script,maybe,game command AI_MoveSet130 (#815): AI mover (brain+0x5D0) +0x130 (0xA3790)
+0xAD1F0,Script_AIMoveToXYZ,script,likely,game command AI_MoveToXYZ (#795): AI mover goes to x y z (0xA2F70)
+0xAD250,Script_AIAimAtChar,script,maybe,"game command AI_AimAtChar (#797): AI aims at a bone of character id (0x4AF30, 0xA2F40)"
+0xAD400,Script_AIAimAtTarget,script,maybe,"game command AI_AimAtTarget (#1825): AI aims at its target (bone matrix, 0xA10C0, 0xA2F40)"
+0xAD530,Script_AIMoveDirPY,script,maybe,game command AI_MoveDirPY (#801): AI mover direction (0xA2F70)
+0xAD5A0,Script_AIMoveReset2,script,maybe,game command AI_MoveReset2 (#366): AI mover (brain+0x5D0) reset with mode 2 (0xA3840)
+0xAD670,Script_AIMoveSpeedLevel,script,likely,"game command AI_MoveSpeedLevel (#1760): AI mover (brain+0x5D0) +6 (speed level, see AI_SetSpeedLevel)"
+0xAD6F0,Script_AIMoveSetMode1B4,script,maybe,"game command AI_MoveSetMode1B4 (#372): AI mover (brain+0x5D0) sub block +0x1B4: mode n, reset"
+0xAD730,Script_AICharModeA0EA0,script,maybe,game command AI_CharModeA0EA0 (#373): AI's character mode (+0x5FC0) check (0xA0EA0)
+0xAD750,Script_AIResetAttackN,script,likely,game command AI_ResetAttackN (#374): resets AI attack block (brain+0x750) with n 1..4 (0xA1CD0; AI_ResetAttackTimer uses 1)
+0xAD780,Script_AIGet750,script,maybe,game command AI_Get750 (#1759): AI brain +0x750 (word)
+0xAD790,Script_AIResetAttackTimer,script,likely,game command AI_ResetAttackTimer (#375): resets AI attack block (brain+0x750) with 1 (0xA1CD0); see AI_ResetAttackN
+0xAD7B0,Script_AISetAttackRate,script,maybe,"game command AI_SetAttackRate (#821): AI attack block (brain+0x750) value (0xA1D40), 0..1"
+0xAD7D0,Script_AISetAttackRate2,script,maybe,"game command AI_SetAttackRate2 (#822): AI attack block (brain+0x750) value (0xA1D00), 0..1"
+0xAD7F0,Script_AISetAttack1C,script,maybe,game command AI_SetAttack1C (#854): AI attack block (brain+0x750) +0x1C (0xA1DA0)
+0xAD810,Script_AISetAttack14,script,maybe,game command AI_SetAttack14 (#1262): AI attack block (brain+0x750) +0x14 (0xA1D80)
+0xAD830,Script_AISetAttack10,script,maybe,game command AI_SetAttack10 (#1263): AI attack block (brain+0x750) +0x10 (0xA1D90)
+0xAD850,Script_AISetAttack20,script,maybe,game command AI_SetAttack20 (#856): AI attack block (brain+0x750) +0x20 (0xA1DB0)
+0xAD870,Script_AISet750b,script,maybe,game command AI_Set750b (#855): AI brain +0x750 block (0xA1DC0)
+0xAD890,Script_AISetAttackTarget,script,maybe,game command AI_SetAttackTarget (#857): AI attack block (brain+0x750) target object id (0xA1DD0)
+0xADA30,Script_CharTargetOfObj,script,maybe,game command Char_TargetOfObj (#1715): target id of object id's brain (0x79130)
+0xADA90,Script_AISet1C,script,maybe,game command AI_Set1C (#1242): AI brain +0x1C = f
+0xADAB0,Script_AISet16,script,maybe,game command AI_Set16 (#1803): AI brain +0x16 = v
+0xADAC0,Script_AISensedValueJ,script,maybe,game command AI_SensedValueJ (#1202): float +0x20/+0x38 from the AI's sense entry for +0x2F8 (debug 'Target see...')
+0xADB10,Script_AISensedValueK,script,maybe,game command AI_SensedValueK (#1240): float +0x1C/+0x34 from the AI's sense entry for +0x2F8
+0xADB60,Script_AISensedValueG,script,maybe,game command AI_SensedValueG (#1594): float +0x20 from the AI's sense entry for +0x2F8
+0xADBA0,Script_AISensedValueB,script,maybe,game command AI_SensedValueB (#1595): float +0x1C (x3 by flag) from the AI's sense entry for its +0x2F8 object (0xA1B10)
+0xADBE0,Script_AISensedValueH,script,maybe,game command AI_SensedValueH (#1201): float +0x20/+0x38 from the AI's sense entry for its look target (debug 'Tran view...')
+0xADC30,Script_AISensedValueF,script,maybe,game command AI_SensedValueF (#1239): float +0x1C/+0x34 from the AI's sense entry for its look target
+0xADCC0,Script_AISensedValueE,script,maybe,game command AI_SensedValueE (#1593): float +0x1C from the AI's sense entry for its look target
+0xADE20,Script_AISensedLookValue,script,maybe,game command AI_SensedLookValue (#1638): larger of +0x30/+0x48 from the AI's sense entry for its look target (+0x2E8)
+0xADE70,Script_AISensedValueI,script,maybe,game command AI_SensedValueI (#1639): float +0x2C/+0x44 from the AI's sense entry for its look target
+0xAE000,Script_AISensedValueC,script,maybe,game command AI_SensedValueC (#1650): float +0x20/+0x28 from the AI's sense entry for id (look list)
+0xAE060,Script_AISensedValueD,script,maybe,game command AI_SensedValueD (#1651): float +0x1C/+0x24 from the AI's sense entry for id
+0xAE370,Script_AIAimSpread,script,maybe,game command AI_AimSpread (#1827): AI aim at target with spread (0xA3970)
+0xAE510,Script_AITargetAimPitch,script,maybe,game command AI_TargetAimPitch (#387): pitch to the AI's target (0x793C0)
+0xAE550,Script_AIAttackDist,script,maybe,game command AI_AttackDist (#1199): AI attack block (brain+0x750) distance (0xA2A60)
+0xAE570,Script_AIAttackDist2,script,maybe,game command AI_AttackDist2 (#1590): AI attack block (brain+0x750) distance (0xA2AB0)
+0xAE5C0,Script_AILookTargetId,script,likely,"game command AI_LookTargetId (#853): id of the AI's look target, -1 if none (0x79540)"
+0xAE620,Script_AIHas2F8,script,maybe,game command AI_Has2F8 (#403): 1 if AI brain +0x2F8 is set
+0xAE640,Script_AISetHear300,script,maybe,game command AI_SetHear300 (#390): AI brain +0x300 = f
+0xAE650,Script_AISetHear304,script,maybe,game command AI_SetHear304 (#391): AI brain +0x304 = angle
+0xAE680,Script_AIFindNearestEnemy,script,maybe,game command AI_FindNearestEnemy (#392): nearest living character for the AI (0x79550)
+0xAE6D0,Script_AILookTargetHeight,script,maybe,"game command AI_LookTargetHeight (#395): height difference to the AI's look target (+0x2E4, 0x79760)"
+0xAE6F0,Script_AILookTargetDist,script,likely,game command AI_LookTargetDist (#1586): distance from the AI's character to its look target (+0x2E4)
+0xAE710,Script_AILookTargetValue,script,maybe,game command AI_LookTargetValue (#396): value from the AI's look target (0x79820; debug 'Folow Target...')
+0xAE7B0,Script_AILookTargetMode,script,likely,game command AI_LookTargetMode (#401): mode (+0x5FC0) of the AI's look target
+0xAE7D0,Script_AIMoveToLookTarget,script,maybe,game command AI_MoveToLookTarget (#388): AI mover goes to its look target (0x7AA20)
+0xAE800,Script_AILockDir,script,maybe,game command AI_LockDir (#422): AI lock block (brain+0x790): 0 / 1 / -1 (debug 'LOCK')
+0xAE860,Script_AICmd7A01B,script,maybe,game command AI_Cmd7A0_1B (#376): AI brain +0x7A0 command 0x1B (0x7B670)
+0xAE880,Script_AILockOnObj,script,likely,game command AI_LockOnObj (#771): AI's character locks on to object id (0x3C5C0)
+0xAE8B0,Script_AILockOnName,script,likely,"game command AI_LockOnName (#772): AI's character locks on to a named object (lock block char+0x4F54, 0x482D0)"
+0xAE8E0,Script_AILockOnChar,script,likely,game command AI_LockOnChar (#773): AI's character locks on to character id (0x3C5C0)
+0xAE940,Script_CharLockOnName,script,likely,game command Char_LockOnName (#775): character id locks on to a named object (0x3C5C0)
+0xAE970,Script_AICmd7A0,script,maybe,game command AI_Cmd7A0 (#507): AI brain +0x7A0 command 9 (0x7B670)
+0xAE9D0,Script_AISenseChar,script,maybe,game command AI_SenseChar (#1807): adds/refreshes character id in the AI's sense list for frames (0xA1A30)
+0xAEA70,Script_AISensedHas,script,likely,game command AI_SensedHas (#1808): 1 if object id is in the AI's sense list
+0xAEE00,Script_AISensedValue,script,maybe,game command AI_SensedValue (#1819): float +0x20/+0x28 (x3 by flag) from the AI's sense entry for object id (0xA1B10)
+0xAEEE0,Script_CatSetPos,script,likely,game command Cat_SetPos (#713): object 0x380FEC +0x164 = x y z (cat scripts)
+0xAEF00,Script_CatSetRot,script,likely,game command Cat_SetRot (#714): object 0x380FEC rotation (cat scripts)
+0xAF040,Script_CatPlaySound,script,likely,game command Cat_PlaySound (#721): plays a sound at the cat object (0x380FEC)
+0xAF150,Script_CatSetMode,script,maybe,game command Cat_SetMode (#723): object 0x380FEC +0x18A = n (cat scripts)
+0xAF180,Script_CatSetMotion,script,maybe,game command Cat_SetMotion (#725): motion slot of object 0x380FEC +0x1A0 (MotSlot_Set); used by the cat scripts
+0xAF1D0,Script_CatSetValue190,script,maybe,game command Cat_SetValue190 (#729): object 0x380FEC +0x190 = f (cat)
+0xAF1E0,Script_CatMotionAt,script,maybe,game command Cat_MotionAt (#730): cat motion slot check (0x83C30)
+0xAF230,Script_CatMotionLength,script,maybe,game command Cat_MotionLength (#733): cat motion length -1 (+0x1BC)
+0xAF250,Script_CatMotionIsEnd,script,likely,game command Cat_MotionIsEnd (#734): cat motion slot reached its end (MotSlot_IsEnd)
+0xAF270,Script_CatSetKillTime,script,likely,game command Cat_SetKillTime (#901): cat kill timer (0x6C130; debug 'cat kill time')
+0xAF290,Script_CatSet1C4,script,maybe,game command Cat_Set1C4 (#917): cat object +0x1C4 = f
+0xAF2A0,Script_CatAttachTo,script,maybe,game command Cat_AttachTo (#1152): cat object attaches to a named object (0x6C160)
+0xAF2E0,Script_CatValue6C1C0,script,maybe,game command Cat_Value6C1C0 (#1154): cat object value (0x6C1C0)
+0xB3CB0,Math_RandomRange,math,sure,game command RandomF (#1): random float between min and max
 # Characters (P5.3): status block layout, life block, roster, outfits. docs/decomp/characters.md
 0x503F0,CharPool_Init,character,sure,"creates the pools: man 0x2A97A0 (status blocks, 0x79A0 each), p_script 0x2A97E8, cloth 0x2A97D0, hair 0x2A97B8"
 0x504B0,CharPool_Free,character,sure,"frees the four character pools made by CharPool_Init"
