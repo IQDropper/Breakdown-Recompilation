@@ -15,6 +15,11 @@ static int s_on = -1;
 static double s_freq;
 static double s_t0;              /* current job start, ms; 0 = none */
 static double s_data_ms;         /* area: AREA DATA SET, ms after start */
+/* P6.2: where a load's time goes, ms per step: pak read (PakLoadStart to the next message), setup (texture and
+ * sound registration, up to EventLoad Start), event file (up to the first Evd wait), waits (Evd In/Out
+ * "Waiting" until work resumes or Load Finish). */
+static double s_mark, s_pak, s_setup, s_event, s_wait;
+static int s_step;               /* 0 none, 1 pak read, 2 setup, 3 event file, 4 waiting */
 static char s_kind[12], s_name[64];
 static double s_after_until;     /* ms clock; while now < this, collect frame stats */
 static char s_after_name[64];
@@ -48,8 +53,23 @@ static void start(const char *kind, const char *name)
 {
     s_t0 = now_ms();
     s_data_ms = 0;
+    s_mark = s_t0;
+    s_pak = s_setup = s_event = s_wait = 0;
+    s_step = 0;
     snprintf(s_kind, sizeof s_kind, "%s", kind);
     snprintf(s_name, sizeof s_name, "%s", name);
+}
+
+/* Close the running step at time t and start step 'next'. */
+static void step_to(int next, double t)
+{
+    double d = t - s_mark;
+    if (s_step == 1) s_pak += d;
+    else if (s_step == 2) s_setup += d;
+    else if (s_step == 3) s_event += d;
+    else if (s_step == 4) s_wait += d;
+    s_step = next;
+    s_mark = t;
 }
 
 static void finish(void)
@@ -59,6 +79,9 @@ static void finish(void)
         fprintf(stderr, "[LOAD] %s %s: %.0f ms (data set at %.0f ms)\n", s_kind, s_name, ms, s_data_ms);
     else
         fprintf(stderr, "[LOAD] %s %s: %.0f ms\n", s_kind, s_name, ms);
+    step_to(0, t);
+    fprintf(stderr, "[LOAD]   steps %s: pak read %.0f, setup %.0f, event file %.0f, waits %.0f, other %.0f ms\n",
+            s_name, s_pak, s_setup, s_event, s_wait, ms - s_pak - s_setup - s_event - s_wait);
     fflush(stderr);
     snprintf(s_after_name, sizeof s_after_name, "%s", s_name);
     s_after_until = t + 5000.0;
@@ -102,6 +125,19 @@ void load_timer_msg(const char *msg)
         start("section", nm);
     } else if (strstr(msg, "EVENT .evb & .pak Load Finish") && s_t0 > 0) {
         finish();
+    }
+    if (s_t0 > 0) {                                                   /* P6.2 steps */
+        double t = now_ms();
+        if (strstr(msg, "PakLoadStart"))
+            step_to(1, t);
+        else if (s_step == 1 && !strstr(msg, "Open and Read file"))
+            step_to(2, t);                                             /* first message after the read */
+        if (strstr(msg, "EventLoad Start"))
+            step_to(3, t);
+        else if (strstr(msg, "Waiting ...."))
+            { if (s_step != 4) step_to(4, t); }
+        else if (s_step == 4)
+            step_to(2, t);                                             /* work again after a wait */
     }
 }
 
