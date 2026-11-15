@@ -15,6 +15,7 @@
 #include "qol_host.h"
 #include "qol.h"
 #include "pc_options.h"
+#include "play_record_host.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -133,7 +134,8 @@ static int looks_black(const uint8_t *bits, int stride, const struct pc_rect *r)
     return 1;
 }
 
-static void screenshot(HWND game)
+/* want: a full path (the play recorder's shots, no overlay note), or NULL for a new name in the screenshots folder. */
+static void screenshot_to(HWND game, const char *want)
 {
     RECT cr;
     struct pc_rect fr;
@@ -212,7 +214,9 @@ static void screenshot(HWND game)
         qol_note("screenshot failed");
         return;
     }
-    if (!shot_path(path, sizeof path) || !(f = fopen(path, "wb"))) {
+    if (want)
+        snprintf(path, sizeof path, "%s", want);
+    if ((!want && !shot_path(path, sizeof path)) || !(f = fopen(path, "wb"))) {
         fprintf(stderr, "[SHOT] could not open a file in %%LOCALAPPDATA%%\\xboxrecomp\\screenshots\n");
         free(png);
         qol_note("screenshot failed");
@@ -225,7 +229,35 @@ static void screenshot(HWND game)
             how == 1 ? "window" : "screen");
     fprintf(stderr, "[SHOT] %s\n", path);
     fflush(stderr);
-    qol_note(n ? "screenshot saved" : "screenshot failed");
+    if (!want)
+        qol_note(n ? "screenshot saved" : "screenshot failed");
+}
+
+/* [play-record] a screenshot to a given path, taken on the overlay thread at its next tick (about 33 ms). */
+static char s_req[MAX_PATH];
+static volatile int s_req_on;
+
+void qol_shot_request(const char *path)
+{
+    if (!s_ready)
+        return;
+    EnterCriticalSection(&s_lock);
+    snprintf(s_req, sizeof s_req, "%s", path);
+    s_req_on = 1;
+    LeaveCriticalSection(&s_lock);
+}
+
+static void take_requested(HWND game)
+{
+    char path[MAX_PATH];
+    if (!s_req_on)
+        return;
+    EnterCriticalSection(&s_lock);
+    snprintf(path, sizeof path, "%s", s_req);
+    s_req_on = 0;
+    LeaveCriticalSection(&s_lock);
+    if (IsWindow(game))
+        screenshot_to(game, path);
 }
 
 /* ---- game frames ---- */
@@ -386,7 +418,7 @@ static void keys(HWND game)
     if (d5 && !s_was5 && front && s_fps_on)
         s_visible = !s_visible;
     if (d12 && !s_was12 && front && s_shots_on && IsWindow(game))
-        screenshot(game);
+        screenshot_to(game, NULL);
     s_was5 = d5;
     s_was12 = d12;
 }
@@ -428,6 +460,7 @@ static DWORD WINAPI qol_thread(LPVOID unused)
                     game = g;
             }
             keys(game);
+            take_requested(game);
             if (IsWindow(game))
                 place(game, (++tick % 8) == 0);   /* the numbers change 4 times a second */
             continue;
@@ -443,7 +476,7 @@ static void start(void)
     HANDLE t;
     qol_fps_overlay_on();
     qol_screenshots_on();
-    if (!s_fps_on && !s_shots_on)
+    if (!s_fps_on && !s_shots_on && !play_record_on())   /* the recorder takes its screenshots here */
         return;
     QueryPerformanceFrequency(&s_freq);
     InitializeCriticalSection(&s_lock);

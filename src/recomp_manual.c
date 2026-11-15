@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Manual function overrides and ICALL diagnostics
  *
  * This file provides:
@@ -193,6 +193,7 @@ void recomp_icall_not_code_log(uint32_t va)
 #include "speedrun_host.h"
 #include "qol.h"
 #include "qol_host.h"
+#include "play_record_host.h"
 
 void recomp_unimpl(const char *text, uint32_t va)
 {
@@ -528,6 +529,7 @@ void sub_00161680(void)
         subtitles_frame();    /* A11Y-6b: the game's Caption option from the PC options row */
         load_timer_frame();   /* RECOMP_LOAD_LOG: frame times after a load (src/load_timer.c) */
         qol_frame();   /* FPS overlay + F12 screenshot (src/qol_host.c) */
+        play_record_frame();   /* RECOMP_PLAY_RECORD: the play recorder (src/play_record_host.c) */
         if (qol_skip_intro_on())
             intro_skip_frame();
     }
@@ -537,7 +539,7 @@ void sub_00161680(void)
      * Real formats are literals in the XBE image. */
     if (fmt < 0x10000u || fmt >= 0x00400000u)
         text = 0;
-    if (s_game_log || text || load_timer_on()) {
+    if (s_game_log || text || load_timer_on() || play_record_on()) {
         ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
@@ -558,6 +560,8 @@ void sub_00161680(void)
         out[n] = 0;
         if (fmt >= 0x10000u && fmt < 0x00400000u)
             load_timer_msg(out);   /* RECOMP_LOAD_LOG: the game's own loading messages */
+        if (fmt >= 0x10000u && fmt < 0x00400000u)
+            play_record_msg(out);   /* RECOMP_PLAY_RECORD: areas and sections entered */
         if (text && MEM32(g_esp) != 0x0018EA4Eu)
             debug_text_put_from(out, MEM32(g_esp));
         if (s_game_log) {
@@ -1448,7 +1452,7 @@ void sub_0003E710(void)
         nodmg = dbg_switch(16);
         /* Step stretch: the FastMove switch times the tuning range's "Move speed x" (src/tuning_host.c). */
         move_k = (dbg_switch(21) ? fastmove_scale() : 1.0f) * tuning_host_move_speed() - 1.0f;
-        if (nodmg || move_k > 1e-3f || move_k < -1e-3f || tuning_host_active())
+        if (nodmg || move_k > 1e-3f || move_k < -1e-3f || tuning_host_active() || play_record_on())
             st = hero_status(hero);
         tuning_host_hero(st);   /* the window reads this; finalized values are applied once per new hero */
         if (nodmg) {
@@ -1458,6 +1462,8 @@ void sub_0003E710(void)
         }
         if (st)
             mem_search_name("herostatus", st);
+        if (st)
+            play_record_hero(MEMF(st + 0x00), MEMF(st + 0x04), MEMF(st + 0x08));   /* RECOMP_PLAY_RECORD */
         pos_log(hero, st);
         damage_log(hero, st);
         if (st && (move_k > 1e-3f || move_k < -1e-3f)) {
