@@ -5,20 +5,20 @@ Made by `python tools/names_db.py` from config/function_names.csv (hand names), 
 
 | | Functions | Share |
 |---|---|---|
-| **Named** (any source) | 1,220 | 7.3% |
-| of which game code named by us or the earlier pass | 755 | 4.5% |
+| **Named** (any source) | 1,229 | 7.4% |
+| of which game code named by us or the earlier pass | 764 | 4.6% |
 | of which Xbox library names (XDK, D3D, sound, C runtime) | 465 | 2.8% |
 | Original source file known (kondoh/ko_*.c), not named yet | 26 | 0.2% |
-| Sorted by kind only (render, audio, objects...) | 7,345 | 44.2% |
-| Nothing known | 8,031 | 48.3% |
+| Sorted by kind only (render, audio, objects...) | 7,344 | 44.2% |
+| Nothing known | 8,023 | 48.3% |
 | **Total** | 16,622 | 100.0% |
 
 ## By system
 
 | System | Named by hand | Earlier pass | Library | Source file | Sorted only | Total |
 |---|---|---|---|---|---|---|
-| (not sorted) | 0 | 0 | 0 | 0 | 0 | 8,031 |
-| objects | 0 | 0 | 0 | 0 | 6437 | 6,437 |
+| (not sorted) | 0 | 0 | 0 | 0 | 0 | 8,023 |
+| objects | 0 | 0 | 0 | 0 | 6436 | 6,436 |
 | render | 115 | 12 | 136 | 0 | 300 | 563 |
 | audio | 1 | 1 | 104 | 0 | 271 | 377 |
 | engine | 231 | 14 | 0 | 0 | 46 | 291 |
@@ -37,6 +37,7 @@ Made by `python tools/names_db.py` from config/function_names.csv (hand names), 
 | char | 12 | 0 | 0 | 0 | 0 | 12 |
 | combat | 12 | 0 | 0 | 0 | 0 | 12 |
 | effects | 10 | 0 | 0 | 0 | 0 | 10 |
+| collision | 9 | 0 | 0 | 0 | 0 | 9 |
 | vehicle | 0 | 0 | 0 | 0 | 8 | 8 |
 | ko_math | 0 | 0 | 0 | 4 | 0 | 4 |
 | ko_ncc_0 | 0 | 0 | 0 | 4 | 0 | 4 |

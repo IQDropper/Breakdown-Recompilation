@@ -3,9 +3,14 @@
   python tools/nud.py <romdata> <model id> [--pak PATH]        print one model (LODs, parts, materials)
   python tools/nud.py <romdata> --area hon_under_A              list the scenery models of one area section
   python tools/nud.py <romdata> --check                         read every model in the game, report problems
+  python tools/nud.py <romdata> --hit <model id> [--pak PATH]    print a model's hit data (HD51 collision)
+  python tools/nud.py <romdata> --hit-area hon_under_A           print the collision of one area section
+  python tools/nud.py <romdata> --check-hit                     read every HD51 block in the game, report problems
 
 Library use (tools/model_gltf.py): find_model(), Model(entry bytes).lod(n) -> parts with vertices and triangles,
 TexIndex(romdata).find(gidx, near=pak) -> (rgba bytes, w, h) of the texture a material names.
+hit_blocks(entry, pak bytes) / section_collision(romdata, 'hon_under_A') -> Hit (points, triangles, tree, edges).
+Hit data layout: docs/formats/collision.md.
 """
 import bisect
 import collections
@@ -340,6 +345,114 @@ class TexIndex:
         return None
 
 
+# ---- hit data (HD51, collision) ---------------------------------------------------------------------------------
+# Layout: docs/formats/collision.md. Reader in the game: 0x42640 (-> chunk walk 0x424D0, chunk handler 0x42540).
+HIT_TYPES = {0: 'solid', 1: 'type 1', 2: 'only for queries with flag 1', 3: 'skipped by queries with flag 8',
+             4: 'type 4', 15: 'never hit (skipped by every query)'}
+
+
+def surface(word):
+    """(type, material, upper bits) of a triangle's surface word: low 4 bits = type (filter 0x42750),
+    bits 4-10 = material number (0-127), bits 11-15 = more flags."""
+    return word & 0xF, (word >> 4) & 0x7F, word >> 11
+
+
+class Hit:
+    """One HD51 block: chunk list INFO, BSP, TRI, AEG, PNT. `points` are (x, y, z) in the same space as the
+    model (area space for scenery), `tris` are (a, b, c, surface word), `nodes` are (front, back, first tri,
+    tri count) with -1 = no child, `edges` are (p0, p1, p2, flags)."""
+
+    def __init__(self, b, o=0):
+        if b[o:o + 4] != b'HD51':
+            raise ValueError('no HD51 at %#x' % o)
+        (sz,) = struct.unpack_from('<I', b, o + 4)       # bit 0 = 'has child chunks', size = rest & ~1
+        self.offset, self.size = o, 8 + (sz & ~1)
+        self.chunks = collections.OrderedDict()
+        p, end = o + 8, o + 8 + (sz & ~1)
+        while p < end:
+            (s,) = struct.unpack_from('<I', b, p + 4)
+            self.chunks[b[p:p + 4].decode('latin-1')] = (p + 8, s & ~1)
+            p += 8 + (s & ~1)
+        i, _ = self.chunks['INFO']
+        self.info = struct.unpack_from('<2I', b, i)
+        self.bbox = (struct.unpack_from('<3f', b, i + 8), struct.unpack_from('<3f', b, i + 0x18))
+        pp, ps = self.chunks['PNT ']
+        self.points = [struct.unpack_from('<3f', b, pp + 12 * k) for k in range(ps // 12)]
+        tp, ts = self.chunks['TRI ']
+        self.tris = [struct.unpack_from('<4H', b, tp + 8 * k) for k in range(ts // 8)]
+        bp, bs = self.chunks['BSP ']
+        (self.node_start,) = struct.unpack_from('<I', b, bp)   # always 4: nodes start right after this word
+        self.nodes = [struct.unpack_from('<2h2H', b, bp + self.node_start + 8 * k)
+                      for k in range((bs - self.node_start) // 8)]
+        ap, _ = self.chunks['AEG ']
+        (n,) = struct.unpack_from('<H', b, ap)
+        self.edges = [struct.unpack_from('<4H', b, ap + 2 + 8 * k) for k in range(n)]
+
+    def check(self):
+        """problems as strings (empty = fine)."""
+        out = []
+        np_ = len(self.points)
+        if any(max(t[:3]) >= np_ for t in self.tris):
+            out.append('triangle point index out of range')
+        if any(max(e[:3]) >= np_ for e in self.edges):
+            out.append('edge point index out of range')
+        seen, stack = [0] * len(self.nodes), [0] if self.nodes else []
+        while stack:
+            k = stack.pop()
+            seen[k] += 1
+            stack += [c for c in self.nodes[k][:2] if 0 <= c < len(self.nodes)]
+        if self.nodes and (min(seen) != 1 or max(seen) != 1):
+            out.append('tree does not reach every node exactly once')
+        pos = 0
+        for _f, _b, s, c in sorted(self.nodes, key=lambda n: n[2]):
+            if s != pos:
+                out.append('tree triangle ranges have a gap at %d' % pos)
+                break
+            pos += c
+        if pos != len(self.tris):
+            out.append('tree holds %d triangles, TRI has %d' % (pos, len(self.tris)))
+        return out
+
+
+def hit_blocks(entry, pak_bytes):
+    """[Hit] of a model entry: the block at entry +0x4C (a pak file offset, `Data_GetModelHitData` 0x1A5B0)
+    when +0x78 >= 0, and a second one +0x7C bytes after it when +0x7C > 0 (0x1A5F0)."""
+    if entry['hit_a'] < 0 or not entry['hit_size']:
+        return []
+    out = [Hit(pak_bytes, entry['hit_off'])]
+    if entry['hit_b'] > 0:
+        out.append(Hit(pak_bytes, entry['hit_off'] + entry['hit_b']))
+    return out
+
+
+def section_collision(romdata, section):
+    """[(entry, [Hit])] for one area section (hon_under_A): the collision-only scenery entries ('..._HO', no
+    LOD) live in the area pak (hon_under.pak) under the section's scenery names without the section letter:
+    hon_under_A.pak 'obj_in_hon_under_A_kansi_M_PART_HO' -> hon_under.pak 'obj_in_hon_under_kansi_M_PART_HO'.
+    Scenery entries of the section's own pak that carry hit data are included too."""
+    for r, _, fs in os.walk(os.path.join(romdata, 'area')):
+        if section + '.pak' in fs:
+            break
+    else:
+        raise KeyError('no %s.pak under area/' % section)
+    area, letter = section.rsplit('_', 1)
+    sec_pak, area_pak = os.path.join(r, section + '.pak'), os.path.join(r, area + '.pak')
+    names = set()
+    out = []
+    sd = open(sec_pak, 'rb').read()
+    for e in model_entries(sec_pak):
+        if e['scenery']:
+            names.add(e['name'].replace('obj_in_%s_%s_' % (area, letter), 'obj_in_%s_' % area, 1))
+            if e['hit_a'] >= 0:
+                out.append((e, hit_blocks(e, sd)))
+    if os.path.exists(area_pak):
+        ad = open(area_pak, 'rb').read()
+        for e in model_entries(area_pak):
+            if e['scenery'] and e['name'] in names and e['hit_a'] >= 0:
+                out.append((e, hit_blocks(e, ad)))
+    return out
+
+
 def write_png(path, rgba, w, h):
     raw = b''.join(b'\0' + rgba[y * w * 4:(y + 1) * w * 4] for y in range(h))
 
@@ -411,6 +524,48 @@ def check_all(romdata):
     return 0 if not bad else 1
 
 
+def describe_hit(name, h):
+    types = collections.Counter(surface(t[3])[0] for t in h.tris)
+    mats = collections.Counter(surface(t[3])[1] for t in h.tris)
+    print('%s: HD51 at %#x, %d points, %d triangles, %d tree nodes, %d edges, box %s - %s' % (
+        name, h.offset, len(h.points), len(h.tris), len(h.nodes), len(h.edges),
+        ['%.1f' % x for x in h.bbox[0]], ['%.1f' % x for x in h.bbox[1]]))
+    print('  types:', ', '.join('%d (%s) x%d' % (k, HIT_TYPES.get(k, '?'), v) for k, v in sorted(types.items())))
+    print('  materials:', ', '.join('%d x%d' % kv for kv in sorted(mats.items())))
+    for p in h.check():
+        print('  PROBLEM', p)
+
+
+def check_hit(romdata):
+    stats, bad, seen = collections.Counter(), [], set()
+    for pak in all_paks(romdata):
+        d = open(pak, 'rb').read()
+        for e in model_entries(pak):
+            if e['hit_a'] < 0 or (pak, e['hit_off']) in seen:
+                continue
+            seen.add((pak, e['hit_off']))
+            try:
+                hs = hit_blocks(e, d)
+            except (ValueError, KeyError, struct.error) as ex:
+                bad.append((pak, e['id'], str(ex)))
+                continue
+            stats['entries with hit data'] += 1
+            for h in hs:
+                stats['HD51 blocks'] += 1
+                stats['triangles'] += len(h.tris)
+                stats['points'] += len(h.points)
+                stats['edges'] += len(h.edges)
+                for t in h.tris:
+                    stats['type %d triangles' % surface(t[3])[0]] += 1
+                bad += [(pak, e['id'], p) for p in h.check()]
+    for k, v in sorted(stats.items()):
+        print('%10d  %s' % (v, k))
+    for b in bad[:20]:
+        print('PROBLEM', b)
+    print('%d problems' % len(bad))
+    return 0 if not bad else 1
+
+
 def main(a):
     if not a:
         print(__doc__)
@@ -418,6 +573,22 @@ def main(a):
     romdata = a[0]
     if '--check' in a:
         return check_all(romdata)
+    if '--check-hit' in a:
+        return check_hit(romdata)
+    if '--hit-area' in a:
+        for e, hs in section_collision(romdata, a[a.index('--hit-area') + 1]):
+            for h in hs:
+                describe_hit('%d %s (%s)' % (e['id'], e['name'], os.path.basename(e['pak'])), h)
+        return 0
+    if '--hit' in a:
+        pak = a[a.index('--pak') + 1] if '--pak' in a else None
+        e, _ = find_model(romdata, int(a[a.index('--hit') + 1]), pak)
+        hs = hit_blocks(e, open(e['pak'], 'rb').read())
+        if not hs:
+            print('model %d %s has no hit data' % (e['id'], e['name']))
+        for k, h in enumerate(hs):
+            describe_hit('%d %s block %d' % (e['id'], e['name'], k), h)
+        return 0
     if '--area' in a:
         sec = a[a.index('--area') + 1]
         for r, _, fs in os.walk(os.path.join(romdata, 'area')):
