@@ -52,6 +52,13 @@ static void test_start_alone(void)
     expect("start alone does not swallow motion", r.suppress_motion == 0);
 }
 
+/* P1.3: a short press of Back on its own opens the page when it is let go. */
+static struct pc_pad_result tap_back(int port)
+{
+    pc_options_on_port(port, PC_PAD_BACK);
+    return pc_options_on_port(port, 0);
+}
+
 static void test_chord(void)
 {
     struct video_settings s = base_settings();
@@ -60,31 +67,42 @@ static void test_chord(void)
     pc_options_set_baseline(&s);
     pc_options_set_locks(0);
     r = pc_options_on_port(0, PC_PAD_BACK);
-    expect("back alone stays closed", pc_options_is_open() == 0);
-    expect("back alone reaches the guest", (r.guest_buttons & PC_PAD_BACK) != 0);
-
-    r = pc_options_on_port(0, PC_PAD_BACK | PC_PAD_START);
-    expect("start while back is held opens", r.action == PC_ACT_OPENED && pc_options_is_open());
-    expect("chord swallows start and back",
-           (r.guest_buttons & (PC_PAD_START | PC_PAD_BACK)) == 0);
-    expect("chord swallows motion", r.suppress_motion == 1);
+    expect("back held stays closed", pc_options_is_open() == 0);
+    expect("back reaches the guest while held", (r.guest_buttons & PC_PAD_BACK) != 0);
+    r = pc_options_on_port(0, 0);
+    expect("letting go of a short back opens", r.action == PC_ACT_OPENED && pc_options_is_open());
+    expect("open swallows motion", r.suppress_motion == 1);
     expect("open focuses the first row", pc_options_row() == 0);
     expect("draft starts at the baseline",
            pc_options_draft() && pc_options_draft()->render_scale == 2);
-
-    r = pc_options_on_port(0, PC_PAD_BACK | PC_PAD_START);
-    expect("held chord does not close", pc_options_is_open() == 1 && r.action == PC_ACT_NONE);
+    r = tap_back(0);
+    expect("back again closes (revert)", pc_options_is_open() == 0);
 }
 
 static void test_same_poll_chord(void)
 {
     struct video_settings s = base_settings();
     struct pc_pad_result r;
+    int i;
     pc_options_reset();
     pc_options_set_baseline(&s);
     r = pc_options_on_port(0, PC_PAD_BACK | PC_PAD_START);
-    expect("both rising opens", r.action == PC_ACT_OPENED);
-    expect("title start is not forwarded", (r.guest_buttons & PC_PAD_START) == 0);
+    expect("back + start does not open (the game's own combo)", r.action == PC_ACT_NONE && !pc_options_is_open());
+    expect("back + start reach the game",
+           (r.guest_buttons & (PC_PAD_BACK | PC_PAD_START)) == (PC_PAD_BACK | PC_PAD_START));
+    r = pc_options_on_port(0, PC_PAD_START);
+    r = pc_options_on_port(0, 0);
+    expect("letting go after back + start stays closed", !pc_options_is_open());
+    pc_options_on_port(0, PC_PAD_BACK);
+    pc_options_on_port(0, PC_PAD_BACK | PC_PAD_A);
+    pc_options_on_port(0, PC_PAD_BACK);
+    r = pc_options_on_port(0, 0);
+    expect("back with another button does not open", !pc_options_is_open());
+    pc_options_on_port(0, PC_PAD_BACK);
+    for (i = 0; i < 60; i++)
+        pc_options_on_port(0, PC_PAD_BACK);
+    r = pc_options_on_port(0, 0);
+    expect("back held long does not open", !pc_options_is_open());
 }
 
 static void test_nav_filter_repeat_and_dedup(void)
@@ -94,7 +112,7 @@ static void test_nav_filter_repeat_and_dedup(void)
     int i;
     pc_options_reset();
     pc_options_set_baseline(&s);
-    pc_options_on_port(0, PC_PAD_BACK | PC_PAD_START);
+    tap_back(0);
     r = pc_options_on_port(0, 0);
     expect("release after open stays open", pc_options_is_open() == 1);
 
@@ -192,9 +210,9 @@ static void test_back_while_start_held_stays(void)
     struct pc_pad_result r;
     pc_options_reset();
     pc_options_set_baseline(&s);
-    pc_options_on_port(0, PC_PAD_START | PC_PAD_BACK);
+    tap_back(0);
     r = pc_options_on_port(0, PC_PAD_START);
-    expect("releasing back while start is held stays open", pc_options_is_open() == 1);
+    expect("start on the open page keeps it open", pc_options_is_open() == 1);
     r = pc_options_on_port(0, PC_PAD_B);
     expect("b reverts", r.action == PC_ACT_REVERT && pc_options_is_open() == 0);
 }
@@ -206,8 +224,8 @@ static void test_second_port_does_not_drop_chord(void)
     pc_options_reset();
     pc_options_set_baseline(&s);
     pc_options_on_port(1, 0);
-    r = pc_options_on_port(0, PC_PAD_START | PC_PAD_BACK);
-    expect("port 0 chord still opens", r.action == PC_ACT_OPENED);
+    r = tap_back(0);
+    expect("port 0 back tap still opens", r.action == PC_ACT_OPENED);
     r = pc_options_on_port(1, 0);
     expect("idle port does not close", pc_options_is_open() == 1);
 }
@@ -261,16 +279,12 @@ static void test_port_zero_drops_stuck_start(void)
     pc_options_reset();
     pc_options_set_baseline(&s);
     pc_options_on_port(1, PC_PAD_START);
-    r = pc_options_on_port(0, PC_PAD_BACK);
-    expect("stuck start on another port still forms the chord", r.action == PC_ACT_OPENED);
-    pc_options_reset();
-    pc_options_set_baseline(&s);
-    pc_options_on_port(1, PC_PAD_START);
-    pc_options_on_port(1, 0);
-    r = pc_options_on_port(0, PC_PAD_BACK);
-    expect("a port that reports 0 no longer supplies start",
+    r = tap_back(0);
+    expect("start held on another port: back is not alone, stays closed",
            r.action == PC_ACT_NONE && pc_options_is_open() == 0);
-    expect("back still reaches the guest", (r.guest_buttons & PC_PAD_BACK) != 0);
+    pc_options_on_port(1, 0);
+    r = tap_back(0);
+    expect("a port that reports 0 no longer blocks the tap", r.action == PC_ACT_OPENED);
 }
 
 static void test_release_ui_drops_stuck_start(void)
@@ -281,9 +295,9 @@ static void test_release_ui_drops_stuck_start(void)
     pc_options_set_baseline(&s);
     pc_options_set_ui_bit(PC_PAD_START, 1);
     pc_options_release_ui();
-    r = pc_options_set_ui_bit(PC_PAD_BACK, 1);
-    expect("released start does not complete a later chord",
-           r.action == PC_ACT_NONE && pc_options_is_open() == 0);
+    pc_options_set_ui_bit(PC_PAD_BACK, 1);
+    r = pc_options_set_ui_bit(PC_PAD_BACK, 0);
+    expect("released start does not block a later backspace tap", r.action == PC_ACT_OPENED);
 }
 
 static void test_keyboard_only_moves_the_page(void)
@@ -293,10 +307,8 @@ static void test_keyboard_only_moves_the_page(void)
     pc_options_reset();
     pc_options_set_baseline(&s);
     pc_options_set_ui_bit(PC_PAD_BACK, 1);
-    r = pc_options_set_ui_bit(PC_PAD_START, 1);
-    expect("keyboard chord opens with no pad port", r.action == PC_ACT_OPENED);
-    pc_options_set_ui_bit(PC_PAD_START, 0);
-    pc_options_set_ui_bit(PC_PAD_BACK, 0);
+    r = pc_options_set_ui_bit(PC_PAD_BACK, 0);
+    expect("backspace tap opens with no pad port", r.action == PC_ACT_OPENED);
     r = pc_options_set_ui_bit(PC_PAD_DPAD_DOWN, 1);
     expect("keyboard down moves a row", pc_options_row() == 1);
     pc_options_release_ui();
@@ -307,7 +319,7 @@ static void test_keyboard_only_moves_the_page(void)
 static void test_rows_are_real(void)
 {
     int i;
-    expect("twenty-two rows", PC_ROW_COUNT == 22);
+    expect("twenty-four rows", PC_ROW_COUNT == 24);
     for (i = 0; i < PC_ROW_COUNT; i++) {
         const char *t = pc_options_row_title(i);
         expect("row has a title", t && t[0]);
@@ -496,7 +508,31 @@ static void test_a11y_rows(void)
                                      && PC_ROW_TEXT == VIDEO_ROW_TEXT);
     pulse(PC_PAD_DPAD_LEFT);
     pulse(PC_PAD_DPAD_DOWN);
-    expect("mouse speed follows text size", pc_options_row() == PC_ROW_MOUSE);
+    expect("mono audio follows text size", pc_options_row() == PC_ROW_MONO);
+    pc_options_row_value(PC_ROW_MONO, buf, sizeof buf);
+    expect("mono audio starts off", pc_options_draft()->mono == 0 && strcmp(buf, "Off") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_MONO, buf, sizeof buf);
+    expect("right turns mono on", pc_options_draft()->mono == 1 && strcmp(buf, "On") == 0);
+    expect("mono row is named", strcmp(pc_options_row_title(PC_ROW_MONO), "Mono audio") == 0
+                                && PC_ROW_MONO == VIDEO_ROW_MONO);
+    pulse(PC_PAD_DPAD_LEFT);
+    expect("left turns mono off", pc_options_draft()->mono == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("subtitles follow mono audio", pc_options_row() == PC_ROW_SUBS);
+    pc_options_row_value(PC_ROW_SUBS, buf, sizeof buf);
+    expect("subtitles start at the game's choice", pc_options_draft()->subs == 0 && strcmp(buf, "Game's choice") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    pc_options_row_value(PC_ROW_SUBS, buf, sizeof buf);
+    expect("right sets subtitles on", pc_options_draft()->subs == 1 && strcmp(buf, "On") == 0);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("right again sets subtitles off", pc_options_draft()->subs == 2);
+    expect("subtitles row is named", strcmp(pc_options_row_title(PC_ROW_SUBS), "Subtitles") == 0
+                                     && PC_ROW_SUBS == VIDEO_ROW_SUBS);
+    pulse(PC_PAD_DPAD_RIGHT);
+    expect("and wraps to the game's choice", pc_options_draft()->subs == 0);
+    pulse(PC_PAD_DPAD_DOWN);
+    expect("mouse speed follows subtitles", pc_options_row() == PC_ROW_MOUSE);
     pc_options_row_value(PC_ROW_MOUSE, buf, sizeof buf);
     expect("mouse speed starts at 100%", strcmp(buf, "100%") == 0);
     pulse(PC_PAD_DPAD_RIGHT);

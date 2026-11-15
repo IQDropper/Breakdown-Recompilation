@@ -34,7 +34,7 @@ static int lock_for_row(int row)
     static const unsigned bits[PC_ROW_LAST_SETTING + 1] = {
         PC_LOCK_SCALE, PC_LOCK_WINDOW, PC_LOCK_ASPECT, PC_LOCK_WIDE, PC_LOCK_FILTER, PC_LOCK_MODE,
         PC_LOCK_FPS60, PC_LOCK_PIPE, PC_LOCK_VSYNC, PC_LOCK_REPEAT, PC_LOCK_TOGGLE, PC_LOCK_OUTFIT,
-        PC_LOCK_CONTENT, PC_LOCK_TEXT, PC_LOCK_MOUSE, PC_LOCK_INVERT, PC_LOCK_DEADZONE, PC_LOCK_KEYS
+        PC_LOCK_CONTENT, PC_LOCK_TEXT, PC_LOCK_MONO, PC_LOCK_SUBS, PC_LOCK_MOUSE, PC_LOCK_INVERT, PC_LOCK_DEADZONE, PC_LOCK_KEYS
     };
     if (row < 0 || row > PC_ROW_LAST_SETTING)
         return 0;
@@ -168,6 +168,10 @@ static void activate(struct pc_pad_result *r)
         s_draft.content = stock.content;
     if (!lock_for_row(PC_ROW_TEXT))
         s_draft.text_size = stock.text_size;
+    if (!lock_for_row(PC_ROW_MONO))
+        s_draft.mono = stock.mono;
+    if (!lock_for_row(PC_ROW_SUBS))
+        s_draft.subs = stock.subs;
     if (!lock_for_row(PC_ROW_MOUSE))
         s_draft.mouse_speed = stock.mouse_speed;
     if (!lock_for_row(PC_ROW_INVERT))
@@ -204,6 +208,10 @@ static void repeat_axis(int *hold, int dir, int vertical, struct pc_pad_result *
     }
 }
 
+/* P1.3: polls Back may stay down and still count as a tap (about 0.7 s at 60 polls a second). */
+#define PC_BACK_TAP_POLLS 40
+static int s_back_solo, s_back_polls;
+
 static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int advance)
 {
     struct pc_pad_result r;
@@ -218,11 +226,25 @@ static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int a
     prev = s_prev;
     rose = now & ~prev;
 
-    if (!s_open && ((rose & PC_PAD_START) && (now & PC_PAD_BACK)))
-        open_page(&r);
-    else if (!s_open && ((rose & PC_PAD_BACK) && (now & PC_PAD_START)))
-        open_page(&r);
-    else if (s_open) {
+    /* P1.3 (Foster 2026-11-14): a short press of Back on its own opens the page, on release. Back + Start is the
+     * original game's own combo (held ~1.8 s: the developers' debug menu) and reaches the game untouched; Back held
+     * long, or with any other button, does nothing here. Back itself still reaches the game while it is held. */
+    if (!s_open) {
+        if (rose & PC_PAD_BACK) {
+            s_back_solo = (now & ~PC_PAD_BACK) == 0;
+            s_back_polls = 0;
+        } else if (now & PC_PAD_BACK) {
+            if (now & ~PC_PAD_BACK)
+                s_back_solo = 0;
+            if (advance)
+                s_back_polls++;
+        }
+        if ((prev & PC_PAD_BACK) && !(now & PC_PAD_BACK)) {
+            if (s_back_solo && s_back_polls <= PC_BACK_TAP_POLLS && !(now & ~PC_PAD_BACK))
+                open_page(&r);
+            s_back_solo = 0;
+        }
+    } else {
         up_edge = (rose & PC_PAD_DPAD_UP) && !(rose & PC_PAD_DPAD_DOWN);
         down_edge = (rose & PC_PAD_DPAD_DOWN) && !(rose & PC_PAD_DPAD_UP);
         left_edge = (rose & PC_PAD_DPAD_LEFT) && !(rose & PC_PAD_DPAD_RIGHT);
@@ -273,6 +295,8 @@ static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int a
 
 void pc_options_reset(void)
 {
+    s_back_solo = 0;
+    s_back_polls = 0;
     memset(s_port, 0, sizeof s_port);
     s_ui = 0;
     s_prev = 0;
@@ -409,6 +433,8 @@ const char *pc_options_row_title(int row)
         "Outfit",
         "Content",
         "Text size",
+        "Mono audio",
+        "Subtitles",
         "Mouse speed",
         "Invert mouse",
         "Stick dead zone",

@@ -23,6 +23,8 @@
 #include "pc_options_host.h"
 #include "tuning_host.h"     /* tuning_host_pad: the tuning window's controller */
 #include "a11y_input.h"
+#include "map_list_host.h"
+#include "load_timer.h"
 #include <stdint.h>
 #include <stddef.h>   /* ptrdiff_t */
 #include "gen/recomp_types.h"   /* g_esp/g_eax (thread-local) + MEM32 - for the input bridge */
@@ -280,6 +282,27 @@ void breakdown_a11y_set(int repeat_choice, int toggle_choice)
 }
 
 /* DWORD XInputGetState(HANDLE, PXINPUT_STATE): 4-byte packet number + 18-byte XINPUT_GAMEPAD (same layout) */
+/* P1.4: Back + right-stick click on a pad = F8 (the developers' F026 menu at boot; in a map-viewer area, back to
+ * the map list). Back + Start stays the game's own combo; Back alone is the PC options page (pc_options.c). */
+static unsigned long s_pad_f8_at;   /* GetTickCount() | 1, 0 = none */
+static void pad_f8_watch(uint32_t port, uint16_t buttons)
+{
+    static uint16_t prev[4];
+    const uint16_t combo = 0x0020u | 0x0080u;   /* XINPUT_GAMEPAD_BACK | XINPUT_GAMEPAD_RIGHT_THUMB */
+    if ((buttons & combo) == combo && (prev[port & 3u] & combo) != combo)
+        s_pad_f8_at = GetTickCount() | 1u;
+    prev[port & 3u] = buttons;
+}
+static int pad_f8_take(void)
+{
+    if (s_pad_f8_at && GetTickCount() - s_pad_f8_at < 1000u) {
+        s_pad_f8_at = 0;
+        return 1;
+    }
+    s_pad_f8_at = 0;
+    return 0;
+}
+
 void sub_00205439(void)
 {
     uint32_t h = MEM32(g_esp + 4), dst = MEM32(g_esp + 8), i;
@@ -293,6 +316,7 @@ void sub_00205439(void)
         a11y_pad_reset(&s_a11y_pad[port]);
         g_eax = 1167; g_esp += 12; return;   /* ERROR_DEVICE_NOT_CONNECTED */
     }
+    pad_f8_watch(port, st.wButtons);   /* P1.4 Back + RS = F8 */
     /* PC options is a host page. Start alone still reaches the guest. */
     pr = pc_options_host_on_port((int)port, st.wButtons);
     st.wButtons = (uint16_t)pr.guest_buttons;
@@ -389,6 +413,38 @@ static void intro_skip_frame(void)
     }
 }
 
+/* A11Y-6b: the PC options row "Subtitles" (RECOMP_SUBTITLES) drives the game's own Caption option: bit 4 of the
+ * flags word at +8 of the game's options block [[0x29F6D8]+0x58] (read by the developers' option-test page through
+ * 0x1FDC0, between Contrast 0x1FF80 and Sound output 0x20000). 0 = the game's choice, never touched; 1 on / 2 off
+ * are held every frame, so a later options load from the save cannot undo them. */
+static volatile int s_subs = 0;
+void breakdown_subtitles_set(int subs)
+{
+    s_subs = subs == 1 || subs == 2 ? subs : 0;
+}
+static void subtitles_frame(void)
+{
+    static int s_logged = -1;
+    uint32_t o, p, f, want;
+    if (!s_subs)
+        return;
+    o = MEM32(0x29F6D8u);
+    if (!o || o >= 0x04000000u)
+        return;
+    p = MEM32(o + 0x58u);
+    if (!p || p >= 0x04000000u)
+        return;
+    f = MEM32(p + 8u);
+    want = s_subs == 1 ? (f | 0x10u) : (f & ~0x10u);
+    if (want != f)
+        MEM32(p + 8u) = want;
+    if (s_logged != s_subs) {
+        s_logged = s_subs;
+        fprintf(stderr, "[A11Y] subtitles %s (the game's Caption option)\n", s_subs == 1 ? "on" : "off");
+        fflush(stderr);
+    }
+}
+
 void sub_00161680(void)
 {
     char out[512], spec[16]; size_t n = 0; uint32_t fmt, ap; int k, text;
@@ -407,6 +463,8 @@ void sub_00161680(void)
     if (MEM32(g_esp) == 0x0018EA4Eu && speedrun_on())
         speedrun_frame(MEM32(0x29F6E0) == 1);   /* speedrun timer: the pause flag, 0 = playing, 1 = paused */
     if (MEM32(g_esp) == 0x0018EA4Eu) {
+        subtitles_frame();    /* A11Y-6b: the game's Caption option from the PC options row */
+        load_timer_frame();   /* RECOMP_LOAD_LOG: frame times after a load (src/load_timer.c) */
         qol_frame();   /* FPS overlay + F12 screenshot (src/qol_host.c) */
         if (qol_skip_intro_on())
             intro_skip_frame();
@@ -417,7 +475,7 @@ void sub_00161680(void)
      * Real formats are literals in the XBE image. */
     if (fmt < 0x10000u || fmt >= 0x00400000u)
         text = 0;
-    if (s_game_log || text) {
+    if (s_game_log || text || load_timer_on()) {
         ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
@@ -436,6 +494,8 @@ void sub_00161680(void)
             if (n >= sizeof out) n = sizeof out - 1;
         }
         out[n] = 0;
+        if (fmt >= 0x10000u && fmt < 0x00400000u)
+            load_timer_msg(out);   /* RECOMP_LOAD_LOG: the game's own loading messages */
         if (text && MEM32(g_esp) != 0x0018EA4Eu)
             debug_text_put_from(out, MEM32(g_esp));
         if (s_game_log) {
@@ -972,6 +1032,79 @@ static int debug_menu_on(void)
     return s_debug_menu;
 }
 
+/* MAP VIEWER walk (map_list_host.c, PR #54). The map viewer (update 0x1F7F0) starts the picked area as a sample-mode
+ * task (update 0x1F450) under its own parent and removes itself; retail has no way back. F8 inside such an area
+ * removes the sample task (0x17E240, as the game's own tasks do from their update) and starts a new map viewer
+ * (0x1F880) under the same parent, with the cursor on the next entry: one game run can walk every area. */
+extern void sub_0001F450_gen(void);
+extern void sub_0001F7F0_gen(void);
+extern void sub_0001F880(void);
+extern void sub_0017E240(void);
+static int s_mv_next = -1;     /* cursor for the next map viewer, -1 = leave the game's 0 */
+static int s_mv_picked = -1;   /* map viewer cursor after its last update = the entry that was loaded */
+static int s_mv_in_area;       /* a sample-mode area is running (F8 belongs to it, not to the menu hook) */
+
+static int mv_f8_edge(void)
+{
+    static int s_was;
+    unsigned long pid = 0;
+    int down = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose = down && !s_was;   /* VK_F8 */
+    s_was = down;
+    if (!rose)
+        return pad_f8_take();   /* P1.4: Back + RS on a pad */
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    return pid == GetCurrentProcessId();
+}
+
+void sub_0001F7F0(void)   /* map viewer update (task) */
+{
+    static uint32_t s_task;
+    uint32_t task = MEM32(g_esp + 4);
+    if (task != s_task) {
+        s_task = task;
+        s_mv_in_area = 0;
+        if (s_mv_next >= 0) {
+            MEM32(task + 0x34) = (uint32_t)s_mv_next;   /* the list clamps it to the last entry */
+            s_mv_next = -1;
+        }
+    }
+    sub_0001F7F0_gen();
+    s_mv_picked = (int)MEM32(task + 0x34);
+}
+
+void sub_0001F450(void)   /* sample mode update (task): the area picked in the map viewer */
+{
+    static uint32_t s_task;
+    uint32_t task = MEM32(g_esp + 4), save;
+    if (task != s_task) {
+        s_task = task;
+        fprintf(stderr, "[MAP-VIEWER] in map %d\n", s_mv_picked);
+        fflush(stderr);
+    }
+    s_mv_in_area = 1;
+    if (!debug_menu_on() || !mv_f8_edge()) {
+        sub_0001F450_gen();
+        return;
+    }
+    fprintf(stderr, "[MAP-VIEWER] F8: left map %d, back to the list on %d\n", s_mv_picked, s_mv_picked + 1);
+    fflush(stderr);
+    s_mv_next = s_mv_picked + 1;
+    s_mv_in_area = 0;
+    save = g_esp;
+    {
+        uint32_t parent = MEM32(task + 0x10);
+        g_esp -= 4; MEM32(g_esp) = task;
+        g_esp -= 4; MEM32(g_esp) = 0x298A40;
+        g_esp -= 4; MEM32(g_esp) = 0;   /* return address (unused) */
+        sub_0017E240();
+        g_esp = save;
+        g_esp -= 4; MEM32(g_esp) = parent;
+        g_esp -= 4; MEM32(g_esp) = 0;
+        sub_0001F880();
+    }
+    g_esp = save + 4;                   /* the original's ret */
+}
+
 /* F9: the Product debug menu (mode 0x1B900). F8: the developers' F026 menu (mode 0x1B640, table 0x227730). */
 static int s_dbgmenu_dev;
 static int debug_menu_key(void)
@@ -982,6 +1115,10 @@ static int debug_menu_key(void)
     int down8 = (GetAsyncKeyState(0x77) & 0x8000) != 0, rose8 = down8 && !s_was8; /* VK_F8 */
     s_was = down;
     s_was8 = down8;
+    if (!rose && !rose8 && pad_f8_take()) {   /* P1.4: Back + RS on a pad (no foreground check needed) */
+        s_dbgmenu_dev = 1;
+        return 1;
+    }
     if (!rose && !rose8)
         return 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
@@ -994,7 +1131,7 @@ static int debug_menu_key(void)
 void sub_0001B9F0(void)
 {
     uint32_t task, save;
-    if (!debug_menu_on() || !debug_menu_key()) {
+    if (!debug_menu_on() || s_mv_in_area || !debug_menu_key()) {
         sub_0001B9F0_gen();
         return;
     }
@@ -1014,6 +1151,7 @@ void sub_0001B9F0(void)
         for (i = 5; i <= 8; i++)
             MEM32(0x2418B0 + i * 8) = 0;                      /* SYSTEM LOAD / SAVE / LOAD TEST, SAVEDATA VIEWER */
         MEM32(0x2418B0 + 13 * 8) = 0x161680u;                 /* end after TGS - C */
+        map_list_install();                                   /* MAP VIEWER list (map_list_host.c) */
     }
     MEM32(task + 0x20) = s_dbgmenu_dev ? 0x1B640u : 0x1B900u;
     MEM32(task + 0x34) = 0;
@@ -1027,7 +1165,7 @@ void sub_0001B9F0(void)
 
 /* Debug-menu mode @ 0x1B900, step +0x34: 0 = set up, 1 = closed (opens after Start+Back are held ~1.8 s),
  * 2 = open the menu (0x1B5F0 builds it from the task's table). F9 asks for step 2 directly, since our PC
- * options overlay already uses Back+Start. */
+ * options overlay used Back+Start (now a short Back press, P1.3). */
 extern void sub_0001B900_gen(void);
 
 void sub_0001B900(void)
