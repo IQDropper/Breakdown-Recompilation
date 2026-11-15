@@ -58,13 +58,25 @@ void warmup_frame(void)
 void warmup_msg(const char *msg)
 {
     char a[64], b[64];
+    /* Only for the log line: "AREA DATA SET" also comes when the map viewer re-opens, so it does not count as a
+     * load (warmup_in_map does). */
     if (!warmup_on() || !strstr(msg, "AREA DATA SET"))
         return;
     if (pr_area_from_msg(msg, a, sizeof a, b, sizeof b)) {
         snprintf(s_area, sizeof s_area, "%s", a);
         snprintf(s_block, sizeof s_block, "%s", b);
     }
-    warmup_area_loaded(&s_w);
+}
+
+void warmup_in_map(int map)
+{
+    if (!warmup_on())
+        return;
+    if (map != s_w.entry) {
+        fprintf(stderr, "[WARMUP] expected entry %d, the map viewer opened %d: following it\n", s_w.entry, map);
+        fflush(stderr);
+    }
+    warmup_map_opened(&s_w, map);
 }
 
 void warmup_pad(uint16_t *buttons, uint8_t analog[8], int16_t thumb[4])

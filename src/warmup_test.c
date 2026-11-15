@@ -64,7 +64,7 @@ int main(void)
         run(&f, &t2, 1500, &a);
         expect("fast area counts", f.state == WU_LOOK && f.loaded == 1);
     }
-    run(&w, &now, 5000, &a);
+    expect("presses B again while waiting", run(&w, &now, 5000, &a) > 0);
     expect("waits for the area", w.state == WU_LOADING && w.loaded == 0);
     warmup_area_loaded(&w);
     run(&w, &now, 600, &a);
@@ -88,6 +88,17 @@ int main(void)
     warmup_area_loaded(&w);
     expect("late area ignored", w.state == WU_STUCK);
     expect("names", warmup_state_name(WU_LOOK)[0] == 'l');
+    {   /* the map viewer opened a different entry than planned: follow it */
+        struct warmup r;
+        uint32_t t3 = 0;
+        warmup_init(&r, 4, 3, 0);
+        r.state = WU_LIST; r.since = 0;
+        warmup_map_opened(&r, 0);
+        run(&r, &t3, WU_LIST_MS + 700, &a);
+        expect("resync to the opened map", r.state == WU_LOOK && r.entry == 0);
+        warmup_map_opened(&r, 9);
+        expect("ignored outside list/loading", r.entry == 0);
+    }
 
     if (g_fail) {
         fprintf(stderr, "%d failed\n", g_fail);

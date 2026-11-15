@@ -30,7 +30,7 @@ while ($Start -lt $stopAt) {
   $env:RECOMP_WARMUP_START = "$Start"; $env:RECOMP_WARMUP_COUNT = "$count"
   Write-Output ("  entries {0}..{1} ..." -f $Start, ($Start + $count - 1))
   $p = Start-Process -FilePath $exe -WorkingDirectory $root -WindowStyle Minimized -PassThru -RedirectStandardError $log -RedirectStandardOutput (Join-Path $root 'warmup_stdout.txt')
-  $limit = (Get-Date).AddSeconds(60 + 60 * $count)
+  $limit = (Get-Date).AddSeconds(150 + 75 * $count)
   while (-not $p.HasExited -and (Get-Date) -lt $limit) { Start-Sleep -Seconds 2 }
   if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; Start-Sleep -Seconds 2 }
   $txt = if (Test-Path $log) { Get-Content $log -Raw } else { '' }

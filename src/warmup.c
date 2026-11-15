@@ -17,11 +17,18 @@ void warmup_init(struct warmup *w, int start, int count, uint32_t now)
     go(w, WU_BOOT, now);
 }
 
+void warmup_map_opened(struct warmup *w, int map)   /* defined before use: warmup_area_loaded calls it */
+{
+    if (w->state != WU_LIST && w->state != WU_LOADING)
+        return;
+    if (map != w->entry)
+        w->entry = map;   /* the list cursor moved differently: follow the game */
+    w->area_seen = 1;   /* the list state ends on its own timer; LOADING then sees area_seen */
+}
+
 void warmup_area_loaded(struct warmup *w)
 {
-    /* Areas load in well under a second, so the message can come before the list state ends. */
-    if (w->state == WU_LOADING || (w->state == WU_LIST && w->area_seen == 2))
-        w->area_seen = 1;
+    warmup_map_opened(w, w->entry);
 }
 
 void warmup_step(struct warmup *w, uint32_t now, struct warmup_out *o)
@@ -53,16 +60,15 @@ void warmup_step(struct warmup *w, uint32_t now, struct warmup_out *o)
         return;
     case WU_LIST:    /* list shown with the cursor on w->entry: B loads it */
         if (t >= WU_LIST_MS) {
-            if (w->area_seen != 1)
-                w->area_seen = 0;
             go(w, WU_LOADING, now);
             return;
         }
         o->b_pressed = (uint8_t)(t >= WU_LIST_MS - 1000u && t < WU_LIST_MS - 700u);
-        if (o->b_pressed && !w->area_seen)
-            w->area_seen = 2;   /* pressed: from now on an area message counts */
         return;
     case WU_LOADING:
+        /* The list sometimes ignores the first B right after it re-opens: press again every 4 s, 5 times. */
+        if (w->area_seen != 1 && t < 5u * 4000u && t % 4000u >= 3000u && t % 4000u < 3300u)
+            o->b_pressed = 1;
         if (w->area_seen == 1 && t >= 500u) {
             w->loaded++;
             go(w, WU_LOOK, now);
@@ -96,6 +102,7 @@ void warmup_step(struct warmup *w, uint32_t now, struct warmup_out *o)
     }
     case WU_BACK:
         if (t >= WU_BACK_MS) {
+            w->area_seen = 0;
             w->entry++;
             w->left--;
             if (w->left <= 0) {

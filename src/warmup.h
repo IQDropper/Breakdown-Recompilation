@@ -50,12 +50,16 @@ struct warmup_out {
 void warmup_init(struct warmup *w, int start, int count, uint32_t now);
 void warmup_step(struct warmup *w, uint32_t now, struct warmup_out *o);
 void warmup_area_loaded(struct warmup *w);
+/* The map viewer opened map-list entry `map` (its own "in map" moment): the only trusted load signal. A different
+ * entry than expected resyncs the cursor to it. */
+void warmup_map_opened(struct warmup *w, int map);
 const char *warmup_state_name(enum warmup_state s);
 
 /* warmup_host.c (game side) */
 int warmup_on(void);
 void warmup_frame(void);                        /* once per frame */
 void warmup_msg(const char *msg);               /* the game's debug messages */
+void warmup_in_map(int map);                    /* the map viewer started entry `map` */
 void warmup_pad(uint16_t *buttons, uint8_t analog[8], int16_t thumb[4]);   /* port 0 pad state */
 int warmup_take_menu(void);
 int warmup_take_f8(void);
