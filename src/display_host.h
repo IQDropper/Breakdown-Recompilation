@@ -88,7 +88,11 @@ int display_exclusive_on(void);
 __attribute__((weak))
 #endif
 extern void breakdown_display_set_exclusive(int on);
-/* 1 while DXGI exclusive is on. Same weak rule: NULL address on an unpatched toolkit. */
+/* 1 while DXGI exclusive is on. Same weak rule: NULL address on an unpatched toolkit (and in the unit tests,
+ * which link display_host.c without the renderer). */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((weak))
+#endif
 extern int breakdown_display_exclusive_active(void);
 /* patch_overlay_hold.py: 1 = a host overlay is shown, keep exclusive fullscreen off; 0 = release. Weak. */
 #if defined(__GNUC__) || defined(__clang__)

@@ -68,7 +68,7 @@ static void test_chord(void)
     pc_options_set_locks(0);
     r = pc_options_on_port(0, PC_PAD_BACK);
     expect("back held stays closed", pc_options_is_open() == 0);
-    expect("back reaches the guest while held", (r.guest_buttons & PC_PAD_BACK) != 0);
+    expect("a short back does not reach the game (its menus treat Back as cancel)", (r.guest_buttons & PC_PAD_BACK) == 0);
     r = pc_options_on_port(0, 0);
     expect("letting go of a short back opens", r.action == PC_ACT_OPENED && pc_options_is_open());
     expect("open swallows motion", r.suppress_motion == 1);
@@ -100,7 +100,8 @@ static void test_same_poll_chord(void)
     expect("back with another button does not open", !pc_options_is_open());
     pc_options_on_port(0, PC_PAD_BACK);
     for (i = 0; i < 60; i++)
-        pc_options_on_port(0, PC_PAD_BACK);
+        r = pc_options_on_port(0, PC_PAD_BACK);
+    expect("back held long reaches the game", (r.guest_buttons & PC_PAD_BACK) != 0);
     r = pc_options_on_port(0, 0);
     expect("back held long does not open", !pc_options_is_open());
 }
