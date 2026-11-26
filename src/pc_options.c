@@ -228,7 +228,7 @@ static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int a
 
     /* P1.3 (Foster 2026-11-14): a short press of Back on its own opens the page, on release. Back + Start is the
      * original game's own combo (held ~1.8 s: the developers' debug menu) and reaches the game untouched; Back held
-     * long, or with any other button, does nothing here. Back itself still reaches the game while it is held. */
+     * long, or with any other button, does nothing here. A short solo Back is kept from the game (see below). */
     if (!s_open) {
         if (rose & PC_PAD_BACK) {
             s_back_solo = (now & ~PC_PAD_BACK) == 0;
@@ -289,6 +289,11 @@ static struct pc_pad_result evaluate(unsigned port_buttons, int have_port, int a
     eat = s_open || r.action == PC_ACT_OPENED || r.action == PC_ACT_REVERT;
     if (have_port)
         r.guest_buttons = eat ? (port_buttons & ~PC_PAD_NAV) : port_buttons;
+    /* Foster 2026-11-26: Back also reached the game, whose menus treat it like B, so one tap opened this page and
+     * backed out of the game's menu. While Back is down alone and still short enough to be a tap, the game does not
+     * see it; held longer, or with another button (Back + Start, the game's own combo), it reaches the game. */
+    if (have_port && !s_open && (now & PC_PAD_BACK) && s_back_solo && s_back_polls <= PC_BACK_TAP_POLLS)
+        r.guest_buttons &= ~PC_PAD_BACK;
     r.suppress_motion = eat ? 1 : 0;
     return r;
 }
