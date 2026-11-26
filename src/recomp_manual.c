@@ -543,7 +543,10 @@ void sub_00161680(void)
      * Real formats are literals in the XBE image. */
     if (fmt < 0x10000u || fmt >= 0x00400000u)
         text = 0;
-    if (s_game_log || text || load_timer_on() || play_record_on() || warmup_on()) {
+    /* Not a format string at all: e.g. the script command at 0x89AE0 (clipboard pickup, 7F room 2) passes a float
+     * here. Reading it as text crashed the game whenever any logger was on (play recorder, 2026-11-26). */
+    if ((s_game_log || text || load_timer_on() || play_record_on() || warmup_on())
+            && fmt >= 0x10000u && fmt < 0x00400000u) {
         ap = g_esp + 8;
         for (k = 0; k < 300 && n < sizeof out - 40; k++) {
             char c = (char)MEM8(fmt + k), t; int si = 0;
