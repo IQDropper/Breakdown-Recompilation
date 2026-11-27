@@ -38,6 +38,7 @@ for %%F in (
   patch_skip_why2.py
   patch_px_trigger.py
   patch_depth_slots.py
+  patch_vsh_zeromul.py
 ) do (
   echo --- %%F ---
   %PY% %%F
@@ -48,5 +49,5 @@ for %%F in (
 )
 
 echo [ok] Base fixes: page-rounded memory, XBE section tails, GPU semaphores, D3D callbacks, window close, inline vertex sizes,
-echo      depth-only passes, exact vertex maths (no black rooms), render-to-texture, debug counters, enough depth buffers (no black walls). Rebuild the exe.
+echo      depth-only passes, exact vertex maths (no black rooms), render-to-texture, debug counters, enough depth buffers, Xbox-style zero products in lighting (no black walls). Rebuild the exe.
 exit /b 0
