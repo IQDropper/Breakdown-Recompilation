@@ -81,6 +81,12 @@ if errorlevel 1 (
   echo [error] patch_d3d11_horplus.py failed
   exit /b 1
 )
+echo --- patch_horplus_menu.py ---
+%PY% patch_horplus_menu.py
+if errorlevel 1 (
+  echo [error] patch_horplus_menu.py failed
+  exit /b 1
+)
 
 echo --- patch_guest_bounds.py ---
 %PY% patch_guest_bounds.py
